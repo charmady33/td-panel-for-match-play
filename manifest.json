@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "Matchplay TD Panel",
+  "version": "0.1.0",
+  "description": "Tournament director tools for app.matchplay.events: live status, finals setup (A/B/C), B-eligibility labels, check-in, tie alerts, game timers and bank building.",
+  "icons": { "16": "icons/icon16.png", "32": "icons/icon32.png", "48": "icons/icon48.png", "128": "icons/icon128.png" },
+  "permissions": ["storage"],
+  "host_permissions": ["https://app.matchplay.events/*", "https://api.matchplay.events/*"],
+  "content_scripts": [
+    {
+      "matches": ["https://app.matchplay.events/*"],
+      "js": [
+        "src/util.js",
+        "src/api.js",
+        "src/timing.js",
+        "src/banks.js",
+        "src/mpui.js",
+        "src/data.js",
+        "src/finals.js",
+        "src/jobs.js",
+        "src/panel.js",
+        "src/main.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}
