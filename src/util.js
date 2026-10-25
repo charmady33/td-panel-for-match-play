@@ -1,7 +1,7 @@
 // Matchplay TD Panel - shared helpers. Every file adds to the one global namespace TDP.
 /* global chrome */
 var TDP = window.TDP || (window.TDP = {});
-TDP.VERSION = '0.2.0';
+TDP.VERSION = '0.3.0';
 
 TDP.sleep = ms => new Promise(r => setTimeout(r, ms));
 TDP.log = (...a) => console.log('%c[TD Panel]', 'color:#4f46e5;font-weight:600', ...a);

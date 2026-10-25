@@ -26,7 +26,7 @@ var TDP = window.TDP || (window.TDP = {});
   T.data.on(D => {
     if (D.isTD === false && T.settings.token) { T.panel.unmount(); return; }   // not your tournament: stay out of the way
     T.panel.mount(); T.panel.render();
-    T.embed.render();
+    T.embed.render(); T.inpage.render();
     autoTick().then(autoBanks);
   });
   T.jobs.on(() => { T.panel.render(true); T.embed.render(); });
@@ -38,7 +38,7 @@ var TDP = window.TDP || (window.TDP = {});
     if (cur && cur.tab !== tabId && Date.now() - cur.at < 30000) return false;
     await T.store.set(k, { tab: tabId, at: Date.now() }); return true;
   }
-  const state = s => T.panel.setAutoState(s);
+  const state = s => { T.panel.setAutoState(s); T.inpage.setAutoState(s); };
   async function autoTick() {
     const D = T.data.D, tid = D.tid, st = T.tstate[tid] || {};
     if (!st.auto || autoBusy || !D.t || !D.isTD) return;

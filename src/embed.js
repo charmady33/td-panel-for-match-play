@@ -20,7 +20,8 @@ tr.back td{background:var(--head)}`;
 
   function wanted() {
     const D = T.data.D;
-    return !!(D.isTD && D.qual && D.tid === D.qual.tournamentId && T.routePage() === 'players' && (D.qual.playoffsCutoffs || []).length);
+    // shows on a FINALS tournament's Players tab (linked playoff of the qualifying)
+    return !!(D.isTD && D.qual && D.tid !== D.qual.tournamentId && D.finals.some(f => f.tid === D.tid) && T.routePage() === 'players' && (D.qual.playoffsCutoffs || []).length);
   }
   // put our block right after Matchplay's player table card
   function anchor() {
@@ -48,7 +49,12 @@ tr.back td{background:var(--head)}`;
     if (!ensure()) return;
     const D = T.data.D, w = root.querySelector('.wrap');
     w.classList.toggle('dark', document.documentElement.classList.contains('dark'));
-    const divs = F().plan(D), ranks = F().ranksOf(D), job = T.jobs.get();
+    const ranks = F().ranksOf(D), job = T.jobs.get();
+    const divs = F().plan(D).filter(x => x.finals && x.finals.tid === D.tid);
+    if (D.qual.status !== 'completed') {
+      w.querySelector('.embed').innerHTML = `<div class="card"><div class="cb"><b>Finals check-in</b> opens here once the qualifying (${T.esc(D.qual.name)}) is completed.</div></div>`;
+      return;
+    }
     const busy = job && !job.done && !job.error;
     let h = `<h2>Finals check-in</h2><div class="sub">Who made each finals, in seed order. Tick a player when they check in: they're added to that finals tournament as <b>Active</b>. Untick to deactivate. Backups can be ticked in place of a no-show; they take the lowest seed.${busy ? ' <b>Updating Matchplay…</b>' : pending.size ? ` <b>${pending.size} change${pending.size === 1 ? '' : 's'} waiting…</b> <button class="link" data-act="now">Apply now</button>` : ''}</div>`;
     for (const x of divs) {
@@ -115,7 +121,7 @@ tr.back td{background:var(--head)}`;
       if (add.length && names.length > 1) steps.push({ tid, page: 'players', op: 'seeds', args: { names }, label: `${x.letter}: seeds in qualifying order` });
     }
     if (!steps.length) { render(); return; }
-    steps.push({ tid: D.qual.tournamentId, page: 'players', op: 'noop', label: 'Back to the qualifying Players tab' });
+    steps.push({ tid: D.tid, page: 'players', op: 'noop', label: 'Back to this Players tab' });
     try { await T.jobs.start('Finals check-in', steps); } catch (e) { T.panel.say(e.message, 'err'); }
     render();
   }

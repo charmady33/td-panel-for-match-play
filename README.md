@@ -1,6 +1,6 @@
-# Matchplay TD Panel v0.2.0
+# Matchplay TD Panel v0.3.0
 
-A Chrome extension for tournament directors on app.matchplay.events. On any tournament you run (as organizer, or as a manager) it adds a full-height sidebar on the left and shifts Matchplay's page over, so it sits beside the site like part of it. The « button collapses it to a thin strip. It's styled to look like Matchplay's own pages.
+A Chrome extension for tournament directors on app.matchplay.events. On any tournament you run (as organizer, or as a manager) it adds a full-height sidebar on the right and shifts Matchplay's page over. The » button collapses it to a thin strip. Most of the tools also appear directly inside Matchplay's own pages (see below), so the sidebar is optional. It's styled to look like Matchplay's own pages.
 
 ## Install (unpacked)
 1. Unzip this folder somewhere permanent.
@@ -20,18 +20,27 @@ To update to a newer version, replace the folder and click the reload icon on th
   - round progress
   - games in progress, with real game timers
   - tie alerts
-  - the optional **Auto close round & start next round** switch (off by default)
+  - whether auto close/start round is on (it's switched on the Matches tab)
 - **Finals**:
   - divisions come from Matchplay's cut lines
   - IFPA ranks are read from Matchplay's own IFPA Rankings list
   - you set a rank cutoff and label for each division (B, C…)
   - you can preview the labels before applying them
   - each division shows its planned players and 3 backups, with a "Fix seeds" button
-- **Finals check-in (inside Matchplay)**: shows on the qualifying **Players tab**, under the player list.
-  - each division's qualifiers in seed order, plus 3 backups
-  - a check-in box for every player. Ticking adds the player to that finals tournament as **Active**; unticking deactivates them.
-  - changes are saved a few seconds after your last tick, then seeds are put in qualifying order
-  - backups get the lowest seed. A backup moving up from a lower division is deactivated there.
+- **Inside Matchplay's pages**:
+  - **USA flag** at the top left of every Matchplay page
+  - **Standings tab (qualifying)**:
+    - a "Ties to break before finals" box lists each unresolved tie that matters, and why
+    - tied players are highlighted in Matchplay's table
+    - Matchplay's standings stay on the left, with **Finals standings (eligibility applied)** next to them on the right
+  - **Resolve ties page**: important ties are outlined, with the reason shown on each card
+  - **Matches tab**:
+    - the **Auto close round & start next round** checkbox and its status
+    - finals groups with a tie for an advancing spot, or any tie in the final, are outlined
+  - **Finals Players tab (each A/B/C finals)**: **Finals check-in**, shown once qualifying is completed
+    - the qualifiers in seed order, plus 3 backups
+    - ticking a player adds them as **Active**; unticking deactivates them
+    - seeds are kept in qualifying order, with backups lowest
 - **Timers**:
   - how long each round took, from the first game's start until every game is done
   - average, min and max game time per arena

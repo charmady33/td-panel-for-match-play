@@ -15,10 +15,10 @@ TDP.panel = (() => {
 *{box-sizing:border-box}
 .wrap{--bg:#f3f4f6;--card:#fff;--text:#111827;--muted:#4b5563;--soft:#6b7280;--line:#e5e7eb;--head:#f9fafb;--pri:#4f46e5;--pri2:#4338ca;--pril:#6366f1;--prib:#a5b4fc;
   font-family:ui-sans-serif,system-ui,sans-serif,"Apple Color Emoji","Segoe UI Emoji";font-size:14px;line-height:1.4;color:var(--text);
-  position:fixed;left:0;top:0;bottom:0;width:380px;z-index:35;}   /* full-height left sidebar, under Matchplay's dialogs (z-40) */
+  position:fixed;right:0;top:0;bottom:0;width:380px;z-index:35;}   /* full-height right sidebar, under Matchplay's dialogs (z-40) */
 .wrap.railed{width:48px}
 .wrap.dark{--bg:#111827;--card:#1f2937;--text:#f3f4f6;--muted:#d1d5db;--soft:#9ca3af;--line:#374151;--head:#111827;--pri:#6366f1;--pri2:#a5b4fc;--pril:#818cf8;--prib:#4f46e5}
-.panel{position:relative;width:100%;height:100%;background:var(--bg);display:flex;flex-direction:column;overflow:hidden;border-right:1px solid var(--line);box-shadow:1px 0 3px rgba(0,0,0,.05)}
+.panel{position:relative;width:100%;height:100%;background:var(--bg);display:flex;flex-direction:column;overflow:hidden;border-left:1px solid var(--line);box-shadow:-1px 0 3px rgba(0,0,0,.05)}
 .top{background:var(--card);border-bottom:1px solid var(--line);padding:10px 12px 0}
 .row{display:flex;align-items:center;gap:8px}
 .title{font-size:15px;font-weight:600;color:var(--text);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -66,7 +66,7 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--pri);vertical-ali
 .tie{border-radius:6px;padding:8px 10px;margin-bottom:8px;font-size:13px}
 .era{font-size:11px;font-weight:600;border-radius:4px;padding:1px 5px}
 .era-EM{background:#fef3c7;color:#92400e}.era-SS{background:#dbeafe;color:#1e40af}.era-DMD{background:#ede9fe;color:#5b21b6}.era-Unknown{background:#f3f4f6;color:#374151}
-.rail{height:100%;width:48px;background:var(--card);border-right:1px solid var(--line);display:flex;flex-direction:column;align-items:center;gap:10px;padding-top:14px}
+.rail{height:100%;width:48px;background:var(--card);border-left:1px solid var(--line);display:flex;flex-direction:column;align-items:center;gap:10px;padding-top:14px}
 .pill{background:var(--pri);color:#fff;border:0;border-radius:9999px;width:36px;height:36px;font:inherit;font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 2px 6px rgba(79,70,229,.35)}
 .rail .n{border-radius:9999px;padding:1px 7px;font-size:12px;font-weight:600;min-width:24px;text-align:center;background:#d1fae5;color:#065f46}
 .rail .n.amber{background:#fef3c7;color:#92400e}
@@ -94,7 +94,7 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--pri);vertical-ali
   // make room for the sidebar: Matchplay's page shifts right (wide screens only; narrow screens overlay)
   function push(mode) {
     let st = document.getElementById('tdp-push');
-    if (!st) { st = document.createElement('style'); st.id = 'tdp-push'; st.textContent = '@media (min-width:900px){html.tdp-side body{margin-left:380px!important}html.tdp-rail body{margin-left:48px!important}}'; document.head.appendChild(st); }
+    if (!st) { st = document.createElement('style'); st.id = 'tdp-push'; st.textContent = '@media (min-width:900px){html.tdp-side body{margin-right:380px!important}html.tdp-rail body{margin-right:48px!important}}'; document.head.appendChild(st); }
     document.documentElement.classList.toggle('tdp-side', mode === 'side');
     document.documentElement.classList.toggle('tdp-rail', mode === 'rail');
   }
@@ -126,7 +126,7 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--pri);vertical-ali
         <div class="row"><div class="title" title="${T.esc(d.t && d.t.name)}">${T.esc(d.t ? d.t.name : 'Matchplay TD Panel')}</div>
           ${d.loading ? '<span class="small">↻</span>' : ''}
           <button class="icon" data-act="refresh" title="Refresh now">⟳</button>
-          <button class="icon" data-act="min" title="Collapse">«</button></div>
+          <button class="icon" data-act="min" title="Collapse">»</button></div>
         <div class="strip" id="strip">${stripHtml()}</div>
         <div class="tabs">${tabs.map(([k, l]) => `<button class="tab ${k === tab ? 'on' : ''}" data-act="tab" data-tab="${k}">${l}</button>`).join('')}</div>
       </div>
@@ -152,9 +152,7 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--pri);vertical-ali
     const r = c.round;
     let h = `<div class="card"><div class="ch"><span class="h">${r ? T.esc(r.name) : 'No round running'}</span>${statusBadge(d.t.status)}</div><div class="cb">
       ${r ? `<div class="bar"><i style="width:${c.total ? Math.round(100 * c.done / c.total) : 0}%"></i></div><div class="small mt">${c.done} of ${c.total} games completed${c.pending ? ` · ${c.pending} waiting for approval` : ''}</div>` : '<div class="small">Start the next round on the Matches tab.</div>'}
-      <label class="gap mt"><input type="checkbox" data-set="auto" ${st.auto ? 'checked' : ''}> <span class="lab">Auto close round &amp; start next round</span></label>
-      <div class="small">When every game is approved (no pending or partial scores, no open tiebreakers), closes the round and starts the next one after a ${T.settings.autoCountdown}s countdown you can cancel. Only runs while this tournament's Matches tab is open. Never starts a round past the last one and never completes the tournament.</div>
-      ${st.auto ? `<div class="small mt"><b>Auto:</b> ${T.esc(ui.autoState || 'watching')}</div>` : ''}
+      <div class="small mt"><b>Auto close/start round:</b> ${st.auto ? T.esc(ui.autoState || 'on - watching') : 'off'} · switch it on the <a class="link" href="/tournaments/${d.tid}/matches">Matches tab</a></div>
     </div></div>`;
     h += tiesCard();
     // games still being played
@@ -235,7 +233,7 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--pri);vertical-ali
       ${f ? '' : `<div class="cb"><div class="callout warn">Create the ${x.letter} playoff in Matchplay: qualifying <b>More… → Manage playoffs → Create playoffs</b> (in the same order as the cut lines).</div></div>`}
       <table><tr><th>#</th><th>Player</th><th class="num">Qual</th><th class="num">IFPA</th><th>Finals</th></tr>${rows}${bk ? `<tr><th colspan="5">Backups</th></tr>${bk}` : ''}</table>
       ${extra.length ? `<div class="cb small">Also in the ${x.letter} finals: ${extra.map(p => T.esc(p.name)).join(', ')}</div>` : ''}
-      ${f && !fStarted ? `<div class="cb gap" style="border-top:1px solid var(--line)"><span class="small flex1">Check players in on the qualifying <a class="link" href="/tournaments/${d.qual.tournamentId}/players">Players tab</a> (under the player list).</span>
+      ${f && !fStarted ? `<div class="cb gap" style="border-top:1px solid var(--line)"><span class="small flex1">Check-in is on the ${x.letter} finals <a class="link" href="/tournaments/${f.tid}/players">Players tab</a> once qualifying is completed.</span>
         ${x.finalsPlayers.length ? `<button class="btn sm sec" data-act="seedsDiv" data-div="${x.i}">Fix seeds</button>` : ''}</div>` : ''}
     </div>`;
   }
