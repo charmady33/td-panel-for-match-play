@@ -15,14 +15,15 @@ TDP.panel = (() => {
 *{box-sizing:border-box}
 .wrap{--bg:#f3f4f6;--card:#fff;--text:#111827;--muted:#4b5563;--soft:#6b7280;--line:#e5e7eb;--head:#f9fafb;--pri:#4f46e5;--pri2:#4338ca;--pril:#6366f1;--prib:#a5b4fc;
   font-family:ui-sans-serif,system-ui,sans-serif,"Apple Color Emoji","Segoe UI Emoji";font-size:14px;line-height:1.4;color:var(--text);
-  position:fixed;left:16px;bottom:16px;z-index:2147483000;}
+  position:fixed;left:0;top:0;bottom:0;width:380px;z-index:35;}   /* full-height left sidebar, under Matchplay's dialogs (z-40) */
+.wrap.railed{width:48px}
 .wrap.dark{--bg:#111827;--card:#1f2937;--text:#f3f4f6;--muted:#d1d5db;--soft:#9ca3af;--line:#374151;--head:#111827;--pri:#6366f1;--pri2:#a5b4fc;--pril:#818cf8;--prib:#4f46e5}
-.panel{width:400px;max-width:calc(100vw - 32px);height:min(640px,calc(100vh - 32px));background:var(--bg);border-radius:8px;box-shadow:0 10px 25px rgba(0,0,0,.18),0 4px 8px rgba(0,0,0,.08);display:flex;flex-direction:column;overflow:hidden;border:1px solid var(--line)}
+.panel{position:relative;width:100%;height:100%;background:var(--bg);display:flex;flex-direction:column;overflow:hidden;border-right:1px solid var(--line);box-shadow:1px 0 3px rgba(0,0,0,.05)}
 .top{background:var(--card);border-bottom:1px solid var(--line);padding:10px 12px 0}
 .row{display:flex;align-items:center;gap:8px}
 .title{font-size:15px;font-weight:600;color:var(--text);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .strip{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 8px}
-.tabs{display:flex;gap:14px;overflow-x:auto;scrollbar-width:none}
+.tabs{display:flex;gap:16px;overflow-x:auto;scrollbar-width:none}
 .tab{background:none;border:0;border-bottom:2px solid transparent;padding:0 2px 6px;font:inherit;font-size:14px;font-weight:500;color:var(--muted);cursor:pointer;white-space:nowrap}
 .tab.on{color:var(--pri);border-bottom-color:var(--pril)}
 .body{flex:1;overflow:auto;padding:12px}
@@ -65,10 +66,11 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--pri);vertical-ali
 .tie{border-radius:6px;padding:8px 10px;margin-bottom:8px;font-size:13px}
 .era{font-size:11px;font-weight:600;border-radius:4px;padding:1px 5px}
 .era-EM{background:#fef3c7;color:#92400e}.era-SS{background:#dbeafe;color:#1e40af}.era-DMD{background:#ede9fe;color:#5b21b6}.era-Unknown{background:#f3f4f6;color:#374151}
-.pill{position:fixed;left:16px;bottom:16px;background:var(--pri);color:#fff;border:0;border-radius:9999px;padding:8px 14px;font:inherit;font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px;cursor:pointer;box-shadow:0 4px 12px rgba(79,70,229,.4)}
-.pill .n{background:#fff;color:var(--pri);border-radius:9999px;padding:0 7px;font-size:12px;min-width:20px;text-align:center}
-.pill .n.amber{background:#fde68a;color:#78350f}
-.toast{position:fixed;left:16px;bottom:16px;width:400px;max-width:calc(100vw - 32px);background:#111827;color:#fff;border-radius:8px;padding:12px 14px;box-shadow:0 10px 25px rgba(0,0,0,.3);display:flex;gap:10px;align-items:center;z-index:2}
+.rail{height:100%;width:48px;background:var(--card);border-right:1px solid var(--line);display:flex;flex-direction:column;align-items:center;gap:10px;padding-top:14px}
+.pill{background:var(--pri);color:#fff;border:0;border-radius:9999px;width:36px;height:36px;font:inherit;font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 2px 6px rgba(79,70,229,.35)}
+.rail .n{border-radius:9999px;padding:1px 7px;font-size:12px;font-weight:600;min-width:24px;text-align:center;background:#d1fae5;color:#065f46}
+.rail .n.amber{background:#fef3c7;color:#92400e}
+.toast{position:absolute;left:12px;right:12px;bottom:12px;background:#111827;color:#fff;border-radius:8px;padding:12px 14px;box-shadow:0 10px 25px rgba(0,0,0,.3);display:flex;gap:10px;align-items:center;z-index:2}
 .job{border-top:1px solid var(--line);background:var(--card);padding:8px 12px;font-size:13px;max-height:140px;overflow:auto}
 .muted{color:var(--soft)}
 .flex1{flex:1;min-width:0}
@@ -88,7 +90,14 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--pri);vertical-ali
     root.addEventListener('keydown', e => e.stopPropagation(), true);   // don't trigger Matchplay shortcuts
     setInterval(tickTimers, 1000);
   }
-  function unmount() { if (host) { host.remove(); host = root = null; } }
+  function unmount() { if (host) { host.remove(); host = root = null; } push(null); }
+  // make room for the sidebar: Matchplay's page shifts right (wide screens only; narrow screens overlay)
+  function push(mode) {
+    let st = document.getElementById('tdp-push');
+    if (!st) { st = document.createElement('style'); st.id = 'tdp-push'; st.textContent = '@media (min-width:900px){html.tdp-side body{margin-left:380px!important}html.tdp-rail body{margin-left:48px!important}}'; document.head.appendChild(st); }
+    document.documentElement.classList.toggle('tdp-side', mode === 'side');
+    document.documentElement.classList.toggle('tdp-rail', mode === 'rail');
+  }
   const wrap = () => root && root.querySelector('.wrap');
   const isDark = () => document.documentElement.classList.contains('dark') || document.body.classList.contains('dark');
   const focused = () => root && root.activeElement && /INPUT|SELECT|TEXTAREA/.test(root.activeElement.tagName);
@@ -98,24 +107,26 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--pri);vertical-ali
     if (!root) return;
     const w = wrap(); w.classList.toggle('dark', isDark());
     const d = D(), c = T.data.counts();
+    push(T.settings.open ? 'side' : 'rail');
+    w.classList.toggle('railed', !T.settings.open);
     if (!T.settings.open) {
-      w.innerHTML = `<button class="pill" data-act="open" title="Open TD panel">TD <span class="n">${c.active}</span>${c.pending ? `<span class="n amber" title="Pending approvals">${c.pending}</span>` : ''}</button>${toastHtml()}`;
+      w.innerHTML = `<div class="rail"><button class="pill" data-act="open" title="Open TD panel">TD</button><span class="n" title="Active games">${c.active}</span>${c.pending ? `<span class="n amber" title="Pending approvals">${c.pending}</span>` : ''}</div>${toastHtml()}`;
       return;
     }
     if (!force && focused() && w.querySelector('.panel')) { updateStrip(); return; }
     const scroll = body ? body.scrollTop : 0;
-    const tabs = [['status', 'Status'], ['finals', 'Finals'], ['checkin', 'Check-in'], ['timers', 'Timers'], ['banks', 'Banks'], ['settings', 'Settings']];
+    const tabs = [['status', 'Status'], ['finals', 'Finals'], ['timers', 'Timers'], ['banks', 'Banks'], ['settings', 'Settings']];
     const tab = T.settings.tab || 'status';
     let content = '';
     try {
-      content = !T.settings.token && tab !== 'settings' ? tokenNotice() : ({ status: tStatus, finals: tFinals, checkin: tCheckin, timers: tTimers, banks: tBanks, settings: tSettings }[tab] || tStatus)();
+      content = !T.settings.token && tab !== 'settings' ? tokenNotice() : ({ status: tStatus, finals: tFinals, timers: tTimers, banks: tBanks, settings: tSettings }[tab] || tStatus)();
     } catch (e) { content = `<div class="callout err">Panel error: ${T.esc(e.message)}</div>`; T.warn(e); }
     w.innerHTML = `<div class="panel">
       <div class="top">
         <div class="row"><div class="title" title="${T.esc(d.t && d.t.name)}">${T.esc(d.t ? d.t.name : 'Matchplay TD Panel')}</div>
           ${d.loading ? '<span class="small">↻</span>' : ''}
           <button class="icon" data-act="refresh" title="Refresh now">⟳</button>
-          <button class="icon" data-act="min" title="Minimize">–</button></div>
+          <button class="icon" data-act="min" title="Collapse">«</button></div>
         <div class="strip" id="strip">${stripHtml()}</div>
         <div class="tabs">${tabs.map(([k, l]) => `<button class="tab ${k === tab ? 'on' : ''}" data-act="tab" data-tab="${k}">${l}</button>`).join('')}</div>
       </div>
@@ -224,40 +235,9 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--pri);vertical-ali
       ${f ? '' : `<div class="cb"><div class="callout warn">Create the ${x.letter} playoff in Matchplay: qualifying <b>More… → Manage playoffs → Create playoffs</b> (in the same order as the cut lines).</div></div>`}
       <table><tr><th>#</th><th>Player</th><th class="num">Qual</th><th class="num">IFPA</th><th>Finals</th></tr>${rows}${bk ? `<tr><th colspan="5">Backups</th></tr>${bk}` : ''}</table>
       ${extra.length ? `<div class="cb small">Also in the ${x.letter} finals: ${extra.map(p => T.esc(p.name)).join(', ')}</div>` : ''}
-      ${f && !fStarted ? `<div class="cb gap" style="border-top:1px solid var(--line)">
-        ${missing.length ? `<button class="btn sm" data-act="importDiv" data-div="${x.i}">Add ${missing.length} player${missing.length === 1 ? '' : 's'} (inactive until check-in)</button>` : '<span class="badge b-green">All players added</span>'}
-        ${x.finalsPlayers.length ? `<button class="btn sm sec" data-act="seedsDiv" data-div="${x.i}">Fix seeds to qualifying order</button>` : ''}</div>` : ''}
+      ${f && !fStarted ? `<div class="cb gap" style="border-top:1px solid var(--line)"><span class="small flex1">Check players in on the qualifying <a class="link" href="/tournaments/${d.qual.tournamentId}/players">Players tab</a> (under the player list).</span>
+        ${x.finalsPlayers.length ? `<button class="btn sm sec" data-act="seedsDiv" data-div="${x.i}">Fix seeds</button>` : ''}</div>` : ''}
     </div>`;
-  }
-
-  // ---------- Check-in ----------
-  function tCheckin() {
-    const d = D(); if (!d.qual) return '<div class="small">Loading…</div>';
-    const divs = F().plan(d).filter(x => x.finals);
-    if (!divs.length) return '<div class="callout warn">No playoffs linked yet - set them up on the Finals tab.</div>';
-    let h = `<div class="callout">Checked in = <b>Active</b> in the finals tournament. When you press Start tournament, Matchplay's "Remove deactivated players" (on by default) drops anyone not checked in.</div>`;
-    for (const x of divs) {
-      const fp = [...x.finalsPlayers].sort((a, b) => ((a.tournamentPlayer || {}).seed ?? 999) - ((b.tournamentPlayer || {}).seed ?? 999));
-      const inN = fp.filter(p => (p.tournamentPlayer || {}).status === 'active').length;
-      const started = x.finals.t && x.finals.t.status !== 'planned';
-      const rows = fp.map(p => {
-        const on = (p.tournamentPlayer || {}).status === 'active';
-        return `<tr><td class="num small">${p.tournamentPlayer && p.tournamentPlayer.seed != null ? 'S' + (p.tournamentPlayer.seed + (fp.some(q => (q.tournamentPlayer || {}).seed === 0) ? 1 : 0)) : ''}</td><td>${T.esc(p.name)}</td>
-          <td>${on ? '<span class="badge b-green">Checked in</span>' : '<span class="badge b-gray">Not checked in</span>'}</td>
-          <td class="num">${started ? '' : on ? `<button class="link" data-act="checkin" data-f="${x.finals.tid}" data-p="${p.playerId}" data-on="0">Undo</button>` : `<span class="gap" style="justify-content:flex-end;flex-wrap:nowrap"><button class="btn sm green" data-act="checkin" data-f="${x.finals.tid}" data-p="${p.playerId}" data-on="1">Check in</button><button class="btn sm sec" data-act="replace" data-div="${x.i}" data-p="${p.playerId}">Replace</button></span>`}</td></tr>`;
-      }).join('');
-      const rep = ui.replace && ui.replace.div === x.i ? replaceHtml(x) : '';
-      h += `<div class="card"><div class="ch" style="border-left:4px solid ${cc(x.color)[2]}"><span class="h">${x.letter} Finals</span><span class="badge ${inN === fp.length && fp.length ? 'b-green' : 'b-amber'}">${inN}/${fp.length} checked in</span></div>
-        ${fp.length ? `<table>${rows}</table>` : '<div class="cb small">No players added yet - use the Finals tab.</div>'}${rep}
-        <div class="cb small">Backups: ${x.backups.map((r, i) => `${i + 1}. ${T.esc(r.p.name)}${r.from ? ` (in ${r.from.letter})` : ''}`).join(' · ') || 'none'}</div></div>`;
-    }
-    return h;
-  }
-  function replaceHtml(x) {
-    const p = x.finalsPlayers.find(q => q.playerId === ui.replace.p), b = x.backups[0];
-    if (!b) return `<div class="cb"><div class="callout warn">No eligible backup left for ${x.letter}.</div></div>`;
-    return `<div class="cb"><div class="callout">Replace <b>${T.esc(p && p.name)}</b> (stays inactive, removed at start) with <b>${T.esc(b.p.name)}</b> (${T.ord(b.position)} in qualifying)${b.from ? `. ${T.esc(b.p.name)} is moving up from <b>${b.from.letter}</b> - they'll be deactivated there and ${b.from.letter} will need its own backup` : ''}. The backup gets the lowest seed.</div>
-      <div class="gap"><button class="btn sm" data-act="doReplace" data-div="${x.i}">Replace</button><button class="btn sm sec" data-act="cancelReplace">Cancel</button></div></div>`;
   }
 
   // ---------- Timers ----------
@@ -272,66 +252,67 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--pri);vertical-ali
       <div class="cb small">A game starts when its group and the arena are both free, and ends at the first full set of scores (or approval). Partial scores don't count. Games under 2 min or over 2 h are left out.</div></div>`;
   }
 
-  // ---------- Banks ----------
+  // ---------- Banks (per round) ----------
   function bankOpts() {
     const d = D(), st = T.tstate[d.tid] || {};
-    if (!ui.bankOpts) ui.bankOpts = { n: st.bankN || 4, size: st.bankSize || d.t.gamesPerRound || 3, past: st.bankPast || '', exclude: st.bankExclude || [] };
+    if (!ui.bankOpts) {
+      const ctx = T.bankplan.context(d);
+      ui.bankOpts = { n: st.bankN || Math.max(ctx.groups.length, (d.t.banks || []).length, 4), size: st.bankSize || d.t.gamesPerRound || 3, past: st.bankPast || '', exclude: st.bankExclude || [] };
+    }
     return ui.bankOpts;
   }
-  function bankEstimates() {
-    const d = D(), st = T.tstate[d.tid] || {};
-    const arenas = (d.t.arenas || []).filter(a => !a.tournamentArena || a.tournamentArena.status !== 'inactive');
-    let live = T.timing.arenaTimes(d.games);
-    if (ui.qualTimes && d.qual && d.qual.tournamentId !== d.tid) {   // finals: use the qualifying's times (matched by name)
-      const byName = {}; for (const [id, v] of Object.entries(ui.qualTimes)) byName[id] = v;
-      live = { ...live };
-      for (const a of arenas) if (!live[a.arenaId] && byName[(a.name || '').toLowerCase()]) live[a.arenaId] = byName[(a.name || '').toLowerCase()];
-    }
-    return T.banks.estimates(arenas, live, st.pastTimes || {});
+  // extra time sources: qualifying (when this is a finals) + tournaments run with the extension
+  function bankExtra() {
+    const d = D(), st = T.tstate[d.tid] || {}, use = new Set(st.histUse || []);
+    return { qual: ui.qualTimes || null, hist: Object.entries(ui.hist || {}).filter(([id]) => use.has(id)).map(([, h]) => h.arenas) };
   }
   function tBanks() {
     const d = D(); if (!d.t) return '<div class="small">Loading…</div>';
-    const o = bankOpts(), st = T.tstate[d.tid] || {}, est = bankEstimates();
-    const bankMode = /bank/i.test(d.t.arenaAssignment || '');
-    const existing = d.t.banks || [];
+    if (!ui.hist) { ui.hist = {}; T.store.get('hist', {}).then(h => { ui.hist = h; render(true); }); }
+    const o = bankOpts(), st = T.tstate[d.tid] || {};
+    const bankMode = /bank/i.test(d.t.arenaAssignment || ''), existing = (d.t.banks || []).filter(b => b.status !== 'inactive');
+    const ctx = T.bankplan.context(d);
     let h = '';
-    if (!bankMode) h += `<div class="callout warn">This tournament isn't using banks. In Matchplay: Overview → <b>Arena assignment</b> → Show additional options → <b>Arena banks (manual)</b>. The Banks tab appears after that.</div>`;
-    // bank use this round
-    const r = T.data.currentRound();
-    if (existing.length && r) {
-      const used = {}; d.games.filter(g => g.roundId === r.roundId && g.bankId).forEach(g => (used[g.bankId] = used[g.bankId] || new Set()).add(g.set + 1));
-      h += `<div class="card"><div class="ch"><span class="h">Banks this round</span></div><div class="cb gap">${existing.map(b => `<span class="badge ${used[b.bankId] ? 'b-indigo' : 'b-gray'}">${T.esc(b.name)}${used[b.bankId] ? ' · Group ' + [...used[b.bankId]].join(', ') : ' · free'}</span>`).join('')}</div></div>`;
-    }
-    h += `<div class="card"><div class="ch"><span class="h">Build banks</span>${existing.length ? `<span class="badge b-gray">${existing.length} in Matchplay</span>` : ''}</div><div class="cb">
-      <div class="grid2"><div><div class="lab">Banks</div><input type="number" min="1" max="20" data-bank="n" value="${o.n}"></div><div><div class="lab">Games per bank</div><input type="number" min="1" max="10" data-bank="size" value="${o.size}"></div></div>
-      <div class="lab mt">Past tournaments for times (IDs, same venue)</div>
-      <div class="gap"><input type="text" class="flex1" style="width:auto" data-bank="past" placeholder="e.g. 279001, 279554" value="${T.esc(o.past)}"><button class="btn sm sec" data-act="loadPast">${ui.pastLoading ? 'Loading…' : 'Load'}</button></div>
-      <div class="small">${Object.keys(st.pastTimes || {}).length ? `${Object.keys(st.pastTimes).length} arenas with past times (matched by exact arena name).` : 'No past times loaded.'} ${d.qual && d.qual.tournamentId !== d.tid ? (ui.qualTimes ? 'Qualifying times in use.' : '<button class="link" data-act="loadQual">Use qualifying times</button>') : ''}</div>
-      <div class="gap mt"><button class="btn" data-act="genBanks">Generate banks</button>${ui.bank ? '<button class="btn sec" data-act="anotherBanks">Try another</button>' : ''}</div>
+    if (!bankMode) h += `<div class="callout warn">This tournament isn't using banks. In Matchplay: Overview → <b>Arena assignment</b> → Show additional options → <b>Arena banks (manual)</b>.</div>`;
+    h += `<div class="card"><div class="ch"><span class="h">${ctx.round ? `${T.esc(ctx.round.name)} · ${ctx.groups.length} group${ctx.groups.length === 1 ? '' : 's'} need banks` : 'No groups waiting for banks'}</span>${existing.length ? `<span class="badge b-gray">${existing.length} banks in Matchplay</span>` : ''}</div><div class="cb">
+      <label class="gap"><input type="checkbox" data-set="autoBanks" ${st.autoBanks ? 'checked' : ''}> <span class="lab">Automatic every round</span></label>
+      <div class="small mb">When a round starts and its groups have no games yet, makes new banks (different from earlier rounds), updates the banks in Matchplay and assigns each group the bank with the most games its players haven't played. Needs Arena assignment set to Arena banks (manual).${st.banksDoneRound ? ` Last done for round #${st.banksDoneRound}.` : ''}</div>
+      <div class="grid2"><div><div class="lab">Banks</div><input type="number" min="1" max="30" data-bank="n" value="${o.n}"></div><div><div class="lab">Games per bank</div><input type="number" min="1" max="10" data-bank="size" value="${o.size}"></div></div>
+      <div class="gap mt"><button class="btn" data-act="genBanks">Generate${ctx.round ? ' for ' + T.esc(ctx.round.name) : ''}</button>${ui.bank ? '<button class="btn sec" data-act="anotherBanks">Try another</button>' : ''}</div>
     </div></div>`;
-    if (ui.bank) h += bankResultHtml(est, existing, bankMode);
-    const ex = new Set(o.exclude);
+    if (ui.bank) h += bankResultHtml(bankMode);
+    h += `<div class="card"><div class="ch"><span class="h">Game times</span></div><div class="cb">
+      <div class="small mb">This tournament's own times are always used (3+ finished games). Other sources fill the gaps, matched by exact arena name.</div>
+      ${d.qual && d.qual.tournamentId !== d.tid ? `<label class="gap mb"><input type="checkbox" data-act="useQual" ${ui.qualTimes ? 'checked' : ''}> <span class="lab">Qualifying (${T.esc(d.qual.name)})</span></label>` : ''}
+      <div class="lab">Matchplay tournament IDs</div>
+      <div class="gap"><input type="text" class="flex1" style="width:auto" data-bank="past" placeholder="e.g. 279001, 279554" value="${T.esc(o.past)}"><button class="btn sm sec" data-act="loadPast">${ui.pastLoading ? 'Loading…' : 'Load'}</button></div>
+      <div class="small">${Object.keys(st.pastTimes || {}).length ? `${Object.keys(st.pastTimes).length} arenas loaded from those IDs.` : 'None loaded.'}</div>
+      <div class="lab mt">Tournaments run with this extension</div>
+      ${Object.entries(ui.hist || {}).filter(([id]) => +id !== d.tid).sort((a, b) => b[1].at - a[1].at).slice(0, 15).map(([id, x]) => `<label class="gap"><input type="checkbox" data-hist="${id}" ${(st.histUse || []).includes(id) ? 'checked' : ''}> <span class="flex1 ell">${T.esc(x.name)}</span><span class="small">${Object.keys(x.arenas).length} arenas</span></label>`).join('') || '<div class="small">None yet - times are saved automatically from every tournament you open with the panel.</div>'}
+    </div></div>`;
+    const est = T.bankplan.estimates(d, st, bankExtra()), ex = new Set(o.exclude);
     h += `<div class="card"><div class="ch"><span class="h">Arenas</span><span class="badge b-gray">${est.length - est.filter(e => ex.has(e.arenaId)).length}/${est.length} used</span></div>
       <table><tr><th></th><th>Arena</th><th>Era</th><th class="num">Est.</th><th>From</th></tr>${est.sort((a, b) => b.sec - a.sec).map(e => `<tr><td><input type="checkbox" data-incl="${e.arenaId}" ${ex.has(e.arenaId) ? '' : 'checked'}></td><td class="ell" style="max-width:130px">${T.esc(e.name)}</td><td><span class="era era-${e.era}">${e.era}</span></td><td class="num">${T.fmtDur(e.sec * 1000)}</td><td class="small">${e.src}</td></tr>`).join('')}</table></div>`;
     return h;
   }
-  function bankResultHtml(est, existing, bankMode) {
-    const res = ui.bank, totals = res.banks.map(b => b.total), spread = Math.max(...totals) - Math.min(...totals);
+  function bankResultHtml(bankMode) {
+    const plan = ui.bank, res = plan.res, totals = res.banks.map(b => b.total), spread = Math.max(...totals) - Math.min(...totals);
     const used = new Set(res.banks.flatMap(b => b.games.map(g => g.arenaId)));
-    const held = est.filter(e => !used.has(e.arenaId) && !new Set(ui.bankOpts.exclude).has(e.arenaId));
-    const start = existing.length + 1;
-    const cards = res.banks.map((b, bi) => `<div class="card"><div class="ch"><span class="h">Bank ${start + bi}</span><span class="small">${T.fmtDur(b.total * 1000)}</span>${b.eraCost >= 750 ? '<span class="badge b-amber">same era</span>' : ''}</div>
+    const held = plan.est.filter(e => !used.has(e.arenaId) && !new Set(ui.bankOpts.exclude).has(e.arenaId));
+    const reps = res.banks.reduce((s, b) => s + b.repeatPairs, 0);
+    const cards = res.banks.map((b, bi) => `<div class="card"><div class="ch"><span class="h">${T.esc(b.name)}</span><span class="small">${T.fmtDur(b.total * 1000)}</span>${b.eraCost >= 750 ? '<span class="badge b-amber">same era</span>' : ''}${b.repeatPairs ? `<span class="badge b-amber">${b.repeatPairs} repeat pair${b.repeatPairs === 1 ? '' : 's'}</span>` : ''}</div>
       <table>${b.games.map((g, gi) => `<tr><td class="small num">A${gi + 1}</td><td class="flex1">${ui.bankEdit ? swapSelect(bi, gi, g, res, held) : T.esc(g.name)}${g.repeat ? ' <span class="badge b-gray">repeat</span>' : ''}</td><td><span class="era era-${g.era}">${g.era}</span></td><td class="num small">${T.fmtDur(g.sec * 1000)}</td><td><button class="icon" title="Swap for the best other game (exclude this one and rebuild)" data-act="excludeRebuild" data-a="${g.arenaId}">⟳</button></td></tr>`).join('')}</table></div>`).join('');
-    return `<div class="callout ${spread > 180 ? 'warn' : 'ok'}">${res.banks.length} banks · longest vs shortest bank: ${T.fmtDur(spread * 1000)}${res.dropped.length ? ` · ${res.dropped.length} games held out` : ''}${res.repeats.length ? ` · ${res.repeats.length} games repeat` : ''}</div>
-      <div class="gap mb"><label class="gap"><input type="checkbox" data-act="bankEdit" ${ui.bankEdit ? 'checked' : ''}> <span class="lab">Edit banks</span></label></div>
-      ${cards}
-      <div class="card"><div class="cb">${existing.length ? `<div class="small mb">Matchplay already has ${existing.length} bank(s); these will be added as Bank ${start}–${start + res.banks.length - 1}.</div>` : ''}
-      <button class="btn" data-act="applyBanks" ${bankMode ? '' : 'disabled title="Switch Arena assignment to banks first"'}>Create ${res.banks.length} banks in Matchplay</button></div></div>`;
+    const asg = plan.assign.length ? `<div class="card"><div class="ch"><span class="h">Groups → banks</span></div><table><tr><th>Group</th><th>Bank</th><th class="num">New games for players</th></tr>${plan.assign.sort((a, b) => a.group - b.group).map(a => `<tr><td>Group ${a.group}</td><td>${T.esc(a.bank)}</td><td class="num">${a.fresh}/${a.total}</td></tr>`).join('')}</table></div>` : '';
+    return `<div class="callout ${spread > 180 ? 'warn' : 'ok'}">${res.banks.length} banks · longest vs shortest: ${T.fmtDur(spread * 1000)}${reps ? ` · ${reps} game pair${reps === 1 ? '' : 's'} repeat an earlier round` : ' · no pair of games repeats an earlier round'}${res.dropped.length ? ` · ${res.dropped.length} held out` : ''}</div>
+      <label class="gap mb"><input type="checkbox" data-act="bankEdit" ${ui.bankEdit ? 'checked' : ''}> <span class="lab">Edit banks</span></label>
+      ${cards}${asg}
+      <div class="card"><div class="cb"><button class="btn" data-act="applyBanks" ${bankMode ? '' : 'disabled title="Switch Arena assignment to banks first"'}>Update banks in Matchplay${plan.assign.length ? ' & assign groups' : ''}</button>
+      <div class="small mt">Existing banks keep their names and get these games; missing banks are created.</div></div></div>`;
   }
   function swapSelect(bi, gi, g, res, held) {
     const opts = [`<option value="">${T.esc(g.name)}</option>`]
       .concat(held.map(h => `<option value="h:${h.arenaId}">↔ ${T.esc(h.name)} (held out, ${T.fmtDur(h.sec * 1000)})</option>`))
-      .concat(res.banks.flatMap((b, bj) => bj === bi ? [] : b.games.filter(x => !res.banks[bi].games.some(y => y.arenaId === x.arenaId)).map((x, xj) => `<option value="b:${bj}:${b.games.indexOf(x)}">↔ ${T.esc(x.name)} (Bank ${bj + 1})</option>`)));
+      .concat(res.banks.flatMap((b, bj) => bj === bi ? [] : b.games.filter(x => !res.banks[bi].games.some(y => y.arenaId === x.arenaId)).map(x => `<option value="b:${bj}:${b.games.indexOf(x)}">↔ ${T.esc(x.name)} (${T.esc(b.name)})</option>`)));
     return `<select data-swap="${bi}:${gi}">${opts.join('')}</select>`;
   }
 
@@ -393,29 +374,10 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--pri);vertical-ali
           await T.jobs.start(`Add eligibility labels (${p.rows.length} players)`, [{ tid: d.qual.tournamentId, page: 'players', op: 'labels', args: { groups: p.groups, color: T.settings.labelColor }, label: 'Setting labels on the qualifying Players tab' }]);
           break;
         }
-        case 'importDiv': {
-          const x = F().plan(d)[+a.dataset.div], ids = x.picks.filter(r => !x.inFinals[r.playerId]).map(r => r.playerId);
-          await T.jobs.start(`Add ${ids.length} players to ${x.letter} Finals`, [
-            { tid: x.finals.tid, page: 'players', op: 'addPlayers', args: { ids }, label: `Adding ${ids.length} from qualifying` },
-            { tid: x.finals.tid, page: 'players', op: 'deactivate', args: { ids }, label: 'Marking them not checked in (inactive)' },
-            { tid: x.finals.tid, page: 'players', op: 'seeds', args: { names: x.picks.map(r => r.p.name) }, label: 'Setting seeds to qualifying order' }]);
-          break;
-        }
         case 'seedsDiv': {
           const x = F().plan(d)[+a.dataset.div];
           const names = x.picks.filter(r => x.inFinals[r.playerId]).map(r => r.p.name).concat(x.finalsPlayers.filter(p => !x.picks.some(r => r.playerId === p.playerId)).map(p => p.name));
           await T.jobs.start(`Fix ${x.letter} seeds`, [{ tid: x.finals.tid, page: 'players', op: 'seeds', args: { names }, label: 'Reordering seeds' }]);
-          break;
-        }
-        case 'checkin': await T.jobs.start(a.dataset.on === '1' ? 'Check in' : 'Undo check-in', [{ tid: +a.dataset.f, page: 'players', op: a.dataset.on === '1' ? 'activate' : 'deactivate', args: { ids: [+a.dataset.p] }, label: a.dataset.on === '1' ? 'Activating player' : 'Deactivating player' }]); break;
-        case 'replace': ui.replace = { div: +a.dataset.div, p: +a.dataset.p }; render(true); break;
-        case 'cancelReplace': ui.replace = null; render(true); break;
-        case 'doReplace': {
-          const x = F().plan(d)[+a.dataset.div], b = x.backups[0]; ui.replace = null;
-          const steps = [];
-          if (b.from && b.from.finals) steps.push({ tid: b.from.finals.tid, page: 'players', op: 'deactivate', args: { ids: [b.playerId] }, label: `Removing ${b.p.name} from ${b.from.letter} (deactivate)` });
-          steps.push({ tid: x.finals.tid, page: 'players', op: 'addPlayers', args: { ids: [b.playerId] }, label: `Adding backup ${b.p.name} to ${x.letter}` });
-          await T.jobs.start(`Replace with ${b.p.name}`, steps);
           break;
         }
         case 'auto': break;
@@ -424,20 +386,20 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--pri);vertical-ali
         case 'excludeRebuild': { const o = bankOpts(); o.exclude = [...new Set([...o.exclude, +a.dataset.a])]; await T.saveT(d.tid, { bankExclude: o.exclude }); genBanks(); break; }
         case 'bankEdit': ui.bankEdit = a.checked; render(true); break;
         case 'loadPast': await loadPast(); break;
-        case 'loadQual': await loadQualTimes(); break;
         case 'applyBanks': {
-          const start = (d.t.banks || []).length + 1;
-          const banks = ui.bank.banks.map((b, i) => ({ name: `Bank ${start + i}`, arenas: b.games.map(g => g.name) }));
-          await T.jobs.start(`Create ${banks.length} banks`, [{ tid: d.tid, page: 'banks', op: 'createBanks', args: { banks }, label: 'Adding banks and arenas on the Banks tab' }]);
+          await T.jobs.start(`Banks for ${ui.bank.ctx.round ? ui.bank.ctx.round.name : 'this tournament'}`, T.bankplan.steps(d, ui.bank));
           ui.bank = null;
           break;
         }
+        case 'useQual': if (a.checked) await loadQualTimes(); else { ui.qualTimes = null; render(true); } break;
       }
     } catch (err) { say(err.message || String(err), 'err'); }
   }
   async function onChange(e) {
     const el = e.target, d = D();
     if (el.dataset.set === 'auto') { await T.saveT(d.tid, { auto: el.checked }); ui.autoState = ''; render(true); return; }
+    if (el.dataset.set === 'autoBanks') { await T.saveT(d.tid, { autoBanks: el.checked }); render(true); return; }
+    if (el.dataset.hist) { const st = T.tstate[d.tid] || {}, s2 = new Set(st.histUse || []); if (el.checked) s2.add(el.dataset.hist); else s2.delete(el.dataset.hist); await T.saveT(d.tid, { histUse: [...s2] }); render(true); return; }
     if (el.dataset.div && el.dataset.field) {
       const qid = d.qual.tournamentId, st = T.tstate[qid] || {}, divs = { ...(st.divs || {}) };
       divs[el.dataset.div] = { ...(divs[el.dataset.div] || {}), [el.dataset.field]: el.dataset.field === 'cutoff' ? (parseInt(el.value, 10) || null) : el.value.trim() };
@@ -453,8 +415,8 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--pri);vertical-ali
       await T.saveT(d.tid, { bankExclude: o.exclude }); render(true); return;
     }
     if (el.dataset.swap && el.value) {
-      const [bi, gi] = el.dataset.swap.split(':').map(Number), res = ui.bank, g = res.banks[bi].games[gi];
-      if (el.value.startsWith('h:')) { const h = bankEstimates().find(x => x.arenaId === +el.value.slice(2)); res.banks[bi].games[gi] = h; }
+      const [bi, gi] = el.dataset.swap.split(':').map(Number), res = ui.bank.res, g = res.banks[bi].games[gi];
+      if (el.value.startsWith('h:')) { const h = ui.bank.est.find(x => x.arenaId === +el.value.slice(2)); res.banks[bi].games[gi] = h; }
       else { const [, bj, gj] = el.value.split(':').map(Number); res.banks[bi].games[gi] = res.banks[bj].games[gj]; res.banks[bj].games[gj] = g; }
       res.banks.forEach(b => { b.total = b.games.reduce((s, x) => s + x.sec, 0); });
       render(true);
@@ -476,7 +438,7 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--pri);vertical-ali
   }
   function genBanks() {
     const o = bankOpts();
-    try { ui.bank = T.banks.build(bankEstimates(), o.n, o.size, { seed: ui.bankSeed, exclude: o.exclude }); ui.msg = null; }
+    try { ui.bank = T.bankplan.make(D(), { n: o.n, size: o.size, seed: ui.bankSeed, exclude: o.exclude, extra: bankExtra() }); ui.msg = null; }
     catch (e) { ui.bank = null; ui.msg = { text: e.message, kind: 'err' }; }
     render(true);
   }
@@ -503,8 +465,8 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--pri);vertical-ali
     const d = D(), q = d.qual, am = T.data.arenaMap(q);
     const games = await T.api.all(`/tournaments/${q.tournamentId}/games`, 300e3), out = {};
     for (const [aid, v] of Object.entries(T.timing.arenaTimes(games))) { const k = ((am[aid] || {}).name || '').toLowerCase(); if (k) out[k] = v; }
-    ui.qualTimes = out; render(true);
+    ui.qualTimes = out; render(true);   // keyed by lowercase arena name
   }
 
-  return { mount, unmount, render, showCountdown, setAutoState: s => { if (ui.autoState !== s) { ui.autoState = s; render(); } }, say };
+  return { CSS, cutColor: cc, mount, unmount, render, showCountdown, setAutoState: s => { if (ui.autoState !== s) { ui.autoState = s; render(); } }, say };
 })();

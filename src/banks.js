@@ -16,6 +16,16 @@ TDP.banks = (() => {
     return d === 0 ? 750 : (ERA_ORDER.length - 1 - d) * 300;
   }
   const bankEra = gs => { let t = 0; for (let a = 0; a < gs.length; a++) for (let b = a + 1; b < gs.length; b++) t += eraPair(gs[a].era, gs[b].era); return t; };
+  // "banks feel unique": two games that already shared a bank in an earlier round cost this much to pair again
+  // (bigger than any time/era gain, so a repeat only happens when nothing else is possible)
+  const PAIR_PENALTY = 2000;
+  const nk = g => String(g.name || '').toLowerCase();
+  const pairKey = (a, b) => { const x = nk(a), y = nk(b); return x < y ? x + '|' + y : y + '|' + x; };
+  function bankPairs(gs, avoid) {
+    if (!avoid || !avoid.size) return 0;
+    let t = 0; for (let a = 0; a < gs.length; a++) for (let b = a + 1; b < gs.length; b++) t += (avoid.get(pairKey(gs[a], gs[b])) || 0) * PAIR_PENALTY;
+    return t;
+  }
   const sumSec = gs => gs.reduce((s, g) => s + g.sec, 0);
 
   function rngFrom(seed) {
@@ -26,7 +36,7 @@ TDP.banks = (() => {
 
   // more games than slots: first give every era up to one game per bank (so banks can mix eras), then share
   // the rest by each era's size; within an era the longest games are held out first
-  function eraBalancedSubset(pool, slots, forced, numBanks) {
+  function eraBalancedSubset(pool, slots, forced, numBanks, usage) {
     const byEra = {};
     pool.forEach(g => (byEra[g.era] = byEra[g.era] || []).push(g));
     const eras = Object.keys(byEra).sort((a, b) => byEra[a].length - byEra[b].length);   // rarest first
@@ -42,7 +52,8 @@ TDP.banks = (() => {
     }
     let kept = [], dropped = [];
     eras.forEach((e, i) => {
-      const s = [...byEra[e]].sort((a, b) => (forced.has(b.arenaId) - forced.has(a.arenaId)) || a.sec - b.sec);
+      // games used least in earlier rounds first (rotation), then the shortest
+      const s = [...byEra[e]].sort((a, b) => (forced.has(b.arenaId) - forced.has(a.arenaId)) || ((usage.get(nk(a)) || 0) - (usage.get(nk(b)) || 0)) || a.sec - b.sec);
       kept.push(...s.slice(0, quota[i])); dropped.push(...s.slice(quota[i]));
     });
     // forced games that still fell out bump the longest unforced kept game
@@ -58,10 +69,11 @@ TDP.banks = (() => {
   function build(games, numBanks, size, opts = {}) {
     const rng = rngFrom(opts.seed);
     const exclude = new Set(opts.exclude || []), forced = new Set(opts.force || []);
+    const avoid = opts.avoid || new Map(), usage = opts.usage || new Map();   // from earlier rounds' banks
     let pool = games.filter(g => !exclude.has(g.arenaId));
     const slots = numBanks * size;
     let dropped = [], repeats = [];
-    if (pool.length > slots) ({ kept: pool, dropped } = eraBalancedSubset(pool, slots, forced, numBanks));
+    if (pool.length > slots) ({ kept: pool, dropped } = eraBalancedSubset(pool, slots, forced, numBanks, usage));
     const entries = pool.map(g => ({ ...g }));
     if (entries.length < slots) {   // too few games: shortest ones repeat (never twice in one bank)
       const cands = [...pool].sort((a, b) => a.sec - b.sec);
@@ -80,24 +92,24 @@ TDP.banks = (() => {
       let best = [], bestScore = Infinity;
       banks.forEach((b, i) => {
         if (b.length >= size || b.some(g => g.arenaId === e.arenaId)) return;
-        const sc = sumSec(b) + (bankEra([...b, e]) - bankEra(b));
+        const sc = sumSec(b) + (bankEra([...b, e]) - bankEra(b)) + (bankPairs([...b, e], avoid) - bankPairs(b, avoid));
         if (sc < bestScore - 1e-6) { bestScore = sc; best = [i]; } else if (Math.abs(sc - bestScore) <= 1e-6) best.push(i);
       });
       if (!best.length) best = banks.map((b, i) => i).filter(i => banks[i].length < size);
       banks[rng && best.length > 1 ? best[Math.floor(rng() * best.length)] : best[0]].push(e);
     }
-    improve(banks);
-    return { banks: banks.map(gs => ({ games: gs, total: sumSec(gs), eraCost: bankEra(gs) })), dropped, repeats };
+    improve(banks, avoid);
+    return { banks: banks.map(gs => ({ games: gs, total: sumSec(gs), eraCost: bankEra(gs), repeatPairs: bankPairs(gs, avoid) / PAIR_PENALTY })), dropped, repeats };
   }
 
   // cost of a whole layout: how far each bank's total is from the mean (seconds) + era clashes
-  function cost(banks) {
+  function cost(banks, avoid) {
     const totals = banks.map(sumSec), mean = totals.reduce((a, b) => a + b, 0) / banks.length;
-    return totals.reduce((s, t) => s + Math.abs(t - mean), 0) + banks.reduce((s, b) => s + bankEra(b), 0);
+    return totals.reduce((s, t) => s + Math.abs(t - mean), 0) + banks.reduce((s, b) => s + bankEra(b) + bankPairs(b, avoid), 0);
   }
   // pairwise swaps between banks while they lower the cost
-  function improve(banks) {
-    let cur = cost(banks);
+  function improve(banks, avoid) {
+    let cur = cost(banks, avoid);
     for (let iter = 0; iter < 40; iter++) {
       let gained = false;
       for (let a = 0; a < banks.length; a++) for (let b = a + 1; b < banks.length; b++)
@@ -106,7 +118,7 @@ TDP.banks = (() => {
           if (x.arenaId === y.arenaId) continue;
           if (banks[a].some((g, k) => k !== i && g.arenaId === y.arenaId) || banks[b].some((g, k) => k !== j && g.arenaId === x.arenaId)) continue;
           banks[a][i] = y; banks[b][j] = x;
-          const c = cost(banks);
+          const c = cost(banks, avoid);
           if (c < cur - 1) { cur = c; gained = true; } else { banks[a][i] = x; banks[b][j] = y; }
         }
       if (!gained) break;
@@ -126,5 +138,55 @@ TDP.banks = (() => {
     });
   }
 
-  return { build, estimates, eraOf, cost, ERA_DEFAULT_SEC };
+  // pairs/usage from earlier rounds: rounds = [[ [name, name, ...], ... ], ...]  (banks per round)
+  function historyMaps(rounds) {
+    const avoid = new Map(), usage = new Map();
+    for (const banks of rounds || []) for (const names of banks) {
+      const gs = names.map(n => ({ name: n }));
+      gs.forEach(g => usage.set(nk(g), (usage.get(nk(g)) || 0) + 1));
+      for (let a = 0; a < gs.length; a++) for (let b = a + 1; b < gs.length; b++) { const k = pairKey(gs[a], gs[b]); avoid.set(k, (avoid.get(k) || 0) + 1); }
+    }
+    return { avoid, usage };
+  }
+
+  // Which bank each group plays this round, so players spread over every game:
+  // a game a player hasn't played yet is good, playing it again costs more each time.
+  // groups: [{ key, players: [id] }], banks: [{ key, names: [arena name] }], plays: Map("pid|name" -> count)
+  function assignGroups(groups, banks, plays) {
+    if (!groups.length || !banks.length) return [];
+    const cap = Math.ceil(groups.length / banks.length);   // more groups than banks: banks are shared
+    const c = (g, b) => { let t = 0; for (const p of g.players) for (const n of b.names) { const k = plays.get(p + '|' + String(n).toLowerCase()) || 0; t += k ? 4 * k * k : -1; } return t; };
+    const M = groups.map(g => banks.map(b => c(g, b)));
+    // small rounds (finals, up to 8 groups): try every arrangement and keep the best
+    if (groups.length <= 8 && banks.length >= groups.length && banks.length <= 10) {
+      let best = Infinity, bestPick = null; const used = new Array(banks.length).fill(false), cur = [];
+      const minRow = M.map(r => Math.min(...r));
+      const rest = i => { let t = 0; for (let k = i; k < groups.length; k++) t += minRow[k]; return t; };
+      (function dfs(i, sum) {
+        if (sum + rest(i) >= best) return;
+        if (i === groups.length) { best = sum; bestPick = [...cur]; return; }
+        for (let j = 0; j < banks.length; j++) if (!used[j]) { used[j] = true; cur.push(j); dfs(i + 1, sum + M[i][j]); cur.pop(); used[j] = false; }
+      })(0, 0);
+      return groups.map((g, i) => ({ group: g.key, bank: banks[bestPick[i]].key, cost: M[i][bestPick[i]] }));
+    }
+    // greedy: groups with the most to lose pick first
+    const load = banks.map(() => 0), pick = new Array(groups.length).fill(-1);
+    const order = groups.map((g, i) => i).sort((a, b) => (Math.max(...M[b]) - Math.min(...M[b])) - (Math.max(...M[a]) - Math.min(...M[a])));
+    for (const i of order) { let best = -1; M[i].forEach((v, j) => { if (load[j] < cap && (best < 0 || v < M[i][best])) best = j; }); pick[i] = best; load[best]++; }
+    // improve: swap two groups' banks, or move a group to a bank with room
+    for (let iter = 0; iter < 50; iter++) {
+      let gained = false;
+      for (let a = 0; a < groups.length; a++) {
+        for (let b = a + 1; b < groups.length; b++) {
+          const d = M[a][pick[b]] + M[b][pick[a]] - M[a][pick[a]] - M[b][pick[b]];
+          if (d < 0) { [pick[a], pick[b]] = [pick[b], pick[a]]; gained = true; }
+        }
+        for (let j = 0; j < banks.length; j++) if (load[j] < cap && M[a][j] < M[a][pick[a]]) { load[pick[a]]--; pick[a] = j; load[j]++; gained = true; }
+      }
+      if (!gained) break;
+    }
+    return groups.map((g, i) => ({ group: g.key, bank: banks[pick[i]].key, cost: M[i][pick[i]] }));
+  }
+
+  return { build, estimates, eraOf, cost, historyMaps, assignGroups, pairKey, ERA_DEFAULT_SEC };
 })();

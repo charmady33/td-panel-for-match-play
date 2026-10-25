@@ -17,6 +17,7 @@ var TDP = window.TDP || (window.TDP = {});
     if (!tid) { T.panel.unmount(); T.data.setTournament(null); return; }
     T.panel.mount(); T.panel.render(true);
     await T.data.setTournament(tid);
+    T.embed.render();
     await T.jobs.resume();
   }
   setInterval(onRoute, 500);
@@ -25,9 +26,10 @@ var TDP = window.TDP || (window.TDP = {});
   T.data.on(D => {
     if (D.isTD === false && T.settings.token) { T.panel.unmount(); return; }   // not your tournament: stay out of the way
     T.panel.mount(); T.panel.render();
-    autoTick();
+    T.embed.render();
+    autoTick().then(autoBanks);
   });
-  T.jobs.on(() => T.panel.render(true));
+  T.jobs.on(() => { T.panel.render(true); T.embed.render(); });
 
   // ---------- auto close round & start next (default off, per tournament) ----------
   let autoBusy = false;
@@ -73,5 +75,25 @@ var TDP = window.TDP || (window.TDP = {});
       await T.data.refresh(true);
     } catch (e) { state('error: ' + (e.message || e)); }
     finally { autoBusy = false; }
+  }
+
+  // ---------- automatic banks each round (Banks tab switch, default off) ----------
+  let banksBusy = false;
+  async function autoBanks() {
+    const D = T.data.D, tid = D.tid, st = T.tstate[tid] || {};
+    if (!st.autoBanks || banksBusy || !D.t || !D.isTD || D.t.status !== 'started' || !/bank/i.test(D.t.arenaAssignment || '')) return;
+    const j = T.jobs.get(); if (j && !j.done && !j.error) return;
+    const ctx = T.bankplan.context(D);
+    if (!ctx.round || !ctx.groups.length || st.banksDoneRound === ctx.round.roundId) return;
+    if (!(await lock(tid + ':banks'))) return;
+    banksBusy = true;
+    try {
+      const n = Math.max(st.bankN || 0, ctx.groups.length), size = st.bankSize || D.t.gamesPerRound || 3;
+      const use = new Set(st.histUse || []), hist = await T.store.get('hist', {});
+      const plan = T.bankplan.make(D, { n, size, seed: ctx.round.roundId, exclude: st.bankExclude || [], extra: { hist: Object.entries(hist).filter(([id]) => use.has(id)).map(([, h]) => h.arenas) } });
+      await T.saveT(tid, { banksDoneRound: ctx.round.roundId });   // once per round, even if the TD stops the task
+      await T.jobs.start(`Auto banks for ${ctx.round.name}`, T.bankplan.steps(D, plan));
+    } catch (e) { T.panel.say('Auto banks: ' + (e.message || e), 'err'); }
+    finally { banksBusy = false; }
   }
 })();

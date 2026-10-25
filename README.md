@@ -1,6 +1,6 @@
-# Matchplay TD Panel v0.1.0
+# Matchplay TD Panel v0.2.0
 
-A Chrome extension for tournament directors on app.matchplay.events. It adds a panel in the bottom-left corner of any tournament you run (as organizer, or as a manager). The panel is styled to look like Matchplay's own pages.
+A Chrome extension for tournament directors on app.matchplay.events. On any tournament you run (as organizer, or as a manager) it adds a full-height sidebar on the left and shifts Matchplay's page over, so it sits beside the site like part of it. The « button collapses it to a thin strip. It's styled to look like Matchplay's own pages.
 
 ## Install (unpacked)
 1. Unzip this folder somewhere permanent.
@@ -26,23 +26,23 @@ To update to a newer version, replace the folder and click the reload icon on th
   - IFPA ranks are read from Matchplay's own IFPA Rankings list
   - you set a rank cutoff and label for each division (B, C…)
   - you can preview the labels before applying them
-  - each division shows its planned players, 3 backups, and "Add players (inactive until check-in)"
-  - "Fix seeds to qualifying order"
-- **Check-in**:
-  - check players in, which sets them Active in the finals tournament
-  - undo a check-in
-  - replace a no-show with the next backup, who gets the lowest seed. If the backup is currently in a lower division, they're moved up and deactivated there.
+  - each division shows its planned players and 3 backups, with a "Fix seeds" button
+- **Finals check-in (inside Matchplay)**: shows on the qualifying **Players tab**, under the player list.
+  - each division's qualifiers in seed order, plus 3 backups
+  - a check-in box for every player. Ticking adds the player to that finals tournament as **Active**; unticking deactivates them.
+  - changes are saved a few seconds after your last tick, then seeds are put in qualifying order
+  - backups get the lowest seed. A backup moving up from a lower division is deactivated there.
 - **Timers**:
   - how long each round took, from the first game's start until every game is done
   - average, min and max game time per arena
   - uses the same game-timing rules as the Carpool Pinball remote app
-- **Banks**:
-  - generates balanced banks: even play times, mixed eras, never the same game twice in a bank
-  - "Try another" gives a different arrangement
-  - edit any slot, or use ⟳ to exclude a game and rebuild
-  - can pull times from past tournaments at the same venue, or from the qualifying
-  - one click creates the banks in Matchplay
-  - shows which banks the current round is using
+- **Banks (per round)**:
+  - makes new banks for the round that's waiting for games
+  - no two games share a bank again if they already did in an earlier round, and games held out last round come back first
+  - updates Matchplay's existing banks (and creates more if needed)
+  - assigns each group the bank with the most games its players haven't played yet
+  - **Automatic every round** switch (off by default)
+  - game times come from this tournament, the qualifying, Matchplay tournament IDs you enter, and any tournament you've opened with the extension (saved automatically)
 - **Settings**: your API token, label color, and the auto-round countdown length.
 
 ## How it works

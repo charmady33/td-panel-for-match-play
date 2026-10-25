@@ -172,5 +172,52 @@ TDP.mp = (() => {
     await dialogClosed();
   }
 
-  return { goTab, menu, playerRows, selectPlayers, setLabels, bulk, setActive, readIfpaRanks, addFromQualifying, setSeeds, closeRound, startNextRound, createBank, needBtn, needDialog, dialogClosed };
+  // ---------- banks: change an existing bank's games (trash icons remove instantly, no confirm) ----------
+  const bankCard = name => [...document.querySelectorAll('main div')].filter(T.visible).find(e => {
+    const head = e.firstElementChild; return head && T.txt(head) === name && T.findBtn(e, /^Add arenas/);
+  });
+  async function setBankArenas(name, arenaNames) {
+    let card = await T.waitFor(() => bankCard(name), 8000);
+    if (!card) return createBank(name, arenaNames);
+    const want = new Set(arenaNames);
+    for (let k = 0; k < 30; k++) {   // remove games that shouldn't be there (re-find after each removal)
+      card = bankCard(name);
+      const li = [...card.querySelectorAll('li')].find(x => x.querySelector('button') && !/^Add arenas/.test(T.txt(x)) && !want.has(T.txt(x)));
+      if (!li) break;
+      li.querySelector('button').click(); await T.sleep(900);
+    }
+    card = bankCard(name);
+    const have = new Set([...card.querySelectorAll('li')].map(T.txt));
+    const missing = arenaNames.filter(n => !have.has(n));
+    if (missing.length) {
+      T.click(T.findBtn(card, /^Add arenas/));
+      const d = await needDialog();
+      const boxes = await T.waitFor(() => { const b = [...d.querySelectorAll('input[type=checkbox]')]; return b.length ? b : null; }, 8000) || fail('Arena list did not load.');
+      let hit = 0;
+      for (const b of boxes) if (missing.includes(T.cbFirst(b)) && !b.checked) { b.click(); hit++; await T.sleep(20); }
+      if (hit !== missing.length) { T.click(T.findBtn(d, 'Close')); fail(`Bank "${name}": only matched ${hit} of ${missing.length} new arenas.`); }
+      T.click(await needBtn(/^Add \d+ arenas?$/, d));
+      await dialogClosed();
+    }
+    // play order = the order given (Re-order modal is click-to-move like seeds; skipped when already right)
+  }
+
+  // ---------- Matches tab: group Actions -> Assign bank -> tick one bank -> Update arenas ----------
+  async function assignBank(groupNo, bankName) {
+    const head = await T.waitFor(() => [...document.querySelectorAll('main th, main td, main div, main span')].find(e => e.children.length === 0 && new RegExp('^Group ' + groupNo + '(\\s|$|-)').test(T.txt(e)) && T.visible(e)), 8000) || fail(`Group ${groupNo} not found on the Matches tab.`);
+    const box = head.closest('table') || head.parentElement;
+    let scope = box; while (scope && ![...scope.querySelectorAll('button')].some(b => T.txt(b) === 'Actions')) scope = scope.parentElement;
+    const btn = scope && [...scope.querySelectorAll('button')].find(b => T.txt(b) === 'Actions') || fail(`Group ${groupNo} has no Actions menu (round finished?).`);
+    T.click(btn); await T.sleep(400);
+    T.click(await needBtn('Assign bank'));
+    const d = await needDialog();
+    const boxes = await T.waitFor(() => { const b = [...d.querySelectorAll('input[type=checkbox]')]; return b.length ? b : null; }, 8000) || fail('Bank list did not load.');
+    let hit = false;
+    for (const b of boxes) { const on = T.cbFirst(b) === bankName; if (on) hit = true; if (b.checked !== on) { b.click(); await T.sleep(30); } }
+    if (!hit) { T.click(T.findBtn(d, 'Cancel')); fail(`Bank "${bankName}" is not in Matchplay.`); }
+    T.click(await needBtn('Update arenas', d));
+    await dialogClosed();
+  }
+
+  return { goTab, menu, playerRows, selectPlayers, setLabels, bulk, setActive, readIfpaRanks, addFromQualifying, setSeeds, closeRound, startNextRound, createBank, setBankArenas, assignBank, needBtn, needDialog, dialogClosed };
 })();

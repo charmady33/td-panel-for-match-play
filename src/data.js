@@ -51,6 +51,20 @@ TDP.data = (() => {
     D.games = [...keep.values()];
     T.timing.noteSuggestions(D.games);
     await T.saveT(D.tid, { fullSeen: { ...T.timing.fullSeen } });
+    await recordHistory();
+  }
+
+  // every tournament run with the extension keeps its per-arena game times (by arena name) for later bank building
+  let histAt = 0;
+  async function recordHistory() {
+    if (Date.now() - histAt < 5 * 60e3 || !D.t) return;
+    histAt = Date.now();
+    const times = T.timing.arenaTimes(D.games), am = arenaMap(D.t), arenas = {};
+    for (const [id, v] of Object.entries(times)) { const n = ((am[id] || {}).name || '').toLowerCase(); if (n) arenas[n] = { count: v.count, avg: v.avg }; }
+    if (!Object.keys(arenas).length) return;
+    const hist = await T.store.get('hist', {});
+    hist[D.tid] = { name: D.t.name, date: D.t.startUtc || null, at: Date.now(), arenas };
+    await T.store.set('hist', hist);
   }
 
   async function refresh(force = false) {
@@ -102,8 +116,8 @@ TDP.data = (() => {
   function stop() { if (timer) clearInterval(timer); timer = null; }
 
   // ---------- derived ----------
+  function arenaMap(t) { const m = {}; for (const a of (t && t.arenas) || []) m[a.arenaId] = a; return m; }
   const playerMap = t => { const m = {}; for (const p of (t && t.players) || []) m[p.playerId] = p; return m; };
-  const arenaMap = t => { const m = {}; for (const a of (t && t.arenas) || []) m[a.arenaId] = a; return m; };
   const currentRound = () => { const s = D.rounds.filter(r => String(r.status) !== 'completed'); return s[s.length - 1] || null; };
   const latestRound = () => D.rounds[D.rounds.length - 1] || null;
   function counts() {
