@@ -90,10 +90,12 @@ TDP.elig = (() => {
 .df{background:var(--head);padding:12px 20px;display:flex;justify-content:flex-end;gap:8px;border-radius:0 0 8px 8px;flex-wrap:wrap}
 .cut{display:flex;align-items:center;gap:8px;margin:6px 0}.cut input{width:110px}
 table{width:100%;border-collapse:collapse}td,th{padding:4px 6px;border-top:1px solid var(--line);text-align:left}`;
-  function open(D) {
+  // preset = the cuts typed before the window closed to load IFPA ranks (it reopens with them)
+  function open(D, preset) {
     const ds = divs(D).slice(1), st = qst(D).divs || {};
     const cuts = {}; ds.forEach(d => { if (st[d.letter] && st[d.letter].cutoff) cuts[d.letter] = +st[d.letter].cutoff; });
-    cur = { cuts, shown: Math.max(1, ds.filter(d => cuts[d.letter]).length) };
+    if (preset && preset.cuts) Object.assign(cuts, preset.cuts);
+    cur = { cuts, shown: Math.max(1, (preset && preset.shown) || 0, ds.filter(d => cuts[d.letter]).length) };
     if (!host) { host = document.createElement('div'); host.id = 'tdp-elig-dlg'; host.attachShadow({ mode: 'open' }); host.shadowRoot.addEventListener('click', onClick); host.shadowRoot.addEventListener('input', onInput); document.documentElement.appendChild(host); }
     draw();
   }
@@ -130,7 +132,7 @@ table{width:100%;border-collapse:collapse}td,th{padding:4px 6px;border-top:1px s
     const D = T.data.D, act = a.dataset.act, qid = D.qual.tournamentId;
     if (act === 'bg' || act === 'close') return close();
     if (act === 'more') { cur.shown++; return draw(); }
-    if (act === 'ranks') { close(); return T.jobs.start('Load IFPA ranks', [{ tid: qid, page: 'players', op: 'readRanks', args: { tid: qid }, label: "Reading Matchplay's IFPA Rankings" }]); }
+    if (act === 'ranks') { const keep = { what: 'elig', cuts: { ...cur.cuts }, shown: cur.shown }; close(); return T.jobs.start('Load IFPA ranks', [{ tid: qid, page: 'players', op: 'readRanks', args: { tid: qid }, label: "Reading Matchplay's IFPA Rankings" }], { after: keep }); }
     if (act === 'apply') {
       const ds = divs(D).slice(1), st = { ...(qst(D).divs || {}) };
       ds.forEach(d => { st[d.letter] = { ...(st[d.letter] || {}), cutoff: cur.cuts[d.letter] || null, label: null }; });
@@ -141,5 +143,10 @@ table{width:100%;border-collapse:collapse}td,th{padding:4px 6px;border-top:1px s
     }
   }
 
+  // reopen after "Load IFPA ranks" (the page refreshes when a task ends): wait for the tournament's data first
+  T.jobs.afterHandlers.elig = async a => {
+    const ok = await T.waitFor(() => { const D = T.data.D; return D && D.qual && (D.qual.players || []).length && D.isTD ? D : null; }, 15000, 200);
+    if (ok) { await T.loadT(ok.qual.tournamentId); open(ok, a); }
+  };
   return { render, open };
 })();

@@ -45,6 +45,9 @@ var TDP = window.TDP || (window.TDP = {});
     autoTick().then(autoBanks).then(autoAssign).then(autoFill);
   });
   T.jobs.on(() => { T.panel.render(true); T.embed.render(); T.busy.render(); });
+  // a setting changed (here or in another tab): redraw everything that shows settings
+  let sharedTimer = null;
+  T.onShared(() => { clearTimeout(sharedTimer); sharedTimer = setTimeout(() => { T.panel.render(true); T.embed.render(); T.inpage.render(); }, 150); });
 
   // ---------- auto close round & start next (default off, per tournament) ----------
   let autoBusy = false;

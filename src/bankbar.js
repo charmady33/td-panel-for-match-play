@@ -32,7 +32,7 @@ TDP.bankbar = (() => {
       <span class="small" title="From &quot;Matches each round&quot; on Matchplay's Overview">${size} game${size === 1 ? '' : 's'} per bank (from Matchplay)</span>
       ${has ? `<button class="btn" data-act="refresh">Refresh banks</button><button class="btn sec" data-act="add">Add banks</button>` : `<button class="btn" data-act="generate">Generate banks</button>`}
       <button class="btn sec" data-act="settings" title="Games and time sources">⚙ Settings</button>
-      <label class="gap" title="Each new round: new banks (different from earlier rounds), then each group gets one. With auto close/start on, the round starts unpublished, gets its banks, then is published."><input type="checkbox" data-f="autoBanks" ${(st(D).autoBanks ? 'checked' : '')}> <span class="lab">Rebuild banks every round</span></label>
+      <label class="gap" title="Each new round: new banks (different from earlier rounds), then each group gets one. With auto close/start on, the round starts unpublished, gets its banks, then is published."><input type="checkbox" data-f="autoBanks" ${(st(D).autoBanks ? 'checked' : '')}> <span class="lab">Rebuild banks every round</span></label>${st(D).autoBanks ? '<span class="small">- includes assigning a bank to each group</span>' : ''}
       <span class="small flex1" style="text-align:right">${has ? `${has} bank${has === 1 ? '' : 's'} in Matchplay` : 'No banks yet'}</span>
     </div></div>`;
     T.inpage.block('tdp-bankbar', a.el, a.where, html, onBar);

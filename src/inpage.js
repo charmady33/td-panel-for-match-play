@@ -160,7 +160,7 @@ TDP.inpage = (() => {
       const nb = (D.t.banks || []).filter(b => b.status !== 'inactive').length;
       bankRow = `<div class="cb gap" style="border-top:1px solid var(--line);flex-wrap:wrap;align-items:center">
         <button class="btn sm" data-act="assign" ${need && nb && !T.jobs.active() ? '' : 'disabled'}>Assign banks</button>
-        <label class="gap" title="Each new round, assign your existing banks automatically"><input type="checkbox" data-act="autoAssign" ${st.autoAssign ? 'checked' : ''}> <span class="lab">Automatic</span></label>${st.autoBanks ? '<span class="badge b-indigo" title="Set on the Banks tab">Rebuild banks every round is on</span>' : ''}
+        ${st.autoBanks ? `<span class="small">Banks: rebuilt and assigned automatically every round (<a href="/tournaments/${D.tid}/banks" style="color:var(--pri)">set on the Banks tab</a>)</span>` : `<label class="gap" title="Each new round, assign your existing banks automatically"><input type="checkbox" data-act="autoAssign" ${st.autoAssign ? 'checked' : ''}> <span class="lab">Automatic</span></label>`}
         <span class="small flex1">${!nb ? 'No banks yet - make them on the Banks tab.' : need ? `${ctx.groups.length} group${ctx.groups.length === 1 ? '' : 's'} in ${T.esc(ctx.round.name || 'this round')} need a bank${st.autoAssign ? ' - assigning automatically' : ''}.` : sum.length ? sum.map(x => `Group ${x.group} → ${T.esc(x.bank)} · ${x.fresh} of ${x.total} new`).join(' &nbsp;·&nbsp; ') : 'Every group has its games.'}</span>
       </div>`;
     }

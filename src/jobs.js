@@ -37,10 +37,12 @@ TDP.jobs = (() => {
   }
 
   // step: { tid, page: 'players'|'banks'|'matches'|..., op, args, label }
-  async function start(title, steps) {
+  // opts.after = { what, ...data }: when the task is done, the window that started it opens again (handlers below)
+  const afterHandlers = {};
+  async function start(title, steps, opts = {}) {
     if (job && !job.done && !job.error) throw new Error('Another task is still running.');
     T.busy.freeze();   // snapshot what's on screen before anything moves
-    job = { title, steps, i: 0, log: [], startedAt: Date.now(), owner: T.tabId, returnTo: location.pathname, scroll: [scrollX, scrollY, (document.querySelector('main') || {}).scrollTop || 0] };
+    job = { title, steps, i: 0, log: [], startedAt: Date.now(), owner: T.tabId, returnTo: location.pathname, scroll: [scrollX, scrollY, (document.querySelector('main') || {}).scrollTop || 0], after: opts.after || null };
     await save();
     run();
   }
@@ -177,6 +179,7 @@ TDP.jobs = (() => {
         if (job.scroll) { scrollTo(job.scroll[0], job.scroll[1]); const m = document.querySelector('main'); if (m && job.scroll[2]) m.scrollTop = job.scroll[2]; }
         job.done = true; job.doneAt = Date.now(); job.log.push('Done.'); await save();
         T.data.refresh(true);
+        if (job.after && afterHandlers[job.after.what]) { const a = job.after; setTimeout(() => { try { afterHandlers[a.what](a); } catch (e) { T.warn('after', e); } }, 400); }
       }
     } catch (e) {
       if (job) { job.error = e.message || String(e); await save(); }
@@ -191,5 +194,5 @@ TDP.jobs = (() => {
   // 0..1 across the whole task (steps + progress inside the current step)
   const fraction = j => { j = j || job; if (!j) return 0; const n = j.steps.length, sub = j.sub && j.sub.total ? j.sub.done / j.sub.total : 0; return Math.min(1, (Math.min(j.i, n) + (j.i < n ? sub : 0)) / n); };
 
-  return { init, start, cancel, resume, retry, active, mine, fraction, counter, running: () => running, get: () => job, on: f => listeners.add(f) };
+  return { afterHandlers, init, start, cancel, resume, retry, active, mine, fraction, counter, running: () => running, get: () => job, on: f => listeners.add(f) };
 })();

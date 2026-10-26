@@ -1,4 +1,4 @@
-# Matchplay TD Panel v0.8.0
+# Matchplay TD Panel v0.8.1
 
 A Chrome extension for tournament directors on app.matchplay.events. On any tournament you run (as organizer, or as a manager) it adds a full-height sidebar on the right and shifts Matchplay's page over. The » button collapses it to a thin strip. Most of the tools also appear directly inside Matchplay's own pages (see below), so the sidebar is optional. It's styled to look like Matchplay's own pages.
 
@@ -84,6 +84,11 @@ To update to a newer version, replace the folder and click the reload icon on th
 - **Matches tab (bank tournaments)**: **Assign banks** gives each group of the new round one of your banks - games its players haven't played, avoiding any bank that shares 2+ games with one a player already had. Preview with **Another option**, then **Assign**. **Automatic** (off by default) does it for every new round without the preview. The bar then shows "Group 2 → Bank 4 · 11 of 12 new"
 - **Overview**: **Submit to IFPA** sits under Re-open tournament, same size and style
 - **Test tournaments only** (Matches tab): **Fill random results** enters a random finishing order for every open game of the round that has its arena; **Every round** does it automatically. With auto close/start and Automatic bank assignment on, a test tournament runs itself.
+
+## New in 0.8.1
+- Settings save safely: each save changes only that setting, so another open tab of the same tournament can't put an old value back; changes show in every open tab right away.
+- With **Rebuild banks every round** on, the Matches tab shows a note instead of the Automatic checkbox (it can't switch Rebuild off any more).
+- The eligibility window reopens after **Load / Reload IFPA ranks**, with your cuts kept.
 
 ## New in 0.8
 - **Ties**: only ties that change the finals are flagged - a cut line (who makes A/B/C, incl. eligibility), a bye line (from each finals' bracket size) or a game-pick line (top seed in each group picks). Others are listed under "Other ties". Resolved ties never show. The **Unresolved tie** tags are on the *Finals standings (eligibility applied)* table; clicking one opens one window: why it matters, who's tied (points, IFPA rank, head-to-head) and how to resolve it (cut lines: IFPA draw + vote or random game; byes/picks: head-to-head then IFPA rank, or play a game).

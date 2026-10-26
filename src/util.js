@@ -1,7 +1,7 @@
 // Matchplay TD Panel - shared helpers. Every file adds to the one global namespace TDP.
 /* global chrome */
 var TDP = window.TDP || (window.TDP = {});
-TDP.VERSION = '0.8.0';
+TDP.VERSION = '0.8.1';
 
 // this browser tab's id (kept across reloads of the same tab), so a task keeps running in the tab that started it
 TDP.tabId = (() => { try { let v = sessionStorage.getItem('tdp-tab'); if (!v) { v = Math.random().toString(36).slice(2); sessionStorage.setItem('tdp-tab', v); } return v; } catch (e) { return 'tab'; } })();
@@ -39,12 +39,41 @@ TDP.DEFAULT_SETTINGS = {
 };
 TDP.settings = { ...TDP.DEFAULT_SETTINGS };
 TDP.loadSettings = async () => { TDP.settings = { ...TDP.DEFAULT_SETTINGS, ...(await TDP.store.get('settings', {})) }; return TDP.settings; };
-TDP.saveSettings = async (patch) => { Object.assign(TDP.settings, patch); await TDP.store.set('settings', TDP.settings); };
+TDP.saveSettings = async (patch) => {   // read the latest first, change only what's given (other tabs may have saved too)
+  const cur = await TDP.store.get('settings', {});
+  TDP.settings = { ...TDP.DEFAULT_SETTINGS, ...cur, ...patch };
+  await TDP.store.set('settings', { ...cur, ...patch });
+};
 
 // per-tournament state (cutoffs, labels, check-ins, auto round, bank options...)
 TDP.tstate = {};
 TDP.loadT = async (tid) => (TDP.tstate[tid] = await TDP.store.get('t:' + tid, {}));
-TDP.saveT = async (tid, patch) => { TDP.tstate[tid] = { ...(TDP.tstate[tid] || {}), ...patch }; await TDP.store.set('t:' + tid, TDP.tstate[tid]); };
+// Saves read the stored copy first and change only the given fields, one save at a time per tournament - so a tab
+// with an older copy can never write old values back over a setting changed in another tab.
+const saveChains = {};
+TDP.saveT = (tid, patch) => (saveChains[tid] = (saveChains[tid] || Promise.resolve()).catch(() => {}).then(async () => {
+  const cur = await TDP.store.get('t:' + tid, {});
+  const next = { ...cur, ...patch };
+  TDP.tstate[tid] = next;
+  await TDP.store.set('t:' + tid, next);
+}));
+// other tabs: pick up changes straight away (checkboxes and panels re-draw through onShared listeners)
+TDP.sharedListeners = new Set();
+TDP.onShared = f => TDP.sharedListeners.add(f);
+if (TDP.hasChrome) chrome.storage.onChanged.addListener((ch, area) => {
+  if (area !== 'local') return;
+  let hit = false;
+  for (const [k, v] of Object.entries(ch)) {
+    if (k.startsWith('t:')) {
+      const o = v.oldValue || {}, n = v.newValue || {};
+      TDP.tstate[k.slice(2)] = n;
+      // the routine game-timing save every 15 s isn't a setting: no redraw for that
+      if (Object.keys({ ...o, ...n }).some(f => f !== 'fullSeen' && JSON.stringify(o[f]) !== JSON.stringify(n[f]))) hit = true;
+    }
+    if (k === 'settings') { TDP.settings = { ...TDP.DEFAULT_SETTINGS, ...(v.newValue || {}) }; hit = true; }
+  }
+  if (hit) TDP.sharedListeners.forEach(f => { try { f(); } catch (e) { /* ignore */ } });
+});
 
 // ---------- formatting ----------
 TDP.fmtDur = ms => {
