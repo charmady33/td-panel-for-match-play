@@ -1,7 +1,7 @@
 // Matchplay TD Panel - shared helpers. Every file adds to the one global namespace TDP.
 /* global chrome */
 var TDP = window.TDP || (window.TDP = {});
-TDP.VERSION = '0.7.0';
+TDP.VERSION = '0.7.1';
 
 // this browser tab's id (kept across reloads of the same tab), so a task keeps running in the tab that started it
 TDP.tabId = (() => { try { let v = sessionStorage.getItem('tdp-tab'); if (!v) { v = Math.random().toString(36).slice(2); sessionStorage.setItem('tdp-tab', v); } return v; } catch (e) { return 'tab'; } })();

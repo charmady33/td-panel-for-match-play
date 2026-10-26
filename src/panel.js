@@ -333,6 +333,7 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--pri);vertical-ali
     const j = T.jobs.get(); if (!j) return '';
     const last = j.log.slice(-4).map(T.esc).join('<br>');
     return `<div class="job"><div class="row"><b class="flex1">${T.esc(j.title)}</b>${j.done ? '<span class="badge b-green">Done</span>' : j.error ? '<span class="badge b-rose">Stopped</span>' : `<span class="badge b-indigo">Step ${Math.min(j.i + 1, j.steps.length)}/${j.steps.length}</span>`}</div>
+      ${!j.done && !j.error ? `<div style="height:6px;background:#e5e7eb;border-radius:3px;overflow:hidden;margin-top:6px"><i style="display:block;height:100%;width:${Math.max(4, Math.round(T.jobs.fraction(j) * 100))}%;background:#4f46e5;transition:width .3s"></i></div>${j.sub && j.sub.text ? `<div class="small mt">${T.esc(j.sub.text)}${j.sub.total > 1 ? ` (${j.sub.done} of ${j.sub.total})` : ''}</div>` : ''}` : ''}
       <div class="small mt">${last}</div>${j.error ? `<div class="callout err mt">${T.esc(j.error)}</div>` : ''}
       <div class="gap mt">${j.error ? '<button class="btn sm" data-act="jobRetry">Retry</button>' : ''}<button class="btn sm sec" data-act="jobClose">${j.done || j.error ? 'Close' : 'Stop'}</button></div></div>`;
   }

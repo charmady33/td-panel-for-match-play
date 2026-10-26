@@ -152,7 +152,39 @@ TDP.mp = (() => {
   }
 
   // ---------- banks (Banks tab) ----------
-  async function createBank(name, arenaNames) {
+  // tick is the progress callback: called once per game added/removed and once for the play order
+  const noTick = () => {};
+
+  // the "Add arenas" dialog: wait until the list stops growing, find each game fresh right before ticking it
+  // (the filter box finds any it can't see), check the button counts them all, then add
+  async function pickArenas(d, names, bankName, tick) {
+    const boxes = () => [...d.querySelectorAll('input[type=checkbox]')];
+    let last = -1, since = Date.now();
+    await T.waitFor(() => { const n = boxes().length; if (n !== last) { last = n; since = Date.now(); } return n > 0 && Date.now() - since > 700; }, 12000, 100);
+    if (!boxes().length) { T.click(T.findBtn(d, 'Close')); fail(`Bank "${bankName}": the Add arenas list did not load.`); }
+    const filter = [...d.querySelectorAll('input')].find(i => i.type !== 'checkbox' && /filter|search/i.test(i.placeholder || ''));
+    const find = nm => boxes().find(b => T.cbFirst(b) === nm);
+    for (const nm of names) {
+      let b = find(nm);
+      if (!b && filter) { T.setVal(filter, nm); b = await T.waitFor(() => find(nm), 4000); }
+      if (!b) { T.click(T.findBtn(d, 'Close')); fail(`Bank "${bankName}": couldn't find ${nm} in the Add arenas list.`); }
+      if (!b.checked) { b.click(); await T.sleep(80); }
+      if (!b.isConnected || !b.checked) { const again = await T.waitFor(() => find(nm), 2000); if (again && !again.checked) { again.click(); await T.sleep(80); } }
+      if (filter && filter.value) { T.setVal(filter, ''); await T.sleep(350); }
+      tick(`adding ${nm}`);
+    }
+    const btn = await T.waitFor(() => T.findBtn(d, /^Add \d+ arenas?$/), 4000);
+    const k = btn ? +T.txt(btn).match(/\d+/)[0] : 0;
+    if (k !== names.length) {
+      const ticked = names.filter(nm => { const b = find(nm); return b && b.checked; });
+      T.click(T.findBtn(d, 'Close'));
+      fail(`Bank "${bankName}": ${k} of ${names.length} games got ticked${ticked.length < names.length ? ` (couldn't tick ${names.filter(n => !ticked.includes(n)).join(', ')})` : ''}.`);
+    }
+    T.click(btn);
+    await dialogClosed();
+  }
+
+  async function createBank(name, arenaNames, tick = noTick) {
     T.click(await needBtn('Add bank'));
     let d = await needDialog();
     const input = d.querySelector('input') || fail('Bank name box not found.');
@@ -162,15 +194,12 @@ TDP.mp = (() => {
     const card = await T.waitFor(() => [...document.querySelectorAll('main div')].filter(T.visible).find(e => {
       const head = e.firstElementChild; return head && T.txt(head) === name && T.findBtn(e, /^Add arenas/);
     }), 8000) || fail(`Bank "${name}" was not created.`);
+    tick(`${name} created`);
     T.click(T.findBtn(card, /^Add arenas/));
     d = await needDialog();
-    const want = new Set(arenaNames); let hit = 0;
-    const boxes = await T.waitFor(() => { const b = [...d.querySelectorAll('input[type=checkbox]')]; return b.length ? b : null; }, 8000) || fail('Arena list did not load.');
-    for (const b of boxes) { const nm = TDP.cbFirst(b); if (want.has(nm) && !b.checked) { b.click(); hit++; await T.sleep(20); } }
-    if (hit !== want.size) { T.click(T.findBtn(d, 'Close')); fail(`Bank "${name}": only matched ${hit} of ${want.size} arenas.`); }
-    T.click(await needBtn(/^Add \d+ arenas?$/, d));
-    await dialogClosed();
+    await pickArenas(d, arenaNames, name, tick);
     await reorderBank(name, arenaNames);
+    tick(`${name} play order`);
   }
 
   // ---------- banks: play order = the bank's arena order (Re-order: click a game, then "Move to arena N") ----------
@@ -202,15 +231,17 @@ TDP.mp = (() => {
   const bankCard = name => [...document.querySelectorAll('main div')].filter(T.visible).find(e => {
     const head = e.firstElementChild; return head && T.txt(head) === name && T.findBtn(e, /^Add arenas/);
   });
-  async function setBankArenas(name, arenaNames) {
+  async function setBankArenas(name, arenaNames, tick = noTick) {
     let card = await T.waitFor(() => bankCard(name), 8000);
-    if (!card) return createBank(name, arenaNames);
+    if (!card) return createBank(name, arenaNames, tick);
     const want = new Set(arenaNames);
     for (let k = 0; k < 30; k++) {   // remove games that shouldn't be there (re-find after each removal)
       card = bankCard(name);
       const li = [...card.querySelectorAll('li')].find(x => x.querySelector('button') && !/^Add arenas/.test(T.txt(x)) && !want.has(T.txt(x)));
       if (!li) break;
+      const gone = T.txt(li);
       li.querySelector('button').click(); await T.sleep(900);
+      tick(`removing ${gone}`);
     }
     card = bankCard(name);
     const have = new Set([...card.querySelectorAll('li')].map(T.txt));
@@ -218,14 +249,10 @@ TDP.mp = (() => {
     if (missing.length) {
       T.click(T.findBtn(card, /^Add arenas/));
       const d = await needDialog();
-      const boxes = await T.waitFor(() => { const b = [...d.querySelectorAll('input[type=checkbox]')]; return b.length ? b : null; }, 8000) || fail('Arena list did not load.');
-      let hit = 0;
-      for (const b of boxes) if (missing.includes(T.cbFirst(b)) && !b.checked) { b.click(); hit++; await T.sleep(20); }
-      if (hit !== missing.length) { T.click(T.findBtn(d, 'Close')); fail(`Bank "${name}": only matched ${hit} of ${missing.length} new arenas.`); }
-      T.click(await needBtn(/^Add \d+ arenas?$/, d));
-      await dialogClosed();
+      await pickArenas(d, missing, name, tick);
     }
     await reorderBank(name, arenaNames);   // play order = the order given
+    tick(`${name} play order`);
   }
 
   // ---------- Matches tab: group Actions -> Assign bank -> tick one bank -> Update arenas ----------

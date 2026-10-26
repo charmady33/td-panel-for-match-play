@@ -13,6 +13,16 @@ TDP.jobs = (() => {
   const active = () => !!(job && !job.done && !job.error);
   const mine = () => !!(job && job.owner === T.tabId);
 
+  // progress inside one step (each game, bank, group…): job.sub = { done, total, text }; saved at most ~4x a second
+  let lastSub = 0;
+  function counter(total) {
+    const c = { done: 0, total: Math.max(1, total) };
+    const put = text => { if (!job) return; job.sub = { done: Math.min(c.done, c.total), total: c.total, text }; const now = Date.now(); if (now - lastSub > 250 || c.done >= c.total) { lastSub = now; save(); } else emit(); };
+    c.tick = text => { c.done++; put(text); };
+    c.to = (k, text) => { c.done = Math.max(c.done, k); put(text); };
+    return c;
+  }
+
   // keep other tabs' view of the job current; a task left from 0.6.0's background tab shows as stopped
   async function init() {
     const j = await T.store.get('job', null);
@@ -41,7 +51,7 @@ TDP.jobs = (() => {
   }
 
   const ops = {
-    async labels(a) { for (const g of a.groups) await T.mp.setLabels(g.ids, g.labels, a.color); },
+    async labels(a) { const P = counter(a.groups.length); for (const g of a.groups) { P.to(P.done, `${g.labels.join(', ') || 'no label'} · ${g.ids.length} player${g.ids.length === 1 ? '' : 's'}`); await T.mp.setLabels(g.ids, g.labels, a.color); P.tick(`${g.ids.length} player${g.ids.length === 1 ? '' : 's'} labelled`); } },
     async addPlayers(a) { await T.mp.addFromQualifying(a.ids); },
     async deactivate(a) { await T.mp.bulk(a.ids, 'Deactivate'); },
     async activate(a) { await T.mp.bulk(a.ids, 'Activate'); },
@@ -53,14 +63,30 @@ TDP.jobs = (() => {
       await T.loadT(a.tid); await T.saveT(a.tid, { ranks, ranksAt: Date.now() });
       return `${Object.values(ranks).filter(Boolean).length} ranked players`;
     },
-    async createBanks(a) { for (const b of a.banks) await T.mp.createBank(b.name, b.arenas); },
-    async bankArenas(a) { for (const b of a.banks) await T.mp.setBankArenas(b.name, b.arenas); },
-    async assignBanks(a) { for (const x of a.pairs) await T.mp.assignBank(x.group, x.bank); await T.saveT(a.tid, { banksDoneRound: a.roundId }); },
+    // banks: each bank is worth (games added + removed + play order); the bar moves with every one of them
+    async createBanks(a) { await eachBank(a.banks, (b, tick) => T.mp.createBank(b.name, b.arenas, tick), b => b.arenas.length + 2); },
+    async bankArenas(a) { await eachBank(a.banks, (b, tick) => T.mp.setBankArenas(b.name, b.arenas, tick), b => 2 * b.arenas.length + 1); },
+    async assignBanks(a) {
+      const P = counter(a.pairs.length);
+      for (const [i, x] of a.pairs.entries()) { P.to(i, `Group ${x.group} → ${x.bank} (${i + 1} of ${a.pairs.length})`); await T.mp.assignBank(x.group, x.bank); P.tick(`Group ${x.group} → ${x.bank} done`); }
+      await T.saveT(a.tid, { banksDoneRound: a.roundId });
+    },
     async noop() { /* just brings you back to a page */ },
     async resolveTie(a) { await T.mp.resolveTie(a.from, a.names); if (a.key) await T.ties.markApplied(a.qid, a.key); },
     async closeRound() { await T.mp.closeRound(); },
     async startNextRound() { await T.mp.startNextRound(); },
   };
+
+  async function eachBank(banks, fn, units) {
+    const sizes = banks.map(units), P = counter(sizes.reduce((x, y) => x + y, 0));
+    let base = 0;
+    for (const [i, b] of banks.entries()) {
+      const label = `${b.name} (bank ${i + 1} of ${banks.length})`;
+      P.to(base, label);
+      await fn(b, text => P.tick(`${label} · ${text}`));
+      base += sizes[i]; P.to(base, `${label} · done`);
+    }
+  }
 
   async function run() {
     if (running || !job) return;
@@ -79,9 +105,10 @@ TDP.jobs = (() => {
         }
         await T.sleep(1200);
         job.log.push(s.label || s.op); await save();
+        job.sub = null;
         const res = await ops[s.op](s.args || {});
         if (res) job.log.push('  ' + res);
-        job.i++; await save();
+        job.i++; job.sub = null; await save();
       }
       if (job && job.i >= job.steps.length) {
         // back to the page the TD was on
@@ -105,5 +132,8 @@ TDP.jobs = (() => {
     run();
   }
 
-  return { init, start, cancel, resume, retry, active, mine, running: () => running, get: () => job, on: f => listeners.add(f) };
+  // 0..1 across the whole task (steps + progress inside the current step)
+  const fraction = j => { j = j || job; if (!j) return 0; const n = j.steps.length, sub = j.sub && j.sub.total ? j.sub.done / j.sub.total : 0; return Math.min(1, (Math.min(j.i, n) + (j.i < n ? sub : 0)) / n); };
+
+  return { init, start, cancel, resume, retry, active, mine, fraction, counter, running: () => running, get: () => job, on: f => listeners.add(f) };
 })();

@@ -10,7 +10,8 @@ TDP.busy = (() => {
   let snap = null, host = null;
 
   const panelW = () => { const c = document.documentElement.classList; return c.contains('tdp-side') ? 380 : c.contains('tdp-rail') ? 48 : 0; };
-  const stepText = j => { const s = j.steps[Math.min(j.i, j.steps.length - 1)]; return s ? (s.label || s.op) : ''; };
+  const stepText = j => { if (j.sub && j.sub.text) return j.sub.text; const s = j.steps[Math.min(j.i, j.steps.length - 1)]; return s ? (s.label || s.op) : ''; };
+  const countText = j => j.sub && j.sub.total > 1 ? ` (${j.sub.done} of ${j.sub.total})` : j.steps.length > 1 ? ` (step ${Math.min(j.i + 1, j.steps.length)} of ${j.steps.length})` : '';
 
   // the page's background colour (body, else html, else white/dark) - the cover must be solid
   const solidBg = () => {
@@ -35,12 +36,12 @@ TDP.busy = (() => {
   }
 
   // ---------- the cover ----------
-  const CARD_CSS = `.dim{position:fixed;inset:0}.card{position:fixed;left:50%;top:38%;transform:translate(-50%,-50%);width:340px;max-width:90vw;background:#fff;color:#111827;border-radius:10px;box-shadow:0 20px 45px rgba(0,0,0,.22);padding:16px 18px;font:14px/1.4 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
-.dark .card{background:#1f2937;color:#f3f4f6}.t{font-weight:600;font-size:15px;display:flex;gap:8px;align-items:center}.s{font-size:12px;color:#6b7280;margin-top:3px}.dark .s{color:#9ca3af}
-.pb{height:6px;background:#e5e7eb;border-radius:3px;overflow:hidden;margin:12px 0 10px}.pb i{display:block;height:100%;background:#4f46e5;transition:width .3s}
-.row{display:flex;align-items:center;gap:8px}.f{flex:1;font-size:12px;color:#6b7280}
-.b{font:500 13px ui-sans-serif,system-ui,sans-serif;border:1px solid #c7d2fe;background:#fff;color:#4338ca;border-radius:6px;padding:5px 12px;cursor:pointer}.b:hover{background:#eef2ff}
-.sp{width:16px;height:16px;border:2px solid #4f46e5;border-right-color:transparent;border-radius:50%;animation:sp .8s linear infinite;flex:none}@keyframes sp{to{transform:rotate(360deg)}}`;
+  const CARD_CSS = `.tdpc-dim{position:fixed;inset:0}.tdpc-card{position:fixed;left:50%;top:38%;transform:translate(-50%,-50%);width:340px;max-width:90vw;background:#fff;color:#111827;border-radius:10px;box-shadow:0 20px 45px rgba(0,0,0,.22);padding:16px 18px;font:14px/1.4 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+.dark .tdpc-card{background:#1f2937;color:#f3f4f6}.tdpc-t{font-weight:600;font-size:15px;display:flex;gap:8px;align-items:center}.tdpc-s{font-size:12px;color:#6b7280;margin-top:3px}.dark .tdpc-s{color:#9ca3af}
+.tdpc-pb{height:6px;background:#e5e7eb;border-radius:3px;overflow:hidden;margin:12px 0 10px}.tdpc-pb i{display:block;height:100%;background:#4f46e5;transition:width .3s}
+.tdpc-row{display:flex;align-items:center;gap:8px}.tdpc-f{flex:1;font-size:12px;color:#6b7280}
+.tdpc-b{font:500 13px ui-sans-serif,system-ui,sans-serif;border:1px solid #c7d2fe;background:#fff;color:#4338ca;border-radius:6px;padding:5px 12px;cursor:pointer}.tdpc-b:hover{background:#eef2ff}
+.tdpc-sp{width:16px;height:16px;border:2px solid #4f46e5;border-right-color:transparent;border-radius:50%;animation:sp .8s linear infinite;flex:none}@keyframes sp{to{transform:rotate(360deg)}}`;
 
   function showCover(j) {
     document.getElementById('tdp-cover-early')?.remove();
@@ -69,12 +70,12 @@ TDP.busy = (() => {
       [...snap.node.childNodes].forEach(n => b.appendChild(n));   // moved, not copied, so our boxes' contents stay
       wrap.appendChild(b); pg.appendChild(wrap);
     }
-    const n = j.steps.length, at = Math.min(j.i + 1, n), pct = Math.max(6, Math.round((Math.min(j.i, n) / n) * 100));
-    const html = `<div class="${dark ? 'dark' : ''}"><div class="dim" style="background:${dark ? 'rgba(17,24,39,.35)' : 'rgba(255,255,255,.35)'}"></div><div class="card">
-      <div class="t"><span class="sp"></span>Updating Matchplay…</div>
-      <div class="s">${T.esc(j.title)}</div><div class="s">${T.esc(stepText(j))}${n > 1 ? ` (${at} of ${n})` : ''}</div>
-      <div class="pb"><i style="width:${pct}%"></i></div>
-      <div class="row"><span class="f">Please wait - the page is locked until it's done.</span><button class="b" data-act="stop">Stop</button></div></div></div>`;
+    const pct = Math.max(4, Math.round(T.jobs.fraction(j) * 100));
+    const html = `<div class="${dark ? 'dark' : ''}"><div class="tdpc-dim" style="background:${dark ? 'rgba(17,24,39,.35)' : 'rgba(255,255,255,.35)'}"></div><div class="tdpc-card">
+      <div class="tdpc-t"><span class="tdpc-sp"></span>Updating Matchplay…</div>
+      <div class="tdpc-s">${T.esc(j.title)}</div><div class="tdpc-s">${T.esc(stepText(j))}</div>
+      <div class="tdpc-pb"><i style="width:${pct}%"></i></div><div class="tdpc-s" style="margin:-4px 0 8px;text-align:right">${pct}%${T.esc(countText(j))}</div>
+      <div class="tdpc-row"><span class="tdpc-f">Please wait - the page is locked until it's done.</span><button class="tdpc-b" data-act="stop">Stop</button></div></div></div>`;
     const ui = root.querySelector('.ui'); if (ui.dataset.h !== html) { ui.dataset.h = html; ui.innerHTML = html; }
   }
   function hideCover() { document.getElementById('tdp-cover-early')?.remove(); if (host) { host.remove(); host = null; } snap = null; }
@@ -97,7 +98,7 @@ TDP.busy = (() => {
     let banner = '';
     if (here && j.error) banner = `<div class="callout err gap" style="margin:8px 0;align-items:center"><span class="flex1"><b>Update stopped:</b> ${T.esc(j.title)} - ${T.esc(j.error)}</span><button class="btn sm" data-act="retry">Retry</button><button class="btn sm sec" data-act="stop">Stop</button></div>`;
     else if (here && fresh) banner = `<div class="callout ok" style="margin:8px 0"><b>Updates done ✓</b> ${T.esc(j.title)}</div>`;
-    else if (here && running && !T.jobs.mine()) banner = `<div class="callout gap" style="margin:8px 0;align-items:center"><span class="flex1"><b>Updating Matchplay in another tab:</b> ${T.esc(j.title)} - ${T.esc(stepText(j))}${j.steps.length > 1 ? ` (${Math.min(j.i + 1, j.steps.length)} of ${j.steps.length})` : ''}. Changes will show when it's done.</span><button class="btn sm sec" data-act="stop">Stop</button></div>`;
+    else if (here && running && !T.jobs.mine()) banner = `<div class="callout gap" style="margin:8px 0;align-items:center"><span class="flex1"><b>Updating Matchplay in another tab:</b> ${T.esc(j.title)} - ${T.esc(stepText(j))} · ${Math.round(T.jobs.fraction(j) * 100)}%. Changes will show when it's done.</span><button class="btn sm sec" data-act="stop">Stop</button></div>`;
     const top = main ? (document.getElementById('tdp-tb-reminder') || [...main.children].find(e => !/^tdp-/.test(e.id || ''))) : null;
     T.inpage.block('tdp-busy-banner', banner ? top : null, 'before', banner, onClick);
   }
