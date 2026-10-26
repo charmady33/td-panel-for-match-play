@@ -27,8 +27,8 @@ TDP.sync = (() => {
   };
 
   // refetch the tournament in place; resolves when Matchplay shows the new data
-  async function soft() {
-    if (hopping || !T.routeTid()) return;
+  async function soft(opts = {}) {
+    if (hopping || (!T.routeTid() && !opts.any)) return;
     const rb = T.findBtn(main() || document, /^Refresh$/);
     if (rb) { T.click(rb); await settled(); return; }
     hopping = true;
@@ -37,7 +37,7 @@ TDP.sync = (() => {
       T.busy.still(true);
       const go = u => { history.replaceState(history.state, '', u); dispatchEvent(new PopStateEvent('popstate', { state: history.state })); };
       go('/tournaments/0');
-      await new Promise(r => requestAnimationFrame(() => setTimeout(r, 0)));
+      await Promise.race([new Promise(r => requestAnimationFrame(() => setTimeout(r, 0))), T.sleep(120)]);   // (no frames in a hidden tab)
       go(path);
       await settled();
       const m2 = main(); if (m2 && y) m2.scrollTop = y; if (sx || sy) scrollTo(sx, sy);

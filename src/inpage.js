@@ -199,8 +199,8 @@ TDP.inpage = (() => {
     }
     let testRow = '';
     if (D.t.test === true && D.t.status === 'started') {
-      const r = T.data.currentRound(), gs = r ? D.games.filter(g => g.roundId === r.roundId && !g.bye && g.set !== 9999) : [];
-      const open = gs.filter(g => !T.timing.isDone(g)), ready = open.filter(g => g.arenaId != null);
+      const r = T.data.currentRound(), gs = r ? D.games.filter(g => g.roundId === r.roundId && !g.bye) : [];
+      const open = gs.filter(g => !T.timing.isDone(g)), ready = open.filter(g => g.arenaId != null || g.set === 9999);   // tiebreakers get a random arena
       testRow = `<div class="cb gap" style="border-top:1px solid var(--line);flex-wrap:wrap;align-items:center;background:#fffbeb">
         <span class="badge b-amber">Test</span>
         <button class="btn sm sec" data-act="fill" ${ready.length && !T.jobs.active() && String((r || {}).status) !== 'pending' ? '' : 'disabled'}>Fill random results</button>
@@ -240,11 +240,34 @@ TDP.inpage = (() => {
       }
       n.style.cssText = `margin:8px 12px;padding:6px 8px;border-radius:6px;font-size:12px;background:${c[0]};color:${c[1]};border-left:4px solid ${c[2]}`;
       const btn = (t, label) => `<button data-tdp-g="${t.group}:${t.pts}" style="margin-left:6px;font:inherit;font-weight:600;color:#4338ca;background:#fff;border:1px solid #a5b4fc;border-radius:6px;padding:1px 8px;cursor:pointer">${label}</button>`;
-      const html = ts.map(t => t.ours
-        ? `<div><b>Tiebreaker${t.ours.game ? ` on ${T.esc(t.ours.game)}` : ''}:</b> ${t.ours.finish.map((id, i) => `${T.esc(nm(id))} ${T.ord(t.place + i)}`).join(', ')}${btn(t, 'Details')}</div>`
-        : `<div><b>${T.esc(t.why)}</b> · ${T.esc(t.players.join(', '))}${t.tbOpen ? ' · tiebreaker game open' : t.tbDone ? ' · tiebreaker played' : btn(t, 'Break tie')}</div>`).join('');
+      const am = T.data.arenaMap(D.t), arenaOf = g => g && g.arenaId != null ? (am[g.arenaId] || {}).name || 'an arena' : null;
+      const html = ts.map(t => {
+        if (t.ours) return `<div><b>Tiebreaker${t.ours.game ? ` on ${T.esc(t.ours.game)}` : ''}:</b> ${t.ours.finish.map((id, i) => `${T.esc(nm(id))} ${T.ord(t.place + i)}`).join(', ')}${btn(t, 'Details')}</div>`;
+        const head = `<b>${T.esc(t.why)}</b> · ${T.esc(t.players.join(', '))}`;
+        if (t.tbGame && t.tbDone) return `<div><b>Tiebreaker done${arenaOf(t.tbGame) ? ` on ${T.esc(arenaOf(t.tbGame))}` : ''}:</b> ${t.tbOrder.map((id, i) => `${T.esc(nm(id))} ${T.ord(t.place + i)}`).join(', ')}</div>`;
+        if (t.tbGame && arenaOf(t.tbGame)) return `<div>${head} · <b>tiebreaker on ${T.esc(arenaOf(t.tbGame))}, playing</b> (enter its result below)</div>`;
+        if (t.tbGame) return `<div>${head} · Matchplay added a tiebreaker game (below) - no arena yet${btn(t, 'Pick tiebreaker game')}</div>`;
+        return `<div>${head} · <b>needs a tiebreaker game</b> <span style="opacity:.75">(Matchplay hasn't added one)</span>${btn(t, 'Break tie')}</div>`;
+      }).join('');
       if (n.dataset.h !== html) { n.dataset.h = html; n.innerHTML = html; }
+      // Matchplay's tiebreaker card(s) below the round: say which group and places they're for
+      for (const t of ts.filter(x => x.tbGame)) tbCard(D, t, c, nm, btn);
     }
+  }
+
+  function tbCard(D, t, c, nm, btn) {
+    const names = (t.tbGame.playerIds || []).map(nm);
+    const card = T.mp.gameCard(names); if (!card || /\bTot\.?/.test(T.txt(card))) return;   // not drawn yet (only the group's table matches)
+    let lab = card.querySelector(':scope > [data-tdp=tblabel]');
+    if (!lab) {
+      lab = document.createElement('div'); lab.dataset.tdp = 'tblabel'; card.prepend(lab);
+      lab.addEventListener('click', ev => { const b = ev.target.closest('[data-tdp-g]'); if (!b) return; ev.preventDefault(); ev.stopPropagation(); const x = (T.finals.groupTies(T.data.D) || []).find(y => `${y.group}:${y.pts}` === b.dataset.tdpG); if (x) T.ties.openGroup(T.data.D, x); });
+    }
+    const places = t.ids.length > 2 ? `${T.ord(t.place)}–${T.ord(t.place + t.ids.length - 1)}` : `${T.ord(t.place)}/${T.ord(t.place + 1)}`;
+    const html = `Tiebreaker · Group ${t.group} · ${t.kind === 'final' ? 'Final' : 'advancing spot'} · for ${places}${t.tbOpen && t.tbGame.arenaId == null ? btn(t, 'Pick tiebreaker game') : ''}`;
+    lab.style.cssText = `padding:6px 10px;font-size:12px;font-weight:600;background:${c[0]};color:${c[1]};border-bottom:1px solid ${c[2]};border-radius:8px 8px 0 0`;
+    if (lab.dataset.h !== html) { lab.dataset.h = html; lab.innerHTML = html; }
+    card.style.boxShadow = t.tbOpen ? `0 0 0 3px ${c[2]}` : '';
   }
 
   // "Assign bank" / "Change bank" next to each group's name: opens Matchplay's own Assign bank dialog (Actions → Assign bank)
@@ -277,12 +300,21 @@ TDP.inpage = (() => {
     }
   }
 
-  // reminder on every page of the tournament while a tiebreaker waits for results
+  // reminder on every page of the tournament while a tiebreaker waits for results, or check-in ticks wait for Confirm
+  const loading = new Set();
   function reminder(D) {
     const p = D.qual ? T.ties.pending(D) : [];
+    const ck = [];
+    for (const f of D.finals || []) {
+      if (!T.tstate[f.tid]) { if (!loading.has(f.tid)) { loading.add(f.tid); T.loadT(f.tid).then(() => render()); } continue; }
+      const n = Object.keys(T.tstate[f.tid].ckPending || {}).length;
+      if (n && !(D.tid === f.tid && T.routePage() === 'players')) ck.push({ f, n });
+    }
     const main = document.querySelector('main');
-    const anchor = p.length && main ? [...main.children].find(e => !/^tdp-/.test(e.id || '')) : null;
-    block('tdp-tb-reminder', anchor, 'before', p.length ? `<div class="callout warn gap" style="margin:8px 16px">${p.length} tiebreaker${p.length === 1 ? '' : 's'} waiting for results: ${p.map(x => `<button class="btn sm" data-act="tb" data-key="${x.key}">Positions ${x.pos}–${x.pos + x.ids.length - 1} · ${T.esc(x.game || '')}</button>`).join(' ')}</div>` : '', onTieClick);
+    const anchor = (p.length || ck.length) && main ? [...main.children].find(e => !/^tdp-/.test(e.id || '')) : null;
+    const tbs = p.length ? `<div class="callout warn gap" style="margin:8px 16px">${p.length} tiebreaker${p.length === 1 ? '' : 's'} waiting for results: ${p.map(x => `<button class="btn sm" data-act="tb" data-key="${x.key}">Positions ${x.pos}–${x.pos + x.ids.length - 1} · ${T.esc(x.game || '')}</button>`).join(' ')}</div>` : '';
+    const cks = ck.map(({ f, n }) => `<div class="callout warn gap" style="margin:8px 16px;align-items:center"><span class="flex1">${n} check-in change${n === 1 ? '' : 's'} waiting for Confirm in ${T.esc(f.name || (f.t && f.t.name) || 'the finals')}.</span><a class="btn sm" href="/tournaments/${f.tid}/players">Go to Players</a></div>`).join('');
+    block('tdp-tb-reminder', anchor, 'before', tbs + cks, onTieClick);
   }
   let lastPage = null;
   function render() {

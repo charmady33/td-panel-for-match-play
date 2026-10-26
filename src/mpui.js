@@ -332,6 +332,49 @@ TDP.mp = (() => {
     await dialogClosed();
   }
 
+  // ---------- Overview: More… -> Delete tournament -> Matchplay's confirm ----------
+  async function deleteTournament(name) {
+    T.click(T.findBtn(document.querySelector('main') || document, /^More/) || fail('No More… menu on the Overview.'));
+    T.click(await needBtn(/^Delete tournament$/));
+    const d = await needDialog();
+    const input = d.querySelector('input[type=text], input:not([type])');
+    if (input) {   // "type the name / DELETE to confirm"
+      const m = T.txt(d).match(/type\s+["“']?([^"”'\s]+)["”']?/i);
+      T.setVal(input, T.txt(d).includes(name) ? name : m ? m[1] : 'DELETE');
+    }
+    const ok = await T.waitFor(() => [...d.querySelectorAll('button')].find(b => T.visible(b) && !b.disabled && /^(delete( tournament)?|yes,? delete( it)?|confirm|remove)$/i.test(T.txt(b))), 4000);
+    if (!ok) { const c = T.findBtn(d, /^Cancel$/); if (c) T.click(c); fail("Couldn't find Matchplay's delete confirm button."); }
+    T.click(ok);
+    await dialogClosed(10000);
+  }
+
+  // ---------- one game's arena (e.g. Matchplay's tiebreaker game, "No arena"): Assign arena, or Details -> Change arena ----------
+  // the game = the smallest card holding all its players' names (smaller than the group's table)
+  function gameCard(names) {
+    const has = el => { const t = T.txt(el); return names.every(n => t.includes(n)); };
+    const cands = [...document.querySelectorAll('main a, main button')].filter(b => T.visible(b) && !b.closest('[data-tdp]') && /^(Assign arena|View details|Details|Enter results|Results)$/i.test(T.txt(b)))
+      .map(b => { let c = b; while (c && c.tagName !== 'MAIN' && !has(c)) c = c.parentElement; return c && c.tagName !== 'MAIN' ? c : null; }).filter(Boolean);
+    cands.sort((a, b) => T.txt(a).length - T.txt(b).length);
+    return cands[0] || null;
+  }
+  async function setGameArena(names, arena) {
+    const card = await T.waitFor(() => gameCard(names), 8000) || fail(`Game for ${names.join(', ')} not found on the Matches tab.`);
+    const assign = T.findBtn(card, /^Assign arena$/);
+    if (assign) T.click(assign);
+    else {
+      T.click(T.findBtn(card, /^(View details|Details)$/) || fail('No details link for that game.'));
+      T.click(await needBtn(/^Change arena$/));
+    }
+    const d = await needDialog();
+    const sel = await T.waitFor(() => d.querySelector('select'), 4000) || fail('Arena list not found.');
+    const opt = [...sel.options].find(o => T.txt(o) === arena) || (T.click(T.findBtn(d, 'Cancel')), fail(`Arena "${arena}" is not in this tournament.`));
+    T.setVal(sel, opt.value);
+    T.click(await needBtn('Save', d));
+    await dialogClosed();
+    // back from the game's details (if we opened them)
+    if (/\/matches\/\d+/.test(location.pathname)) { history.back(); await T.sleep(400); }
+  }
+
   // ---------- Resolve ties page: open the "Positions from-to" tie, put players in this order, Save ----------
   async function resolveTie(from, namesInOrder) {
     const isHead = e => e.children.length === 0 && new RegExp('^Positions\\s+' + from + '\\s*[-–]\\s*\\d+$').test(T.txt(e));
@@ -355,5 +398,5 @@ TDP.mp = (() => {
     await dialogClosed();
   }
 
-  return { openAssign, groupHead, goTab, menu, playerRows, selectPlayers, setLabels, bulk, setActive, readIfpaRanks, addFromQualifying, setSeeds, closeRound, startNextRound, publishRound, createBank, setBankArenas, reorderBank, assignBank, enterResults, addArenas, resolveTie, needBtn, needDialog, dialogClosed };
+  return { deleteTournament, setGameArena, gameCard, openAssign, groupHead, goTab, menu, playerRows, selectPlayers, setLabels, bulk, setActive, readIfpaRanks, addFromQualifying, setSeeds, closeRound, startNextRound, publishRound, createBank, setBankArenas, reorderBank, assignBank, enterResults, addArenas, resolveTie, needBtn, needDialog, dialogClosed };
 })();

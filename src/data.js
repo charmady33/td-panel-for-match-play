@@ -37,7 +37,7 @@ TDP.data = (() => {
     }
   }
 
-  async function loadGames() {
+  async function loadGames(force) {
     // Matchplay lists rounds newest first: keep them oldest first everywhere (Round 1, 2, 3…)
     D.rounds = arr(unwrap(await api.get(`/tournaments/${D.tid}/rounds`, 15000))).sort((a, b) => ((a.index != null ? a.index : a.roundId) - (b.index != null ? b.index : b.roundId)));
     const keep = new Map(D.games.map(g => [g.gameId, g]));
@@ -45,7 +45,7 @@ TDP.data = (() => {
       const done = String(r.status) === 'completed';
       if (done && doneRounds.has(r.roundId)) continue;
       const path = `/tournaments/${D.tid}/games?round=${r.roundId}`;
-      const list = await api.all(path, done ? 0 : 12000);
+      const list = await api.all(path, done || force ? 0 : 12000);   // after a change: the open round straight from the API
       for (const g of list) keep.set(g.gameId, g);
       if (done) { doneRounds.add(r.roundId); }
     }
@@ -95,7 +95,7 @@ TDP.data = (() => {
         lastStand = now;
       }
       if (fullDue && !D.games.length) { D.cached = false; emit(); }   // first load: players + standings are enough to draw
-      await loadGames();
+      await loadGames(force);
       D.error = null; D.cached = false;
       saveCache();
       noteChange();
@@ -183,7 +183,11 @@ TDP.data = (() => {
     if (tid) { await refresh(true); start(); }
     emit();
   }
-  function start() { stop(); timer = setInterval(() => { if (!document.hidden) refresh(); }, 15000); }
+  // every 15 s while the tab shows; in the background only when an automatic option is on (every 30 s - Chrome may
+  // slow it to about once a minute), so a round started on a phone is still noticed
+  const autosOn = () => { const st = T.tstate[D.tid] || {}; return !!(st.auto || st.autoBanks || st.autoAssign); };
+  let ticks = 0;
+  function start() { stop(); timer = setInterval(() => { ticks++; if (!document.hidden || (autosOn() && ticks % 2 === 0)) refresh(); }, 15000); }
   function stop() { if (timer) clearInterval(timer); timer = null; }
 
   // ---------- derived ----------

@@ -5,7 +5,13 @@ var TDP = window.TDP || (window.TDP = {});
 
 TDP.embed = (() => {
   const T = TDP, F = () => T.finals;
-  let host = null, root = null, pending = new Map(), timer = null;   // pending: playerId -> { div, on }
+  let host = null, root = null, pending = new Map(), pendFor = null;   // pending: playerId -> { div, on } - ticks waiting for Confirm
+  // waiting ticks are saved per finals (this browser), so they survive other tabs, reloads and closing the page
+  function loadPending(tid) {
+    if (pendFor === tid) return;
+    pendFor = tid; pending = new Map(Object.entries((T.tstate[tid] || {}).ckPending || {}).map(([k, v]) => [Number(k), v]));
+  }
+  const savePending = tid => { const o = Object.fromEntries(pending); T.tstate[tid] = { ...(T.tstate[tid] || {}), ckPending: o }; return T.saveT(tid, { ckPending: o }); };
 
   const CSS = () => (T.panel.CSS || '') + `
 :host{all:initial;display:block;margin-top:24px}
@@ -18,6 +24,8 @@ TDP.embed = (() => {
 tr.pend td{background:#fffbeb}
 tr.back td{background:var(--head)}
 tr.capped td{opacity:.55}
+.cbar{position:sticky;top:0;z-index:3;display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:#eef2ff;border:1px solid var(--prib);border-radius:8px;padding:8px 12px;margin:0 0 12px;box-shadow:0 2px 6px rgba(0,0,0,.08)}
+.dark .cbar{background:#1e1b4b}
 .spin{width:14px;height:14px;border:2px solid var(--pril);border-right-color:transparent;border-radius:50%;animation:sp .8s linear infinite;display:inline-block}@keyframes sp{to{transform:rotate(360deg)}}`;
 
   // a finals = linked to a qualifying, with no playoffs or cut lines of its own
@@ -70,6 +78,9 @@ tr.capped td{opacity:.55}
         : `<div class="card"><div class="cb gap"><span class="spin"></span><b>Finals check-in</b><span class="small">Loading players${D.qual ? ` from ${T.esc(D.qual.name)}` : ''}…</span></div></div>`);
       return;
     }
+    loadPending(D.tid);
+    { const saved = (T.tstate[D.tid] || {}).ckPending || {};   // changed in another tab
+      if (JSON.stringify(saved) !== JSON.stringify(Object.fromEntries(pending))) pending = new Map(Object.entries(saved).map(([k, v]) => [Number(k), v])); }
     const job = T.jobs.get(), busy = !!(job && !job.done && !job.error);
     // a check-in task that just finished: Matchplay has the change - show it now, until the API agrees (max 60 s)
     const doneJob = job && job.done && job.title === 'Finals check-in' && Date.now() - (job.doneAt || 0) < 60000 ? job : null;
@@ -86,7 +97,16 @@ tr.capped td{opacity:.55}
     // players the running task is changing (shown as "Checking in…" until Matchplay has them)
     const inJob = new Map();
     if (busy) for (const st of job.steps.slice(job.i)) for (const id of (st.args && st.args.ids) || []) inJob.set(id, st.op === 'deactivate' ? 'off' : 'on');
-    let h = `<h2>Finals check-in</h2><div class="sub">Tick a player when they check in: they're added to this finals as <b>Active</b>. Untick to take them out. Backups go in place of a no-show.${pending.size ? ` <button class="link" data-act="now">Apply now</button>` : ''}</div>`;
+    // waiting ticks Matchplay already matches (e.g. Activate used in Matchplay): nothing left to do for them
+    let dropped = false;
+    for (const [id, c] of [...pending]) { const x = divs.find(d => d.i === c.div); const p = x && x.inFinals[id]; const act = !!(p && (p.tournamentPlayer || {}).status === 'active'); if (x && act === c.on) { pending.delete(id); dropped = true; } }
+    if (dropped) savePending(D.tid);
+    let h = `<h2>Finals check-in</h2><div class="sub">Tick each player who checks in (untick to take someone out), then <b>Confirm</b>: they're added to this finals as <b>Active</b>. Backups go in place of a no-show.</div>`;
+    if (pending.size) {
+      const ins = [...pending].filter(([, c]) => c.on).map(([id]) => nameOf(D, id)), outs = [...pending].filter(([, c]) => !c.on).map(([id]) => nameOf(D, id));
+      h += `<div class="cbar"><span class="flex1"><b>${pending.size} change${pending.size === 1 ? '' : 's'}:</b> ${ins.length ? `check in ${ins.map(T.esc).join(', ')}` : ''}${ins.length && outs.length ? ' · ' : ''}${outs.length ? `take out ${outs.map(T.esc).join(', ')}` : ''}</span>
+        <button class="btn sm sec" data-act="clear">Clear</button><button class="btn sm" data-act="now" ${busy ? 'disabled title="Waiting for the update that\'s running"' : ''}>Confirm</button></div>`;
+    }
     for (const x of divs) {
       const f = x.finals, started = f && f.t && f.t.status !== 'planned';
       const fp = x.inFinals, cap = (f && f.t && f.t.bracketSize) || x.size;   // the finals' own bracket size, else the cut line
@@ -98,7 +118,8 @@ tr.capped td{opacity:.55}
       const lockMsg = started ? `${x.letter} Finals has started: check-in is locked. To swap a player, use Matchplay's Activate / Deactivate above.` : '';
       const row = (r, label, isBackup) => {
         const pend = pending.get(r.playerId), working = inJob.get(r.playerId), want = wantOf(r.playerId);
-        const state = pend || working ? `<span class="badge b-amber">${want ? 'Checking in…' : 'Taking out…'}</span>`
+        const state = working ? `<span class="badge b-amber">${want ? 'Checking in…' : 'Taking out…'}</span>`
+          : pend ? `<span class="badge b-amber">${want ? 'Will check in' : 'Will take out'}</span>`
           : want ? '<span class="badge b-green">Checked in</span>' : '<span class="badge b-gray">Not checked in</span>';
         const from = isBackup && r.from ? ` <span class="small">(in ${r.from.letter})</span>` : '';
         const capped = full && !want, off = !f || started || working || capped;
@@ -136,13 +157,16 @@ tr.capped td{opacity:.55}
       if (other && !confirm(`${nameOf(D, id)} is checked in to ${other.letter}. Move them to ${here ? here.letter : 'this'} finals? They'll be taken out of ${other.letter}.`)) { cb.checked = false; return; }
     }
     if (cb.checked && cb.closest('tr').classList.contains('capped')) { cb.checked = false; return; }
-    pending.set(id, { div, on: cb.checked });
-    clearTimeout(timer); timer = setTimeout(apply, 1000);   // a quick second tick joins the same update
+    // ticking back to what Matchplay has = no change
+    const x = F().plan(D).find(o => o.i === div), p = x && x.inFinals[id], act = !!(p && (p.tournamentPlayer || {}).status === 'active');
+    if (act === cb.checked) pending.delete(id); else pending.set(id, { div, on: cb.checked });
+    savePending(D.tid);
     render();
   }
   function onClick(e) {
     const a = e.target.closest('[data-act]'); if (!a) return;
-    if (a.dataset.act === 'now') { clearTimeout(timer); apply(); }
+    if (a.dataset.act === 'now') apply();
+    if (a.dataset.act === 'clear') { pending.clear(); savePending(T.data.D.tid); render(); }
     if (a.dataset.act === 'retry') { T.api.clear(); T.data.refresh(true); }
     if (a.dataset.act === 'more') { const i = +a.dataset.div; if (more.has(i)) more.delete(i); else more.add(i); render(); }
   }
@@ -151,7 +175,7 @@ tr.capped td{opacity:.55}
   async function apply() {
     if (!pending.size) return;
     const D = T.data.D, divs = F().plan(D), steps = [];
-    const changes = [...pending.entries()]; pending.clear();
+    const changes = [...pending.entries()]; pending.clear(); await savePending(D.tid);
     for (const x of divs) {
       if (!x.finals) continue;
       const mine = changes.filter(([, c]) => c.div === x.i);
@@ -178,7 +202,7 @@ tr.capped td{opacity:.55}
     }
     if (!steps.length) { render(); return; }
     steps.push({ tid: D.tid, page: 'players', op: 'noop', label: 'Back to this Players tab' });
-    try { await T.jobs.start('Finals check-in', steps); } catch (e) { T.panel.say(e.message, 'err'); }
+    try { await T.jobs.start('Finals check-in', steps); } catch (e) { T.panel.say(e.message, 'err'); pending = new Map(changes); await savePending(D.tid); }
     render();
   }
   const nameOf = (D, id) => ((T.data.playerMap(D.qual)[id]) || {}).name || id;

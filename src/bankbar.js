@@ -147,10 +147,17 @@ TDP.bankbar = (() => {
 table{width:100%;border-collapse:collapse}td{padding:4px 6px;border-top:1px solid var(--line)}
 .gname{background:none;border:0;padding:0;font:inherit;color:inherit;cursor:pointer;text-align:left;border-bottom:1px dashed var(--prib)}
 .gname:hover,.gname.on{color:var(--pri2)}.gname .caret{font-size:10px;color:var(--soft)}
-.picker{display:block!important;border:1px solid var(--prib);border-radius:6px;margin:4px 0 6px;padding:4px;background:var(--card)}
-.plist{max-height:220px;overflow:auto}
-.popt{display:flex;width:100%;gap:8px;align-items:center;background:none;border:0;border-radius:4px;padding:4px 6px;font:inherit;font-size:13px;color:var(--text);cursor:pointer;text-align:left}
+.gwrap{white-space:normal;word-break:break-word;min-width:0}
+.bk li{align-items:flex-start}
+.pop{position:fixed;z-index:5;width:380px;max-width:calc(100vw - 16px);background:var(--card);border:1px solid var(--prib);border-radius:8px;box-shadow:0 12px 30px rgba(0,0,0,.25);padding:6px}
+.phead{display:flex;gap:6px;align-items:flex-start;font-size:12px;color:var(--muted);padding:2px 4px 6px}
+.phead .x{background:none;border:0;font-size:16px;line-height:1;color:var(--soft);cursor:pointer}
+.plist{max-height:300px;overflow:auto}
+.popt{display:block;width:100%;background:none;border:0;border-radius:6px;padding:6px 8px;font:inherit;color:var(--text);cursor:pointer;text-align:left;border-bottom:1px solid var(--line)}
+.popt:last-child{border-bottom:0}
 .popt:hover{background:var(--head)}
+.popt .pn{display:block;font-weight:600;font-size:14px;white-space:normal;word-break:break-word}
+.popt .pd{display:block;font-size:12px;color:var(--soft);margin-top:1px}
 .err{color:#be123c}`;
   function show(inner) {
     if (!host) {
@@ -164,9 +171,22 @@ table{width:100%;border-collapse:collapse}td{padding:4px 6px;border-top:1px soli
     host.shadowRoot.innerHTML = `<style>${CSS()}</style><div class="wrap${document.documentElement.classList.contains('dark') ? ' dark' : ''}"><div class="ov" data-act="bg"><div class="dlg">${inner}</div></div></div>`;
     const inp = host.shadowRoot.querySelector('input[data-autofocus]'); if (inp) inp.focus();
     if (y) { const db = host.shadowRoot.querySelector('.db'); if (db) db.scrollTop = y; }
+    placePopover();
   }
   function close() { if (host) host.remove(); host = null; cur = null; }
-
+  // the replacement list opens over the preview, lined up under the game that was clicked
+  function placePopover() {
+    const r = host && host.shadowRoot, pop = r && r.querySelector('.pop'); if (!pop || !cur || !cur.picking) return;
+    const btn = r.querySelector(`[data-act=pick][data-b="${cur.picking.bi}"][data-g="${cur.picking.gi}"]`); if (!btn) return;
+    // fixed to the screen, under the game (or above it when there's no room below); the list scrolls inside
+    const b = btn.getBoundingClientRect(), w = Math.min(380, innerWidth - 16), list = pop.querySelector('.plist');
+    pop.style.position = 'fixed'; pop.style.width = w + 'px';
+    pop.style.left = Math.max(8, Math.min(b.left, innerWidth - w - 8)) + 'px';
+    const below = innerHeight - b.bottom - 12, above = b.top - 12, room = below >= 220 || below >= above ? below : above;
+    if (list) list.style.maxHeight = Math.max(120, Math.min(320, room - 50)) + 'px';
+    pop.style.top = (room === below ? b.bottom + 4 : Math.max(8, b.top - 4 - pop.offsetHeight)) + 'px';
+    const db = r.querySelector('.db'); if (db && !db.dataset.popScroll) { db.dataset.popScroll = '1'; db.addEventListener('scroll', () => { if (cur && cur.picking) placePopover(); }, { passive: true }); }
+  }
   function ask(D, mode, q) {
     cur = { mode };
     show(`<div class="dh">${T.esc(q)}</div><div class="db"><input type="number" min="1" data-autofocus data-f="askN" value=""></div>
@@ -189,7 +209,7 @@ table{width:100%;border-collapse:collapse}td{padding:4px 6px;border-top:1px soli
       const w = res.when[bi][gi], clash = w.also.filter(x => x.overlap > 0 || x.sameSlot), same = w.also.filter(x => x.sameSlot);
       const also = w.also.length ? `<div class="small ${clash.length ? 'err' : 'muted'}" style="padding-left:44px">${clash.length ? '⚠ ' : ''}also in ${w.also.map(x => `${T.esc(x.bank)} as game ${x.pos + 1} @ ${at(x.s)}`).join(', ')}${same.length ? ` - same game number as ${same.map(x => T.esc(x.bank)).join(', ')}` : clash.length ? ` - overlaps ~${Math.ceil(Math.max(...clash.map(x => x.overlap)) / 60)} min` : ''}</div>` : '';
       const pinned = (cur.pins[bi] || []).some(nm => lc(nm) === lc(g.name)), open = cur.picking && cur.picking.bi === bi && cur.picking.gi === gi;
-      return `<li><span class="small" style="width:44px;flex:none">@${at(w.s)}</span><span class="ell flex1"><button class="gname${open ? ' on' : ''}" data-act="pick" data-b="${bi}" data-g="${gi}" title="Change this game">${pinned ? '📌 ' : ''}${T.esc(g.name)} <span class="caret">▾</span></button>${g.repeat ? ' <span class="badge b-amber">repeat</span>' : ''}</span><span class="small" title="${T.esc(g.src)}">${T.esc(g.era)} · ${at(g.sec)}</span></li>${also}${open ? pickerHtml(bi, gi) : ''}`;
+      return `<li><span class="small" style="width:44px;flex:none">@${at(w.s)}</span><span class="flex1 gwrap"><button class="gname${open ? ' on' : ''}" data-act="pick" data-b="${bi}" data-g="${gi}" title="Change this game">${pinned ? '📌 ' : ''}${T.esc(g.name)} <span class="caret">▾</span></button>${g.repeat ? ' <span class="badge b-amber">repeat</span>' : ''}</span><span class="small" style="white-space:nowrap" title="${T.esc(g.src)}">${T.esc(g.era)} · ${at(g.sec)}</span></li>${also}`;
     }).join('')}</ul>${b.repeatPairs ? '<div class="small warn mt">Has a game pair from an earlier round</div>' : ''}</div></div>`).join('');
     const notes = [`Bank times ${at(Math.min(...t))} – ${at(Math.max(...t))} (spread ${at(Math.max(...t) - Math.min(...t))}). @ = expected start; games are played in this order.`];
     if (res.fixed.length) notes.push(res.fixed.length === 1 ? 'Your existing bank stays as it is.' : `Your ${res.fixed.length} existing banks stay as they are.`);
@@ -198,7 +218,7 @@ table{width:100%;border-collapse:collapse}td{padding:4px 6px;border-top:1px soli
     if (mode === 'refresh') notes.push('Bank names stay the same; their games are replaced.');
     notes.push('Click a game to change it (best choices first). Games you change are pinned 📌 and stay when you ask for another arrangement.');
     const pinned = cur.pins.some(p => p && p.length);
-    show(`<div class="dh">${title}</div><div class="db"><div class="small mb">${notes.map(T.esc).join('<br>')}</div><div class="bk">${cards}</div></div>
+    show(`<div class="dh">${title}</div><div class="db" style="position:relative"><div class="small mb">${notes.map(T.esc).join('<br>')}</div><div class="bk">${cards}</div>${cur.picking ? pickerHtml(cur.picking.bi, cur.picking.gi) : ''}</div>
       <div class="df">${pinned ? '<button class="btn sec" data-act="unpin" style="margin-right:auto">Clear my changes</button>' : ''}<button class="btn sec" data-act="close">Cancel</button><button class="btn sec" data-act="another">Another arrangement</button><button class="btn" data-act="confirm">Confirm</button></div>`);
   }
 
@@ -230,9 +250,11 @@ table{width:100%;border-collapse:collapse}td{padding:4px 6px;border-top:1px soli
   }
   function pickerHtml(bi, gi) {
     const list = choices(bi, gi), at = sec => T.fmtDur(sec * 1000);
-    if (!list.length) return '<li class="picker small">No other game fits here.</li>';
-    return `<li class="picker"><div class="small" style="padding:2px 4px 4px">Replace with (best first):</div><div class="plist">${list.map((c, i) =>
-      `<button class="popt" data-act="choose" data-name="${T.esc(c.g.name)}"><span class="flex1 ell">${i === 0 ? '<b>' : ''}${T.esc(c.g.name)}${i === 0 ? '</b> <span class="badge b-green">best</span>' : ''}</span><span class="small">${T.esc(c.g.era)} · ${at(c.g.sec)}${c.swapWith ? ` · swaps with ${T.esc(c.swapWith)}` : ' · not used yet'}${c.clash ? ` · <span class="err">⚠ ${c.clash}</span>` : ''}</span></button>`).join('')}</div></li>`;
+    const me = cur.res.banks[bi].games[gi];
+    const head = `<div class="phead"><span class="flex1">Replace <b>${T.esc(me.name)}</b> in ${T.esc(cur.res.banks[bi].name)} with (best first):</span><button class="x" data-act="pickClose" title="Close">×</button></div>`;
+    if (!list.length) return `<div class="pop">${head}<div class="small" style="padding:6px">No other game fits here.</div></div>`;
+    return `<div class="pop">${head}<div class="plist">${list.map((c, i) =>
+      `<button class="popt" data-act="choose" data-name="${T.esc(c.g.name)}"><span class="pn">${T.esc(c.g.name)}${i === 0 ? ' <span class="badge b-green">best</span>' : ''}</span><span class="pd">${T.esc(c.g.era)} · ${at(c.g.sec)}${c.swapWith ? ` · swaps with ${T.esc(c.swapWith)}` : ' · not used yet'}${c.clash ? ` · <span class="err">⚠ ${c.clash}</span>` : ''}</span></button>`).join('')}</div></div>`;
   }
   function choose(name) {
     const { bi, gi } = cur.picking, res = cur.res, me = res.banks[bi].games[gi];
@@ -282,12 +304,16 @@ table{width:100%;border-collapse:collapse}td{padding:4px 6px;border-top:1px soli
   }
 
   // ---------- Fill random results (Test tournaments) ----------
-  function fillConfirm(D) {
+  async function fillConfirm(D) {
     const r = T.data.currentRound(); if (!r || D.t.test !== true) return;
-    const open = D.games.filter(g => g.roundId === r.roundId && !g.bye && g.set !== 9999 && !T.timing.isDone(g)), ready = open.filter(g => g.arenaId != null);
+    // the round straight from the API (a bank assigned a moment ago must count)
+    let fresh = null;
+    try { fresh = await T.api.all(`/tournaments/${D.tid}/games?round=${r.roundId}`, 0); D.games = D.games.filter(g => g.roundId !== r.roundId).concat(fresh); } catch (e) { /* use what we have */ }
+    const open = D.games.filter(g => g.roundId === r.roundId && !g.bye && !T.timing.isDone(g));
+    const ready = open.filter(g => g.arenaId != null || g.set === 9999), tbs = open.filter(g => g.set === 9999 && g.arenaId == null).length;
     cur = { mode: 'fill', r };
     show(`<div class="dh">Fill random results?</div><div class="db">
-      <div class="mb">Enter a random finishing order for all <b>${ready.length}</b> open game${ready.length === 1 ? '' : 's'} in ${T.esc(r.name || 'this round')}.</div>
+      <div class="mb">Enter a random finishing order for all <b>${ready.length}</b> open game${ready.length === 1 ? '' : 's'} in ${T.esc(r.name || 'this round')}.${tbs ? ` ${tbs} tiebreaker game${tbs === 1 ? ' gets' : 's get'} a random arena first.` : ''}</div>
       ${ready.length < open.length ? `<div class="callout warn">${open.length - ready.length} game${open.length - ready.length === 1 ? ' has' : 's have'} no arena yet and will be skipped. Assign banks first.</div>` : ''}
       <div class="small">Only on Test tournaments. Each game gets its own random order.</div></div>
       <div class="df"><button class="btn sec" data-act="close">Cancel</button><button class="btn" data-act="fillGo">Fill ${ready.length} game${ready.length === 1 ? '' : 's'}</button></div>`);
@@ -322,7 +348,9 @@ table{width:100%;border-collapse:collapse}td{padding:4px 6px;border-top:1px soli
       if (el.dataset.hist) { const s2 = new Set(st(D).histUse || []); el.checked ? s2.add(el.dataset.hist) : s2.delete(el.dataset.hist); await T.saveT(D.tid, { histUse: [...s2] }); }
       return;
     }
-    const a = el.closest('[data-act]'); if (!a) return;
+    const a = el.closest('[data-act]');
+    if (cur && cur.picking && !el.closest('.pop') && !(a && a.dataset.act === 'pick')) { cur.picking = null; drawPreview(); if (!a || a.dataset.act === 'bg') return; }
+    if (!a) return;
     if (a.dataset.act === 'bg' && el !== a) return;
     const act = a.dataset.act;
     try {
@@ -336,6 +364,7 @@ table{width:100%;border-collapse:collapse}td{padding:4px 6px;border-top:1px soli
       if (act === 'unpin') return preview(D, cur.mode, cur.n, []);
       if (act === 'pick') { const bi = +a.dataset.b, gi = +a.dataset.g; cur.picking = cur.picking && cur.picking.bi === bi && cur.picking.gi === gi ? null : { bi, gi }; return drawPreview(); }
       if (act === 'choose') return choose(a.dataset.name);
+      if (act === 'pickClose') { cur.picking = null; return drawPreview(); }
       if (act === 'nextOpt') return assignPreview(D, cur.k + 1);
       if (act === 'fillGo') { const r = cur.r; close(); return T.jobs.start(`Random results for ${r.name || 'this round'}`, [{ tid: D.tid, page: 'matches', op: 'fillResults', args: { tid: D.tid, roundId: r.roundId }, label: 'Entering random results' }]); }
       if (act === 'assignGo') { const { o, k } = cur; close(); return T.jobs.start(`Assign banks for ${o.ctx.round.name || 'this round'}`, T.bankplan.assignSteps(D, o.ctx, o.list[k])); }
@@ -358,7 +387,7 @@ table{width:100%;border-collapse:collapse}td{padding:4px 6px;border-top:1px soli
     } catch (err) { T.panel.say(err.message || String(err), 'err'); }
   }
   // keyboard: Enter in the "how many" box
-  document.addEventListener('keydown', e => { if (e.key === 'Enter' && cur && cur.mode !== 'settings' && host && e.composedPath().some(x => x.dataset && x.dataset.f === 'askN')) host.shadowRoot.querySelector('[data-act=askOk]').click(); }, true);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && cur && cur.picking && host) { e.stopPropagation(); cur.picking = null; drawPreview(); return; } if (e.key === 'Enter' && cur && cur.mode !== 'settings' && host && e.composedPath().some(x => x.dataset && x.dataset.f === 'askN')) host.shadowRoot.querySelector('[data-act=askOk]').click(); }, true);
 
   return { render, close, assignPreview, fillConfirm };
 })();

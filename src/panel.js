@@ -41,6 +41,7 @@ TDP.panel = (() => {
 .btn.green{background:#059669}
 .btn.red{background:#e11d48}
 .btn[disabled]{opacity:.5;cursor:not-allowed}
+a.btn{text-decoration:none}
 .link{background:none;border:0;padding:0;font:inherit;font-weight:500;color:var(--pril);cursor:pointer;text-decoration:none}
 .link:hover{text-decoration:underline}
 .icon{background:none;border:0;cursor:pointer;color:var(--soft);font-size:16px;padding:2px 4px;border-radius:4px}
@@ -108,7 +109,8 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--pri);vertical-ali
     const html = (r ? b('#e0e7ff', '#3730a3', T.esc(r.name || 'Round'), `${c.done} of ${c.total} games done`) : '')
       + b('#d1fae5', '#065f46', `● ${c.active} active`, 'Games still being played')
       + (c.pending ? b('#fef3c7', '#92400e', `${c.pending} pending approval${c.pending === 1 ? '' : 's'}`, 'Every score entered, waiting for your approval') : '')
-      + (c.partial ? b('#f3f4f6', '#374151', `${c.partial} partial`, 'Some scores entered - not complete') : '');
+      + (c.partial ? b('#f3f4f6', '#374151', `${c.partial} partial`, 'Some scores entered - not complete') : '')
+      + (() => { const st = T.tstate[D.tid] || {}; return st.auto || st.autoBanks || st.autoAssign ? b('#ede9fe', '#5b21b6', 'Watching for new rounds', 'An automatic option is on: new rounds (also started on a phone) and finished rounds are handled, even with this tab in the background or closed while Chrome is open') : ''; })();
     if (el.dataset.h !== html) { el.dataset.h = html; el.shadowRoot.innerHTML = html; }
   }
 
@@ -117,7 +119,7 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--pri);vertical-ali
     const main = document.querySelector('main');
     const anchor = show && main ? [...main.children].find(e => !/^tdp-/.test(e.id || '')) : null;
     T.inpage.block('tdp-token', anchor, 'before', anchor ? `<div class="card" style="margin:8px 16px"><div class="cb gap" style="align-items:center;flex-wrap:wrap">
-      <b>Matchplay TD Panel</b><span class="small flex1">Paste your Matchplay API token to switch on the TD tools. Create one at app.matchplay.events → Account → API tokens. It's kept only in this browser; you can change it later with the extension's toolbar button.</span>
+      <b>Matchplay TD Panel</b><span class="small flex1">Paste your Matchplay API token to switch on the TD tools. <a class="link" href="https://app.matchplay.events/account/tokens" target="_blank" rel="noopener">Create an API token ↗</a> - name it anything (e.g. TD Panel), copy it, paste it here. It's kept only in this browser; change it later with the extension's toolbar button.</span>
       <input type="password" data-f="tok" placeholder="API token" style="width:240px"><button class="btn sm" data-act="saveToken">Save</button></div></div>` : '', onTokenEvent);
   }
   async function onTokenEvent(e) {
@@ -138,7 +140,7 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--pri);vertical-ali
     const w = root.querySelector('.wrap'); w.classList.toggle('dark', isDark());
     const html = toasts.map((t, i) => t.count
       ? `<div class="toast"><span class="flex1">${T.esc(t.text)} <b>${Math.max(0, Math.ceil((t.until - Date.now()) / 1000))}s</b></span><button class="btn sm sec" data-act="toastCancel" data-i="${i}">Cancel</button></div>`
-      : `<div class="toast ${t.kind || ''}"><span class="flex1">${T.esc(t.text)}</span><button class="x" data-act="toastClose" data-i="${i}" title="Dismiss">×</button></div>`).join('');
+      : `<div class="toast ${t.kind || ''}"><span class="flex1">${T.esc(t.text)}${/API token/.test(t.text) ? ' <a href="https://app.matchplay.events/account/tokens" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline">Create an API token ↗</a>' : ''}</span><button class="x" data-act="toastClose" data-i="${i}" title="Dismiss">×</button></div>`).join('');
     if (w.dataset.h !== html) { w.dataset.h = html; w.innerHTML = html; }
   }
 

@@ -22,6 +22,7 @@ var TDP = window.TDP || (window.TDP = {});
   }
 
   T.busy.render();   // mid-task reload: cover the page straight away
+  bgRunner();
   T.jobs.afterLoad();
 
   // ---------- route watching (Matchplay is a single-page app) ----------
@@ -32,7 +33,7 @@ var TDP = window.TDP || (window.TDP = {});
     lastPath = location.pathname;
     if (prevTid && prevTid === T.routeTid()) { T.data.refresh(true); return; }   // another tab of the same tournament: fresh details
     const tid = T.routeTid();
-    if (!tid) { T.panel.unmount(); T.data.setTournament(null); return; }
+    if (!tid) { T.panel.unmount(); T.data.setTournament(null); T.deltest.render(); return; }
     T.panel.mount(); T.panel.render();
     T.jobs.resume();   // a task in progress carries on straight away (it doesn't need the tournament data first)
     await T.data.setTournament(tid);
@@ -49,6 +50,7 @@ var TDP = window.TDP || (window.TDP = {});
     onRoute();
     T.flag.swap();
     if (T.data.D.t) { T.inpage.render(); T.embed.render(); T.panel.render(); }
+    T.deltest.render();   // (Organized page: no tournament open)
     if (T.jobs.get()) T.busy.render();
   };
   new MutationObserver(ms => {
@@ -106,7 +108,7 @@ var TDP = window.TDP || (window.TDP = {});
       }
       D.games = D.games.filter(g => g.roundId !== r.roundId).concat(fresh);
       const ft = T.finals.groupTies(D).filter(t => !t.tbDone);
-      if (ft.length) return state('tie needs breaking first: ' + ft[0].why);
+      if (ft.length) return state(ft[0].tbGame ? `waiting for Group ${ft[0].group}'s tiebreaker` : 'tie needs breaking first: ' + ft[0].why);
       const total = D.t.roundCount || D.t.duration || 0, last = !!total && D.rounds.length >= total;
       const go = await T.panel.showCountdown(`All games approved in ${r.name}. Closing the round${last ? '' : ' and starting the next one'} in`, 10);
       if (!go || !(T.tstate[tid] || {}).auto) return state('cancelled - will check again');
@@ -154,14 +156,19 @@ var TDP = window.TDP || (window.TDP = {});
   async function autoFill() {
     const D = T.data.D, tid = D.tid, st = T.tstate[tid] || {};
     if (!st.autoFill || fillBusy || !D.t || D.t.test !== true || !D.isTD || D.t.status !== 'started' || T.jobs.active()) return;
-    const r = T.data.currentRound(); if (!r || st.fillDoneRound === r.roundId || String(r.status) === 'pending') return;   // unpublished rounds can't take results
-    const gs = D.games.filter(g => g.roundId === r.roundId && !g.bye && g.set !== 9999);
-    if (!gs.length || gs.some(g => g.arenaId == null)) return;   // wait until every game has its arena / bank
+    const r = T.data.currentRound(); if (!r || String(r.status) === 'pending') return;   // unpublished rounds can't take results
+    // once per round - and again when Matchplay adds a tiebreaker game to it
+    const tried = new Set(st.fillTbTried || []);
+    const tbOpen = D.games.some(g => g.roundId === r.roundId && g.set === 9999 && !T.timing.isDone(g) && !tried.has(g.gameId));
+    if (st.fillDoneRound === r.roundId && !tbOpen) return;
+    const gs = D.games.filter(g => g.roundId === r.roundId && !g.bye);
+    if (!gs.length || gs.some(g => g.arenaId == null && g.set !== 9999)) return;   // wait until every game has its arena / bank (tiebreakers get one when filled)
     if (!gs.some(g => !T.timing.isDone(g))) return;
     if (!(await lock(tid + ':fill'))) return;
     fillBusy = true;
     try {
-      await T.saveT(tid, { fillDoneRound: r.roundId });
+      const tbIds = D.games.filter(g => g.roundId === r.roundId && g.set === 9999).map(g => g.gameId);
+      await T.saveT(tid, { fillDoneRound: r.roundId, fillTbTried: [...new Set([...(st.fillTbTried || []), ...tbIds])].slice(-50) });
       await T.jobs.start(`Random results for ${r.name || 'this round'}`, [{ tid, page: 'matches', op: 'fillResults', args: { tid, roundId: r.roundId }, label: 'Entering random results' }]);
     } catch (e) { T.panel.say('Random results: ' + (e.message || e), 'err'); }
     finally { fillBusy = false; }
@@ -184,5 +191,26 @@ var TDP = window.TDP || (window.TDP = {});
       await T.jobs.start(`Rebuild banks for ${ctx.round.name}`, steps);
     } catch (e) { T.panel.say('Rebuild banks: ' + (e.message || e), 'err'); }
     finally { banksBusy = false; }
+  }
+
+  // ---------- opened by the background watcher (minimized window, no tab of this tournament was open) ----------
+  // Lets the automatic options do their work here, then reports back so the window can close.
+  function bgRunner() {
+    let on = false;
+    try { if (location.hash === '#tdp-bg') sessionStorage.setItem('tdp-bg', '1'); on = sessionStorage.getItem('tdp-bg') === '1'; } catch (e) { /* no */ }
+    if (!on || !(T.hasChrome && chrome.runtime && chrome.runtime.sendMessage)) return;   // eslint-disable-line no-undef
+    const t0 = Date.now(), titles = [];
+    let lastDone = 0, seen = null, sent = false;
+    const send = (ok, text) => { if (sent) return; sent = true; try { sessionStorage.removeItem('tdp-bg'); } catch (e) { /* */ } chrome.runtime.sendMessage({ type: 'tdp-bg-done', tid: T.routeTid(), ok, text }); };   // eslint-disable-line no-undef
+    const iv = setInterval(() => {
+      const j = T.jobs.get();
+      if (j && j.startedAt >= t0 && j.startedAt !== seen) { seen = j.startedAt; titles.push(j.title); }
+      if (j && j.startedAt >= t0 && j.error) { clearInterval(iv); return send(false, `${j.title}: ${j.error}`); }
+      if (j && j.startedAt >= t0 && j.done) lastDone = Math.max(lastDone, j.doneAt || Date.now());
+      if (T.jobs.active()) return;
+      // done: nothing new started for 30 s after the last task (auto close/start, then banks, can follow each other)
+      if (lastDone && Date.now() - lastDone > 30000) { clearInterval(iv); return send(true, titles.join(' · ') + ' - done.'); }
+      if (!titles.length && Date.now() - t0 > 3 * 60e3) { clearInterval(iv); return send(true, 'nothing needed doing after all.'); }
+    }, 5000);
   }
 })();

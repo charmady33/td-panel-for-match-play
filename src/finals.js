@@ -124,12 +124,12 @@ TDP.finals = (() => {
     // 1. Matchplay's own cut lines
     const cuts = [...(D.qual.playoffsCutoffs || [])].sort((x, y) => (x.index || 0) - (y.index || 0));
     const cutAt = (pos, n) => cuts.find(c => pos <= c.cumulative && pos + n - 1 > c.cumulative) || null;
+    const divOfCut = c => divs[cuts.indexOf(c)] || null;   // cut lines and divisions are in the same order
     for (const r of rows) {
       const g = group(r.position); if (!real(g)) continue;
       const c = cutAt(r.position, g.length); if (!c) continue;
-      const L = String(c.text || '').trim().charAt(0).toUpperCase() || 'A';
+      const d = divOfCut(c), L = d ? d.letter : 'A';   // same letter as the finals list ("FINALS CUTOFF" alone = A)
       let spots = c.cumulative - r.position + 1, out = [];
-      const d = divs.find(x => x.letter === L);
       if (d && d.i > 0) {
         // a lower division's line: players who can't play it (ineligible, or already in a higher finals) don't count
         out = g.filter(x => ineligible(x.p, d, ranks) || higherPick(d, x)).map(x => x.playerId);
@@ -167,7 +167,7 @@ TDP.finals = (() => {
       t.why = t.reasons.join('; '); t.playing = t.players.filter(r => !(t.sitOut || []).includes(r.playerId));
       // which division the tie decides
       if (t.div) t.letter = t.div.letter;
-      else { const c = cutAt(t.pos, t.span); t.letter = c ? (String(c.text || '').trim().charAt(0).toUpperCase() || 'A') : 'A'; }
+      else { const c = cutAt(t.pos, t.span), d = c && divOfCut(c); t.letter = d ? d.letter : 'A'; }
       t.divI = Math.max(0, divs.findIndex(d => d.letter === t.letter));
     });
     // a tie at a higher division's cut-off can move a lower one: whoever loses it drops down (if eligible there)
@@ -212,8 +212,18 @@ TDP.finals = (() => {
         }
       }
     }
-    // a tiebreaker played with the extension counts as done
-    out.forEach(t => { const rec = T.ties && T.ties.gRec(D, t); if (rec && rec.status === 'done') { t.tbDone = true; t.ours = rec; } });
+    // Matchplay's own tiebreaker game for exactly these players (it adds one when a bracket group ends tied)
+    const tbAll = gs.filter(g => g.set === 9999);
+    out.forEach(t => {
+      const ids = new Set(t.ids);
+      const g = tbAll.filter(x => (x.playerIds || []).length && (x.playerIds || []).every(p => ids.has(Number(p)))).pop() || null;
+      if (g) {
+        t.tbGame = g; t.tbOpen = !T.timing.isDone(g); t.tbDone = !t.tbOpen;
+        if (t.tbDone) t.tbOrder = ((g.resultPositions || []).length ? g.resultPositions : g.playerIds).map(Number);
+      } else { t.tbOpen = false; t.tbDone = false; }   // another tie's tiebreaker in the same group isn't this one's
+      // fallback: a tiebreaker recorded with the extension (when Matchplay didn't add a game)
+      const rec = T.ties && T.ties.gRec(D, t); if (!g && rec && rec.status === 'done') { t.tbDone = true; t.ours = rec; }
+    });
     return out;
   }
 

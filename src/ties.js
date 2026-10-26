@@ -243,7 +243,7 @@ tr.out td{opacity:.5}
   function finalsArenas(D) { return (D.t.arenas || []).filter(a => !a.tournamentArena || a.tournamentArena.status !== 'inactive'); }
   let gcur = null;
   function openGroup(D, gt) {
-    gcur = { gt, key: gKey(gt) };
+    gcur = { gt, key: gKey(gt), mp: !!(gt.tbGame && gt.tbOpen) };   // mp: Matchplay added the tiebreaker game - we only pick its arena
     cur = null;
     if (!host) { host = document.createElement('div'); host.id = 'tdp-tb'; host.attachShadow({ mode: 'open' }); host.shadowRoot.addEventListener('click', onClick); document.documentElement.appendChild(host); }
     gDraw();
@@ -254,7 +254,21 @@ tr.out td{opacity:.5}
     const place = i => T.ord(gt.place + i);
     let body = `<div class="callout mb"><b>Why it matters:</b> ${T.esc(gt.why)}. Matchplay has no tiebreaker for brackets: play one here and the extension records the result (shown by the group, and used for Submit to IFPA).</div>
       <div class="lab">Tied on ${gt.pts} points</div><div class="small mb">${ids.map(id => T.esc(gName(D, id))).join(', ')}</div>`, foot = '';
-    if (rec.status === 'done') {
+    if (gcur.mp) {
+      // Matchplay's own tiebreaker game: pick the game (IFPA draw + vote, or random); the arena is set on Matchplay's game
+      const am = T.data.arenaMap(D.t), cur2 = gt.tbGame.arenaId != null ? (am[gt.tbGame.arenaId] || {}).name : null;
+      body = `<div class="callout mb"><b>Why it matters:</b> ${T.esc(gt.why)}. Matchplay added a tiebreaker game for ${ids.map(id => T.esc(gName(D, id))).join(' and ')}. Pick the game here; the extension sets it as that game's arena, then enter the result in Matchplay as usual.</div>`;
+      if (cur2) { body += `<div class="callout ok">Tiebreaker arena: <b>${T.esc(cur2)}</b>. Enter the result on Matchplay's tiebreaker card.</div>`; foot = `<button class="btn" data-act="close">Close</button>`; }
+      else if (gcur.drawn) {
+        body += `<div class="small mb">Players vote by secret ballot; click the game with the most votes.</div><div class="pick">${gcur.drawn.map((g, i) => `<button class="opt" data-act="gSet" data-i="${i}"><b><span class="era era-${g.era}">${g.label}</span>${T.esc(g.name)}</b></button>`).join('')}</div>
+          <div class="gap"><button class="btn sm sec" data-act="gSetRand">Random pick (vote tied)</button><button class="btn sm sec" data-act="gIfpa">Redraw</button></div>`;
+        foot = `<button class="btn sec" data-act="close">Cancel</button>`;
+      } else {
+        body += `<div class="lab">Pick the tiebreaker game</div><div class="pick"><button class="opt" data-act="gIfpa"><b>IFPA draw + vote</b><span>Recommended. Draws one Old (EM), Mid (SS) and New (DMD/LCD) game from this finals; the tied players vote.</span></button>
+          <button class="opt" data-act="gRandom"><b>Random game</b><span>One random game from this finals.</span></button></div>`;
+        foot = `<button class="btn sec" data-act="close">Cancel</button>`;
+      }
+    } else if (rec.status === 'done') {
       body += `<div class="callout ok">Tiebreaker${rec.game ? ` on <b>${T.esc(rec.game)}</b>` : ''}: ${rec.finish.map((id, i) => `${T.esc(gName(D, id))} ${place(i)}`).join(', ')}</div>`;
       foot = `<button class="btn sec" data-act="gForget">Clear result</button><button class="btn" data-act="close">Close</button>`;
     } else if (!rec.status) {
@@ -279,6 +293,18 @@ tr.out td{opacity:.5}
     const D = T.data.D, gt = gcur.gt, key = gcur.key, rec = gStore(D)[key] || {};
     const drawn = () => { const all = finalsArenas(D), byEra = { EM: [], SS: [], DMD: [] }; all.forEach(x => { const e = T.banks.eraOf(x) === 'LCD' ? 'DMD' : T.banks.eraOf(x); if (byEra[e]) byEra[e].push(x); }); const out = [], used = new Set(); for (const [label, era] of [['Old', 'EM'], ['Mid', 'SS'], ['New', 'DMD']]) { let pool = byEra[era].filter(x => !used.has(x.arenaId)); if (!pool.length) pool = all.filter(x => !used.has(x.arenaId)); if (!pool.length) continue; const x = pool[Math.floor(Math.random() * pool.length)]; used.add(x.arenaId); out.push({ label, era: T.banks.eraOf(x), name: x.name }); } return out; };
     const base = { ids: gt.ids, place: gt.place, pts: gt.pts, roundId: gt.roundId, group: gt.group };
+    if (gcur.mp) {
+      const setArena = async name => {
+        const names = (gt.tbGame.playerIds || []).map(id => gName(D, id));
+        close();
+        await T.jobs.start(`Tiebreaker game: ${name}`, [{ tid: D.tid, page: 'matches', op: 'tiebreakerArena', args: { names, arena: name }, label: `Setting ${name} as the tiebreaker's arena` }]);
+      };
+      if (act === 'gIfpa') { gcur.drawn = drawn(); return gDraw(); }
+      if (act === 'gRandom') { const all = finalsArenas(D), x = all[Math.floor(Math.random() * all.length)]; return x ? setArena(x.name) : null; }
+      if (act === 'gSet') return setArena(gcur.drawn[+a.dataset.i].name);
+      if (act === 'gSetRand') return setArena(gcur.drawn[Math.floor(Math.random() * gcur.drawn.length)].name);
+      return;
+    }
     if (act === 'gIfpa') await gSave(D, key, { ...base, status: 'vote', method: 'ifpa', drawn: drawn() });
     if (act === 'gRandom') { const all = finalsArenas(D), x = all[Math.floor(Math.random() * all.length)]; await gSave(D, key, { ...base, status: 'playing', method: 'random', game: x ? x.name : '', order: shuffle(gt.ids), finish: [] }); }
     if (act === 'gChoose') await gSave(D, key, { status: 'playing', game: rec.drawn[+a.dataset.i].name, order: shuffle(gt.ids), finish: [] });

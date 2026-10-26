@@ -103,21 +103,44 @@ TDP.jobs = (() => {
     async noop() { /* just brings you back to a page */ },
     async resolveTie(a) { await T.mp.resolveTie(a.from, a.names); if (a.key) await T.ties.markApplied(a.qid, a.key); },
     // TEST tournaments only: a random finishing order for every open game of the round that has its arena
+    // a tiebreaker game Matchplay added (bracket finals): play it on the game the TD picked
+    async tiebreakerArena(a) { await T.mp.setGameArena(a.names, a.arena); return `${a.arena} assigned to the tiebreaker`; },
+    // a test tournament of yours - checked again right before - deleted with Matchplay's own button
+    async deleteTest(a) {
+      const me = T.data.D.me || T.data.unwrap(await T.api.get('/users/profile', 3600e3));
+      let t = null;
+      try { t = await T.data.loadTournament(a.tid, 0); } catch (e) { return `${a.name}: not found (already deleted?) - skipped`; }
+      if (!t || t.test !== true) return `${a.name}: not a test tournament - skipped`;
+      if (!me || t.organizerId !== me.userId) return `${a.name}: you're not the organizer - skipped`;
+      if (!/\bTest\b/.test(T.txt(document.querySelector('main')))) return `${a.name}: the page doesn't show it as Test - skipped`;
+      try { await T.mp.deleteTournament(t.name); }
+      catch (e) { return `${a.name}: ${e.message || e} - not deleted`; }
+      await T.store.del('t:' + a.tid); await T.store.del('cache:' + a.tid);
+      return `${a.name}: deleted`;
+    },
     async fillResults(a) {
       const t = await T.data.loadTournament(a.tid, 0);
       if (!t || t.test !== true) throw new Error('Random results are only for Test tournaments.');
       const pm = T.data.playerMap(t), am = T.data.arenaMap(t);
-      const games = (await T.api.all(`/tournaments/${a.tid}/games?round=${a.roundId}`, 0)).filter(g => !g.bye && g.set !== 9999 && !T.timing.isDone(g));
+      const games = (await T.api.all(`/tournaments/${a.tid}/games?round=${a.roundId}`, 0)).filter(g => !g.bye && !T.timing.isDone(g));
+      // Matchplay's tiebreaker games (set 9999) come without an arena: give each a random one first
+      const arenas = (t.arenas || []).filter(x => !x.tournamentArena || x.tournamentArena.status !== 'inactive');
+      for (const g of games.filter(x => x.set === 9999 && x.arenaId == null && arenas.length)) {
+        const names = (g.playerIds || []).map(id => (pm[id] || {}).name).filter(Boolean), ar = arenas[Math.floor(Math.random() * arenas.length)];
+        await T.mp.setGameArena(names, ar.name); g.arenaId = ar.arenaId;
+      }
       const ready = games.filter(g => g.arenaId != null).sort((x, y) => (x.set - y.set) || (x.index - y.index));
       const P = counter(ready.length);
       for (const [i, g] of ready.entries()) {
         const names = (g.playerIds || []).map(id => (pm[id] || {}).name).filter(Boolean);
         const order = [...names].sort(() => Math.random() - 0.5);
-        P.to(i, `Group ${g.set + 1} · Game ${g.index + 1} (${(am[g.arenaId] || {}).name || 'arena'})`);
+        const what = g.set === 9999 ? 'Tiebreaker' : `Group ${g.set + 1} · Game ${g.index + 1}`;
+        P.to(i, `${what} (${(am[g.arenaId] || {}).name || 'arena'})`);
         await T.mp.enterResults(names, (am[g.arenaId] || {}).name || '', order);
-        P.tick(`Group ${g.set + 1} · Game ${g.index + 1}: ${order[0]} won`);
+        P.tick(`${what}: ${order[0]} won`);
       }
-      await T.saveT(a.tid, { fillDoneRound: a.roundId });
+      const tried = [...new Set([...((T.tstate[a.tid] || {}).fillTbTried || []), ...games.filter(g => g.set === 9999).map(g => g.gameId)])].slice(-50);
+      await T.saveT(a.tid, { fillDoneRound: a.roundId, fillTbTried: tried });
       const skipped = games.length - ready.length;
       return `${ready.length} game${ready.length === 1 ? '' : 's'} filled${skipped ? `, ${skipped} skipped (no arena yet - assign banks first)` : ''}`;
     },
@@ -171,8 +194,11 @@ TDP.jobs = (() => {
             // another tournament: switch inside Matchplay's app (no page load); a full load only if that doesn't take
             job.log.push(`Opening ${s.page} of tournament ${s.tid}…`); await save();
             const url = `/tournaments/${s.tid}/${s.page === 'overview' ? '' : s.page}`;
-            history.pushState(history.state, '', url); dispatchEvent(new PopStateEvent('popstate', { state: history.state }));
-            const ok = await T.waitFor(() => T.routeTid() === s.tid && document.querySelector(`main a[href^="/tournaments/${s.tid}"]`), 6000);
+            let ok = false;
+            if (location.host === 'app.matchplay.events' && document.getElementById('app')) {   // inside Matchplay's app (not a blank frame)
+              try { history.pushState(history.state, '', url); dispatchEvent(new PopStateEvent('popstate', { state: history.state })); ok = true; } catch (e) { ok = false; }
+              if (ok) ok = !!(await T.waitFor(() => T.routeTid() === s.tid && document.querySelector(`main a[href^="/tournaments/${s.tid}"]`), 6000));
+            }
             if (!ok) { location.assign(url); return; }
             await T.data.useTournament(s.tid);
           }

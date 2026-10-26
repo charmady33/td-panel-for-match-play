@@ -1,4 +1,4 @@
-# Matchplay TD Panel v0.10.0
+# Matchplay TD Panel v0.11.0
 
 A Chrome extension for tournament directors on app.matchplay.events. On tournaments you run (as organizer, or as a manager) its tools are built straight into Matchplay's own pages, styled like Matchplay. There's no sidebar: a small status chip sits next to the tournament's name, and messages show as short toasts at the bottom.
 
@@ -52,11 +52,21 @@ To update to a newer version, replace the folder and click the reload icon on th
   3. **Format notes**, ready to paste, with the Matchplay links
   4. **Submit**: link to IFPA and a checklist
   5. **Done**: until ticked, the Overview shows how many of IFPA's 45 days are left
-- **Toolbar button**: your API token, and Clear saved data for the open tournament
+- **Toolbar button**: your events with links, your API token, and Clear saved data for the open tournament
 
 - **Matches tab (bank tournaments)**: **Assign banks** gives each group of the new round one of your banks - games its players haven't played, avoiding any bank that shares 2+ games with one a player already had. Preview with **Another option**, then **Assign**. **Automatic** (off by default) does it for every new round without the preview. The bar then shows "Group 2 → Bank 4 · 11 of 12 new"
 - **Overview**: **Submit to IFPA** sits under Re-open tournament, same size and style
 - **Test tournaments only** (Matches tab): **Fill random results** enters a random finishing order for every open game of the round that has its arena; **Every round** does it automatically. With auto close/start and Automatic bank assignment on, a test tournament runs itself.
+
+## New in 0.11.0
+- **Toolbar button**: your events - each qualifying with its A/B/C finals underneath (planned finals too), status, current round, an **Auto** tag, and Overview · Matches · Players · Standings links (switches to the tab if it's open). The icon shows how many are in progress. Token box with **Create an API token ↗**.
+- **Works with no tab open**: while Chrome is open, the extension checks your in-progress tournaments about once a minute. One with an automatic option on that needs something (a round started on a phone needs banks, a finished round to close/start) and has no tab open is opened in its own minimized window, handled there, and closed; a Chrome notification says what happened (an error leaves the window open with Retry). An open tab in the background keeps checking every 30 s. The header chip says **Watching for new rounds** when this is armed. Needs Chrome running (on Windows: Settings → System → Continue running background apps) and the PC awake. New permissions: alarms, notifications.
+- **Finals check-in**: tick several players, then **Confirm** (a bar sticks to the top: "3 changes: check in … · Clear / Confirm"). Waiting ticks show "Will check in" and are saved: other tabs, pages, reloads keep them; a reminder shows on the event's other pages. Ticks Matchplay already matches drop off.
+- **Bracket ties**: Matchplay adds its own tiebreaker game when a bracket group ends tied. Its card is labelled ("Tiebreaker · Group 1 · Final · for 1st/2nd"); **Pick tiebreaker game** (IFPA draw + vote, or random) sets that game as its arena; the group's note follows it (playing / done with the order). The extension's own record is only a fallback when Matchplay adds no game. Auto close waits for it.
+- **Test tournaments**: Fill random results also fills tiebreaker games (a random arena first) and reads the round fresh, so its count matches the page. **Organized page → Delete test tournaments**: lists only Test tournaments you organize, untick to keep, type DELETE; finals are deleted before their qualifying, each one re-checked first.
+- **Submit to IFPA** is one page: checks, results (Copy), meaningful games, notes (Copy), what to do at IFPA, with **Submit results at IFPA ↗** (ifpapinball.com/tournaments/manage/) and **Done** in the header. The Overview note links there too.
+- **Bank preview**: the replacement list is a wide popover with full game names (details on a second line); long names wrap in the bank cards.
+- Fixed: a cut line named just "FINALS CUTOFF" was read as an "F" division, so its tie didn't show in the A list. A forced re-read (after a change) now always gets the open round's games fresh from the API.
 
 ## New in 0.10.0
 - **No page reloads**: after a change, Matchplay fetches the tournament again in place (its Refresh button, or a quick in-app hop behind a still copy of the screen). Tasks that move between tournaments switch inside Matchplay's app too.

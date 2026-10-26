@@ -7,7 +7,9 @@ var TDP = window.TDP || (window.TDP = {});
 TDP.ifpa = (() => {
   const T = TDP;
   const DAY = 864e5, WINDOW_DAYS = 45, PCT_PER_GAME = 4;
-  const IFPA_URL = 'https://www.ifpapinball.com/how-to-submit-tournaments';
+  const IFPA_URL = 'https://www.ifpapinball.com/tournaments/manage/';   // IFPA Tournament Manager (log in first if asked)
+  const IFPA_HOWTO = 'https://www.ifpapinball.com/how-to-submit-tournaments';
+  const IFPA_REGISTER = 'https://www.ifpapinball.com/register';
   const TYPE_NAME = {
     matchplay: 'Head-to-head match play', group_matchplay: 'Group match play', target: 'Target match play', max_matchplay: 'Max match play',
     pace_matchplay: 'Pace match play', round_robin: 'Round robin', double_round_robin: 'Double round robin', frenzy: 'Flip Frenzy',
@@ -241,7 +243,8 @@ TDP.ifpa = (() => {
     if (s.submittedAt) { btn.style.backgroundColor = '#059669'; btn.dataset.green = '1'; }
     else if (btn.dataset.green) { btn.style.backgroundColor = ''; delete btn.dataset.green; }   // only undo our own colour
     const note = box.querySelector('.tdp-ifpa-note');
-    if (note.textContent !== sub) note.textContent = sub;
+    const nh = T.esc(sub) + (F.ready && !s.submittedAt ? ` · <a href="${IFPA_URL}" target="_blank" rel="noopener" style="color:#4f46e5">Submit at IFPA ↗</a>` : '');
+    if (note.dataset.h !== nh) { note.dataset.h = nh; note.innerHTML = nh; }
     note.style.color = subCls ? '#e11d48' : '#9ca3af';
   }
 
@@ -251,12 +254,10 @@ TDP.ifpa = (() => {
 :host{all:initial}
 .ov{position:fixed;inset:0;background:rgba(17,24,39,.5);z-index:2147483000;display:flex;align-items:flex-start;justify-content:center;padding:4vh 16px;overflow:auto}
 .dlg{background:var(--card);border-radius:8px;box-shadow:0 20px 40px rgba(0,0,0,.25);width:760px;max-width:100%;font-family:ui-sans-serif,system-ui,sans-serif;font-size:14px;color:var(--text)}
-.dh{padding:16px 20px 4px;font-size:18px;font-weight:500}
-.steps{display:flex;gap:4px;padding:8px 20px;flex-wrap:wrap;border-bottom:1px solid var(--line)}
-.steps button{border:0;background:none;font:inherit;font-size:13px;padding:4px 8px;border-radius:6px;cursor:pointer;color:var(--soft)}
-.steps button.on{background:#eef2ff;color:#4338ca;font-weight:600}
-.steps button.ok::after{content:' ✓';color:#059669}
-.db{padding:12px 20px 16px;max-height:62vh;overflow:auto}
+.dh{padding:14px 20px 12px;font-size:18px;font-weight:500}
+.db{padding:4px 20px 20px;max-height:80vh;overflow:auto;border-top:1px solid var(--line)}
+h3{font-size:15px;font-weight:600;margin:18px 0 6px}
+ol.steps1{margin:4px 0 8px;padding-left:20px}ol.steps1 li{padding:2px 0}
 .df{background:var(--head);padding:12px 20px;display:flex;justify-content:space-between;gap:8px;border-radius:0 0 8px 8px;flex-wrap:wrap}
 textarea{width:100%;min-height:220px;font:12px/1.5 ui-monospace,Menlo,monospace;border:1px solid #d1d5db;border-radius:6px;padding:8px;color:var(--text);background:var(--card);box-sizing:border-box}
 .chk{display:flex;gap:8px;padding:6px 8px;border-radius:6px;margin-bottom:6px;font-size:13px}
@@ -264,11 +265,11 @@ textarea{width:100%;min-height:220px;font:12px/1.5 ui-monospace,Menlo,monospace;
 table{width:100%;border-collapse:collapse}td,th{padding:5px 6px;border-top:1px solid var(--line);text-align:left;vertical-align:top}
 .big{font-size:28px;font-weight:600}
 ol.todo{padding-left:0;list-style:none}ol.todo li{display:flex;gap:8px;align-items:flex-start;padding:6px 0;border-top:1px solid var(--line)}`;
-  const STEPS = ['Results', 'Meaningful games', 'Format notes', 'Submit', 'Done'];
+  
 
   async function open(D) {
     const F = family(D);
-    cur = { F, step: state(F).step || 0, loading: true };
+    cur = { F, loading: true };
     if (!host) {
       host = document.createElement('div'); host.id = 'tdp-ifpa';
       host.attachShadow({ mode: 'open' });
@@ -288,59 +289,53 @@ ol.todo{padding-left:0;list-style:none}ol.todo li{display:flex;gap:8px;align-ite
 
   function draw() {
     if (!host || !cur) return;
-    const F = cur.F, s = state(F), step = cur.step;
+    const F = cur.F, s = state(F);
+    const db0 = host.shadowRoot.querySelector('.db'), y = db0 ? db0.scrollTop : 0;
+    const left = F.completedAt ? Math.ceil((F.completedAt + WINDOW_DAYS * DAY - Date.now()) / DAY) : null;
+    const due = s.submittedAt ? `<span class="badge b-green">Submitted ${new Date(s.submittedAt).toLocaleDateString()}</span>`
+      : left == null ? '' : `<span class="badge ${left <= 7 ? 'b-rose' : 'b-amber'}">${left > 0 ? `Due in ${left} day${left === 1 ? '' : 's'}` : 'Past the 45-day window'}</span>`;
     let body = '';
     if (cur.loading) body = '<div class="small">Loading standings and games…</div>';
     else if (cur.err) body = `<div class="chk err">${T.esc(cur.err)}</div>`;
-    else if (!F.ready) body = `<div class="chk warn">${F.all.filter(t => !done(t)).map(t => T.esc(t.name)).join(', ')} ${F.all.filter(t => !done(t)).length === 1 ? 'is' : 'are'} not completed yet. Results go to IFPA once, for the whole event: complete ${F.all.filter(t => !done(t)).length === 1 ? 'it' : 'them'} first. You can still look through the steps.</div>`;
-    if (!cur.loading && !cur.err) {
-      if (step === 0) body += `<div class="small mb">Paste this into the results box in IFPA's Tournament Manager. Finals places come first${cur.Fs.length > 1 ? ' (A, then the other divisions)' : ''}, then everyone else by qualifying position. Tied players share a place and the next place is skipped.</div>
-        ${cur.R.checks.map(c => `<div class="chk ${c.kind}">${c.kind === 'ok' ? '✓' : c.kind === 'err' ? '✕' : '!'} <span>${T.esc(c.text)}</span></div>`).join('')}
+    else {
+      if (!F.ready) body += `<div class="chk warn">! <span>${F.all.filter(t => !done(t)).map(t => T.esc(t.name)).join(', ')} ${F.all.filter(t => !done(t)).length === 1 ? 'is' : 'are'} not completed yet. Results go to IFPA once, for the whole event: complete ${F.all.filter(t => !done(t)).length === 1 ? 'it' : 'them'} first.</span></div>`;
+      // checks
+      const probs = cur.R.checks.filter(c => c.kind !== 'ok').concat(cur.G.parts.some(p => p.bye) ? [{ kind: 'warn', text: 'Your finals had byes: IFPA asks you to email ifpapinball@gmail.com so the event is graded right (the bye path is in your notes).' }] : []);
+      body += `<h3>Checks</h3>${probs.length ? probs.map(c => `<div class="chk ${c.kind}">${c.kind === 'err' ? '✕' : '!'} <span>${T.esc(c.text)}</span></div>`).join('') : '<div class="chk ok">✓ <span>Ready to submit.</span></div>'}`;
+      // results
+      body += `<h3>Results</h3><div class="small mb">Finals places first${cur.Fs.length > 1 ? ' (A, then the other divisions)' : ''}, then everyone else by qualifying position. Tied players share a place and the next place is skipped. Format: place,name,IFPA number.</div>
         <textarea readonly data-copy="results">${T.esc(cur.R.text)}</textarea>
-        <div class="gap mt"><button class="btn" data-act="copy" data-what="results">Copy results</button><span class="small">Format: place,name,IFPA number</span></div>`;
-      if (step === 1) body += `<div class="small mb">Meaningful games set the event's TGP (each one is worth ${PCT_PER_GAME}%). Worked out from each tournament's format and its Matchplay games, following the IFPA TGP guide.</div>
+        <div class="gap mt"><button class="btn" data-act="copy" data-what="results">Copy results</button></div>`;
+      // meaningful games
+      body += `<h3>Meaningful games</h3><div class="small mb">They set the event's TGP (each one is worth ${PCT_PER_GAME}%). Worked out from each tournament's format and its Matchplay games, following the IFPA TGP guide.</div>
         <table><tr><th>Part</th><th>Games</th><th>How</th></tr>${cur.G.parts.map(p => `<tr><td><b>${T.esc(p.label)}</b><div class="small">${T.esc(p.note || '')}</div></td><td class="big" style="font-size:18px;${p.counts ? '' : 'opacity:.45;text-decoration:line-through'}">${p.mg == null ? '?' : p.mg}</td><td class="small">${p.math.map(T.esc).join('<br>') || '-'}</td></tr>`).join('')}</table>
         ${cur.G.warns.map(w => `<div class="chk warn mt">! <span>${T.esc(w)}</span></div>`).join('')}
-        <div class="gap mt" style="align-items:center"><span>Total meaningful games</span><input type="number" step="0.5" min="0" data-f="mg" value="${mgNow()}" style="width:90px"><span class="small">${state(F).mg != null && state(F).mg !== '' ? `you changed it (worked out: ${cur.G.total}${cur.G.unknown ? ' + ?' : ''})` : cur.G.unknown ? 'part of this needs your number' : 'worked out'}</span></div>
-        <div class="small mt">≈ ${Math.round(mgNow() * PCT_PER_GAME)}% TGP before IFPA's own limits. IFPA reviewers make the final call.</div>`;
-      if (step === 2) body += `<div class="small mb">Goes in the notes / description box. Short is fine: format, the cut, byes, meaningful games and the Matchplay links.</div>
-        <textarea data-copy="notes" data-f="notes" style="min-height:160px">${T.esc(s.notes != null ? s.notes : notes(F, cur.Q, cur.Fs, cur.G, mgNow()))}</textarea>
+        <div class="gap mt" style="align-items:center"><span>Total meaningful games</span><input type="number" step="0.5" min="0" data-f="mg" value="${mgNow()}" style="width:90px"><span class="small">${s.mg != null && s.mg !== '' ? `you changed it (worked out: ${cur.G.total}${cur.G.unknown ? ' + ?' : ''})` : cur.G.unknown ? 'part of this needs your number' : 'worked out'} · ≈ ${Math.round(mgNow() * PCT_PER_GAME)}% TGP before IFPA's own limits</span></div>`;
+      // notes
+      body += `<h3>Format notes</h3><div class="small mb">For the notes / description box: format, the cut, byes, meaningful games and the Matchplay links.</div>
+        <textarea data-copy="notes" data-f="notes" style="min-height:150px">${T.esc(s.notes != null ? s.notes : notes(F, cur.Q, cur.Fs, cur.G, mgNow()))}</textarea>
         <div class="gap mt"><button class="btn" data-act="copy" data-what="notes">Copy notes</button>${s.notes != null ? '<button class="btn sec" data-act="resetNotes">Rebuild from Matchplay</button>' : ''}</div>`;
-      if (step === 3) {
-        const todo = [['login', 'Log in to IFPA Tournament Manager with your TD account (it is separate from your IFPA player account).'], ['find', 'Open this event (the one you registered on the IFPA calendar).'], ['results', 'Paste the results from step 1.'], ['notes', 'Paste the format notes from step 2.'], ['mg', `Enter ${mgNow()} meaningful games if the form asks for it.`], ['submit', 'Submit.'], ['check', 'Open the results view and check for errors - the page doesn\'t change when you submit.']];
-        const ck = s.checks || {};
-        body += `<div class="gap mb"><a class="btn" href="${IFPA_URL}" target="_blank" rel="noopener">Open IFPA submission page ↗</a><button class="btn sec" data-act="copy" data-what="results">Copy results</button><button class="btn sec" data-act="copy" data-what="notes">Copy notes</button></div>
-          <ol class="todo">${todo.map(([k, t], i) => `<li><input type="checkbox" data-ck="${k}" ${ck[k] ? 'checked' : ''}><span><b>${i + 1}.</b> ${T.esc(t)}</span></li>`).join('')}</ol>
-          ${cur.G.parts.some(p => p.bye) ? '<div class="chk warn">! <span>Your finals had byes: IFPA asks you to email ifpapinball@gmail.com so the event is graded right. Mention the bye path in your notes (already included).</span></div>' : ''}
-          <div class="small">IFPA wants results within ${WINDOW_DAYS} days of the event.</div>`;
-      }
-      if (step === 4) {
-        const left = F.completedAt ? Math.ceil((F.completedAt + WINDOW_DAYS * DAY - Date.now()) / DAY) : null;
-        body += s.submittedAt ? `<div class="chk ok">✓ <span>Marked as submitted on ${new Date(s.submittedAt).toLocaleString()}.</span></div><button class="btn sec" data-act="unsubmit">Mark as not submitted</button>`
-          : `<div class="mb">${left != null ? `<b>${left > 0 ? left + ' day' + (left === 1 ? '' : 's') + ' left' : 'Past the 45-day window'}</b> to submit.` : ''} Until you tick this, the Overview shows a reminder.</div><button class="btn" data-act="submitted">I've submitted to IFPA</button>`;
-      }
+      // what to do at IFPA
+      body += `<h3>At IFPA</h3><ol class="steps1">
+        <li><a class="link" href="${IFPA_URL}" target="_blank" rel="noopener">Open Submit at IFPA ↗</a> (log in with your director account - it's separate from your IFPA player account)</li>
+        <li>Pick this event (the one on the IFPA calendar)</li><li>Paste the results</li><li>Enter ${mgNow()} meaningful games if asked</li><li>Paste the notes</li><li>Submit, then open the results view to check them</li><li>Tick <b>Done</b> here</li></ol>
+        <div class="small">IFPA wants results within ${WINDOW_DAYS} days of the event. <a class="link" href="${IFPA_HOWTO}" target="_blank" rel="noopener">How to submit</a> · <a class="link" href="${IFPA_REGISTER}" target="_blank" rel="noopener">No director account? Create one</a></div>`;
     }
-    const okStep = i => i === 4 ? !!s.submittedAt : (s.seen || []).includes(i);
     host.shadowRoot.innerHTML = `<style>${CSS()}</style><div class="wrap${document.documentElement.classList.contains('dark') ? ' dark' : ''}"><div class="ov" data-act="bg"><div class="dlg">
-      <div class="dh">Submit to IFPA <span class="small">· ${T.esc(F.qual.name || '')}</span></div>
-      <div class="steps">${STEPS.map((n, i) => `<button class="${i === step ? 'on' : ''} ${okStep(i) ? 'ok' : ''}" data-act="go" data-i="${i}">${i + 1}. ${n}</button>`).join('')}</div>
+      <div class="dh gap" style="align-items:center;flex-wrap:wrap"><span class="flex1">Submit to IFPA <span class="small">· ${T.esc(F.qual.name || '')}</span></span>${due}
+        <a class="btn sm" href="${IFPA_URL}" target="_blank" rel="noopener">Submit results at IFPA ↗</a>
+        <label class="gap small" style="color:var(--text)"><input type="checkbox" data-f="done" ${s.submittedAt ? 'checked' : ''}> Done</label>
+        <button class="icon" data-act="close" title="Close">✕</button></div>
       <div class="db">${body}</div>
-      <div class="df"><button class="btn sec" data-act="close">Close</button><span class="gap">${step > 0 ? '<button class="btn sec" data-act="back">Back</button>' : ''}${step < 4 ? '<button class="btn" data-act="next">Next</button>' : ''}</span></div>
     </div></div></div>`;
+    const db = host.shadowRoot.querySelector('.db'); if (db && y) db.scrollTop = y;
   }
 
-  async function go(i) {
-    const s = state(cur.F), seen = new Set(s.seen || []); seen.add(cur.step);
-    cur.step = Math.max(0, Math.min(4, i)); await saveState(cur.F, { step: cur.step, seen: [...seen] }); draw();
-  }
   async function onClick(e) {
     const a = e.target.closest('[data-act]'); if (!a || !cur) return;
     if (a.dataset.act === 'bg' && e.target !== a) return;
     const act = a.dataset.act;
     if (act === 'bg' || act === 'close') return close();
-    if (act === 'go') return go(+a.dataset.i);
-    if (act === 'next') return go(cur.step + 1);
-    if (act === 'back') return go(cur.step - 1);
     if (act === 'copy') {
       const txt = a.dataset.what === 'results' ? cur.R.text : (state(cur.F).notes != null ? state(cur.F).notes : notes(cur.F, cur.Q, cur.Fs, cur.G, mgNow()));
       try { await navigator.clipboard.writeText(txt); a.textContent = 'Copied ✓'; } catch (err) { const ta = host.shadowRoot.querySelector(`[data-copy=${a.dataset.what}]`); if (ta) { ta.select(); document.execCommand('copy'); a.textContent = 'Copied ✓'; } }
@@ -355,7 +350,7 @@ ol.todo{padding-left:0;list-style:none}ol.todo li{display:flex;gap:8px;align-ite
     const el = e.target; if (!cur) return;
     if (el.dataset.f === 'mg') { const v = el.value === '' ? null : Number(el.value); await saveState(cur.F, { mg: v === cur.G.total ? null : v }); return draw(); }
     if (el.dataset.f === 'notes') { await saveState(cur.F, { notes: el.value }); return; }
-    if (el.dataset.ck) { const ck = { ...(state(cur.F).checks || {}), [el.dataset.ck]: el.checked }; await saveState(cur.F, { checks: ck }); }
+    if (el.dataset.f === 'done') { await saveState(cur.F, { submittedAt: el.checked ? Date.now() : null }); if (T.inpage.render) T.inpage.render(); return draw(); }
   }
 
   return { render, open, close, results, mgOf, grade, notes, family };
