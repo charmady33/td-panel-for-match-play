@@ -167,7 +167,15 @@ TDP.jobs = (() => {
         if (!here) {
           // same tournament: use Matchplay's tab links (keeps the page loaded); otherwise load the page
           if (T.routeTid() === s.tid) await T.mp.goTab(s.tid, s.page);
-          else { job.log.push(`Opening ${s.page} of tournament ${s.tid}…`); await save(); location.assign(`/tournaments/${s.tid}/${s.page === 'overview' ? '' : s.page}`); return; }
+          else {
+            // another tournament: switch inside Matchplay's app (no page load); a full load only if that doesn't take
+            job.log.push(`Opening ${s.page} of tournament ${s.tid}…`); await save();
+            const url = `/tournaments/${s.tid}/${s.page === 'overview' ? '' : s.page}`;
+            history.pushState(history.state, '', url); dispatchEvent(new PopStateEvent('popstate', { state: history.state }));
+            const ok = await T.waitFor(() => T.routeTid() === s.tid && document.querySelector(`main a[href^="/tournaments/${s.tid}"]`), 6000);
+            if (!ok) { location.assign(url); return; }
+            await T.data.useTournament(s.tid);
+          }
           if (T.routePage() !== s.page) { location.assign(`/tournaments/${s.tid}/${s.page}`); return; }
         }
         // page ready: Matchplay has drawn the tab's content
@@ -187,14 +195,9 @@ TDP.jobs = (() => {
           if (m && T.routeTid() === +m[1]) { try { await T.mp.goTab(+m[1], m[2] || 'overview'); } catch (e) { /* fall through */ } }
           if (location.pathname !== job.returnTo) { await save(); location.assign(job.returnTo); return; }
         }
-        // show what changed: Matchplay's own Refresh button where there is one, else reload this page once
-        const changedHere = job.steps.some(st => st.tid === T.routeTid() && (st.page === T.routePage() || (st.page === 'overview' && T.routePage() === 'overview')));
-        if (changedHere && !job.reloaded) {
-          const rb = T.findBtn(document.querySelector('main') || document, /^Refresh$/);
-          job.reloaded = true; await save();
-          if (rb) { T.click(rb); await T.sleep(800); }
-          else { location.reload(); return; }
-        }
+        // show what changed: Matchplay fetches the tournament again in place (no page reload)
+        const changedHere = job.steps.some(st => st.tid === T.routeTid());
+        if (changedHere && !job.reloaded) { job.reloaded = true; await save(); await T.sync.soft(); }
         await T.waitFor(() => { const m = document.querySelector('main'); return m && T.txt(m).length > 80; }, 8000);
         await T.sleep(250);
         if (job.scroll) { scrollTo(job.scroll[0], job.scroll[1]); const m = document.querySelector('main'); if (m && job.scroll[2]) m.scrollTop = job.scroll[2]; }
@@ -209,17 +212,14 @@ TDP.jobs = (() => {
   function runAfter() {
     if (job && job.after && afterHandlers[job.after.what]) { const a = job.after; setTimeout(() => { try { afterHandlers[a.what](a); } catch (e) { T.warn('after', e); } }, 400); }
   }
-  // the worker frame finished every step: show the TD the updated page (Matchplay's own Refresh button, or a reload)
+  // the worker frame finished every step: Matchplay's page here fetches the tournament again, in place (no reload)
   async function finish() {
     T.worker.close();
-    const changedHere = job.steps.some(st => st.tid === T.routeTid() && (st.page === T.routePage() || (st.page === 'overview' && T.routePage() === 'overview')));
+    const changedHere = job.steps.some(st => st.tid === T.routeTid());   // Matchplay keeps one copy of the tournament for all its tabs
     job.done = true; job.doneAt = Date.now(); job.log.push('Done.');
-    if (changedHere) {
-      const rb = T.findBtn(document.querySelector('main') || document, /^Refresh$/);
-      if (!rb) { job.afterOnLoad = !!job.after; await save(); location.reload(); return; }
-      T.click(rb);
-    }
-    await save(); T.data.refresh(true); runAfter();
+    await save(); T.data.refresh(true);
+    if (changedHere) await T.sync.soft();
+    runAfter();
   }
   async function retry() {
     if (!job) return;

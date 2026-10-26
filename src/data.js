@@ -14,8 +14,8 @@ TDP.data = (() => {
   const isCompleted = t => t && String(t.status) === 'completed';
   const tPath = id => `/tournaments/${id}?includePlayers=1&includeArenas=1&includeBanks=1&includeLinkedTournaments=1`;
 
-  async function loadTournament(id, maxAge) {
-    const t = unwrap(await api.get(tPath(id), maxAge));
+  async function loadTournament(id, maxAge, prio) {
+    const t = unwrap(await api.get(tPath(id), maxAge, prio));
     if (isCompleted(t)) api.keepForever(tPath(id));
     return t;
   }
@@ -50,7 +50,8 @@ TDP.data = (() => {
       if (done) { doneRounds.add(r.roundId); }
     }
     D.games = [...keep.values()];
-    if (T.logs) await T.logs.load(D.tid, isCompleted(D.t));   // when scores were really entered (Matchplay's Logs)
+    // when scores were really entered (Matchplay's Logs): only where game times are shown or used
+    if (T.logs && (/^(arenas|banks)$/.test(T.routePage()) || T.isFrame)) await T.logs.load(D.tid, isCompleted(D.t));
     T.timing.noteSuggestions(D.games);
     await T.saveT(D.tid, { fullSeen: { ...T.timing.fullSeen } });
     await recordHistory();
@@ -69,8 +70,10 @@ TDP.data = (() => {
     await T.store.set('hist', hist);
   }
 
+  let again = false;
   async function refresh(force = false) {
-    if (busy || !D.tid) return;
+    if (!D.tid) return;
+    if (busy) { if (force) again = true; return; }   // a forced reload asked mid-refresh runs right after it
     busy = true; D.loading = true;
     try {
       if (!T.settings.token) throw new Error('NO_TOKEN');
@@ -85,19 +88,45 @@ TDP.data = (() => {
       D.isTD = !!(D.me && D.t && D.me.userId === D.t.organizerId) || pageShowsTdControls();
       if (!D.isTD) return;
       if (fullDue && T.cats) T.cats.lookup(D.t.arenas, emit);   // LCD vs DMD from OPDB, in the background
-      await loadGames();
-      // standings of the qualifying tournament: at most every 15 s (we use 30 s)
+      // standings of the qualifying tournament: at most every 15 s (we use 30 s). Before the games, so check-in and
+      // the finals tables can draw first
       if (D.qual && (force || now - lastStand > 30e3)) {
         D.standings = arr(unwrap(await api.get(`/tournaments/${D.qual.tournamentId}/standings`, force ? 0 : 29e3)));   // force = fresh (tie just resolved)
         lastStand = now;
       }
+      if (fullDue && !D.games.length) { D.cached = false; emit(); }   // first load: players + standings are enough to draw
+      await loadGames();
       D.error = null; D.cached = false;
       saveCache();
+      noteChange();
     } catch (e) {
       D.error = T.apiErrorText(e);
     } finally {
       busy = false; D.loading = false; D.updatedAt = Date.now(); emit();
+      if (again) { again = false; setTimeout(() => refresh(true), 0); }
     }
+  }
+
+  // one tournament again, straight away (e.g. a finals right after check-in) - then everything else
+  async function reloadOne(tid) {
+    try {
+      const t = await loadTournament(tid, 0, true);
+      if (tid === D.tid) D.t = t;
+      if (D.qual && D.qual.tournamentId === tid) D.qual = t;
+      for (const f of D.finals) if (f.tid === tid) f.t = t;
+      emit();
+    } catch (e) { T.warn('reloadOne', e); }
+    refresh(true);
+  }
+
+  // what Matchplay would show differently: players, rounds, games and their scores (for keeping its page in sync)
+  let sig = null;
+  const changeListeners = new Set();
+  function noteChange() {
+    const s = JSON.stringify([D.tid, D.t && D.t.status, (D.t && D.t.players || []).map(p => [p.playerId, (p.tournamentPlayer || {}).status]),
+      D.rounds.map(r => [r.roundId, r.status]), D.games.filter(g => !doneRounds.has(g.roundId) || g.status !== 'completed').map(g => [g.gameId, g.status, g.arenaId, (g.suggestions || []).length, g.resultPositions || g.resultPoints || null])]);
+    const prev = sig; sig = s;
+    if (prev && prev !== s && JSON.parse(prev)[0] === D.tid) changeListeners.forEach(f => { try { f(D); } catch (e) { T.warn(e); } });
   }
 
   // managers aren't in the API's organizerId - fall back to TD-only buttons Matchplay shows
@@ -124,8 +153,19 @@ TDP.data = (() => {
     await T.store.set('cache:' + D.tid, { at: Date.now(), me: D.me, t: D.t, qual: D.qual, finals: D.finals, rounds: D.rounds, games: D.games, standings: D.standings });
   }
   async function loadCache(tid) {
-    const c = await T.store.get('cache:' + tid, null);
-    if (!c || !c.t || Date.now() - c.at > 7 * 864e5) return false;
+    let c = await T.store.get('cache:' + tid, null);
+    if (!c || !c.t || Date.now() - c.at > 7 * 864e5) {
+      // first visit: another tournament of the same set (qualifying, A, B, C…) knows this one's players and standings
+      c = null;
+      for (const id of await T.store.get('cacheIdx', [])) {
+        const o = await T.store.get('cache:' + id, null);
+        if (!o || !o.t || Date.now() - o.at > 7 * 864e5) continue;
+        const f = (o.finals || []).find(x => x.tid === tid && x.t);
+        const q = o.qual && o.qual.tournamentId === tid ? o.qual : null;
+        if (f || q) { c = { me: o.me, t: f ? f.t : q, qual: o.qual, finals: o.finals, rounds: [], games: [], standings: o.standings }; break; }
+      }
+      if (!c) return false;
+    }
     Object.assign(D, { me: c.me || D.me, t: c.t, qual: c.qual, finals: c.finals || [], rounds: c.rounds || [], games: c.games || [], standings: c.standings || [], isTD: true, cached: true });
     return true;
   }
@@ -134,7 +174,7 @@ TDP.data = (() => {
     if (D.tid === tid) return;
     stop();
     Object.assign(D, { tid, t: null, isTD: null, qual: null, finals: [], rounds: [], games: [], standings: [], error: null });
-    doneRounds.clear(); lastFull = 0; lastStand = 0;
+    doneRounds.clear(); lastFull = 0; lastStand = 0; sig = null;
     const st = await T.loadT(tid);
     if (T.cats) await T.cats.load();
     Object.keys(T.timing.fullSeen).forEach(k => delete T.timing.fullSeen[k]);
@@ -162,5 +202,5 @@ TDP.data = (() => {
     return { round: r, active, pending, partial, total: gs.length, done: gs.filter(T.timing.doneish).length };
   }
 
-  return { D, refresh, setTournament, useTournament, stop, on: f => listeners.add(f), playerMap, arenaMap, currentRound, latestRound, counts, loadTournament, unwrap, arr };
+  return { D, refresh, reloadOne, onChange: f => changeListeners.add(f), setTournament, useTournament, stop, on: f => listeners.add(f), playerMap, arenaMap, currentRound, latestRound, counts, loadTournament, unwrap, arr };
 })();

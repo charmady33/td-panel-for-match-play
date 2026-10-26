@@ -308,14 +308,22 @@ TDP.mp = (() => {
   }
 
   // ---------- Matches tab: group Actions -> Assign bank -> tick one bank -> Update arenas ----------
-  async function assignBank(groupNo, bankName) {
-    const head = await T.waitFor(() => [...document.querySelectorAll('main th, main td, main div, main span')].find(e => e.children.length === 0 && new RegExp('^Group ' + groupNo + '(\\s|$|-)').test(T.txt(e)) && T.visible(e)), 8000) || fail(`Group ${groupNo} not found on the Matches tab.`);
+  // the group's heading cell ("Group 2" / "Group 2 - Bank 4"); our own Assign bank button inside it doesn't count
+  const ownTxt = e => [...e.childNodes].filter(n => !(n.dataset && n.dataset.tdp)).map(n => n.textContent).join('').replace(/\s+/g, ' ').trim();
+  const isGroupHead = (e, no) => [...e.children].every(c => c.dataset && c.dataset.tdp) && new RegExp('^Group ' + no + '(\\s|$|-)').test(ownTxt(e)) && T.visible(e);
+  const groupHead = no => [...document.querySelectorAll('main th, main td, main div, main span')].find(e => isGroupHead(e, no));
+  // group Actions -> Assign bank: leaves Matchplay's dialog open (the TD picks the bank) or returns it
+  async function openAssign(groupNo) {
+    const head = await T.waitFor(() => groupHead(groupNo), 8000) || fail(`Group ${groupNo} not found on the Matches tab.`);
     const box = head.closest('table') || head.parentElement;
     let scope = box; while (scope && ![...scope.querySelectorAll('button')].some(b => T.txt(b) === 'Actions')) scope = scope.parentElement;
     const btn = scope && [...scope.querySelectorAll('button')].find(b => T.txt(b) === 'Actions') || fail(`Group ${groupNo} has no Actions menu (round finished?).`);
     T.click(btn);
     T.click(await needBtn('Assign bank'));
-    const d = await needDialog();
+    return needDialog();
+  }
+  async function assignBank(groupNo, bankName) {
+    const d = await openAssign(groupNo);
     const boxes = await T.waitFor(() => { const b = [...d.querySelectorAll('input[type=checkbox]')]; return b.length ? b : null; }, 8000) || fail('Bank list did not load.');
     let hit = false;
     for (const b of boxes) { const on = T.cbFirst(b) === bankName; if (on) hit = true; if (b.checked !== on) { b.click(); await T.sleep(30); } }
@@ -347,5 +355,5 @@ TDP.mp = (() => {
     await dialogClosed();
   }
 
-  return { goTab, menu, playerRows, selectPlayers, setLabels, bulk, setActive, readIfpaRanks, addFromQualifying, setSeeds, closeRound, startNextRound, publishRound, createBank, setBankArenas, reorderBank, assignBank, enterResults, addArenas, resolveTie, needBtn, needDialog, dialogClosed };
+  return { openAssign, groupHead, goTab, menu, playerRows, selectPlayers, setLabels, bulk, setActive, readIfpaRanks, addFromQualifying, setSeeds, closeRound, startNextRound, publishRound, createBank, setBankArenas, reorderBank, assignBank, enterResults, addArenas, resolveTie, needBtn, needDialog, dialogClosed };
 })();

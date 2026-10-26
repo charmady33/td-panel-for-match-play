@@ -36,7 +36,8 @@ TDP.ifpa = (() => {
     const standings = arr(T.data.unwrap(await T.api.get(`/tournaments/${id}/standings`, age)));
     const rounds = arr(T.data.unwrap(await T.api.get(`/tournaments/${id}/rounds`, age)));
     const games = await T.api.all(`/tournaments/${id}/games`, age);
-    return { t, standings, rounds, games, pm: T.data.playerMap(t) };
+    const gtb = ((await T.store.get('t:' + id, {})) || {}).gtb || {};   // bracket tiebreakers played with the extension
+    return { t, standings, rounds, games, gtb, pm: T.data.playerMap(t) };
   }
 
   // ---------- 1. results ----------
@@ -53,7 +54,10 @@ TDP.ifpa = (() => {
       });
     };
     for (const f of Fs) {
-      const rows = [...f.standings].filter(r => r.gamesPlayed !== 0).sort((a, b) => a.position - b.position);
+      // a tie broken with the extension's bracket tiebreaker: those players get separate places, in its finish order
+      const tb = new Map();
+      Object.values(f.gtb || {}).filter(x => x && x.status === 'done' && x.finish).forEach(x => x.finish.forEach((id, i) => tb.set(id, i)));
+      const rows = [...f.standings].filter(r => r.gamesPlayed !== 0).map(r => tb.has(r.playerId) ? { ...r, position: r.position + tb.get(r.playerId) / 100 } : r).sort((a, b) => a.position - b.position);
       add(rows, { ...Q.pm, ...f.pm }, f.label);
     }
     const qrows = [...Q.standings].sort((a, b) => a.position - b.position).filter(r => {

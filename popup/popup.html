@@ -1,0 +1,30 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Matchplay TD Panel</title>
+<style>
+:root{--text:#111827;--muted:#4b5563;--line:#e5e7eb;--pri:#4f46e5;--bg:#fff}
+@media (prefers-color-scheme:dark){:root{--text:#f3f4f6;--muted:#9ca3af;--line:#374151;--pri:#6366f1;--bg:#1f2937}}
+body{margin:0;width:320px;font:14px/1.4 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--text);background:var(--bg)}
+.w{padding:14px 16px}
+h1{font-size:15px;font-weight:600;margin:0 0 2px}
+.s{font-size:12px;color:var(--muted)}
+label{display:block;font-weight:500;margin:12px 0 4px}
+input{box-sizing:border-box;width:100%;font:inherit;padding:6px 8px;border:1px solid #d1d5db;border-radius:6px;background:transparent;color:inherit}
+.row{display:flex;gap:6px;margin-top:8px;align-items:center}
+button{font:500 13px inherit;font-family:inherit;border-radius:6px;padding:6px 12px;cursor:pointer;border:1px solid transparent;background:var(--pri);color:#fff}
+button.sec{background:transparent;color:var(--pri);border-color:#a5b4fc}
+hr{border:0;border-top:1px solid var(--line);margin:14px 0}
+#msg{min-height:16px;margin-top:6px}
+</style></head>
+<body><div class="w">
+  <h1>Matchplay TD Panel</h1>
+  <div class="s" id="ver"></div>
+  <label for="tok">Matchplay API token</label>
+  <input id="tok" type="password" placeholder="Paste your token" autocomplete="off">
+  <div class="s" style="margin-top:4px">Create one at app.matchplay.events → Account → API tokens. Kept only in this browser; used to read data (changes are made with Matchplay's own buttons).</div>
+  <div class="row"><button id="save">Save</button><span class="s" id="msg"></span></div>
+  <hr>
+  <div class="s" id="tinfo">Open one of your tournaments to clear its saved data.</div>
+  <div class="row"><button class="sec" id="clear" disabled>Clear saved data for this tournament</button></div>
+</div>
+<script src="popup.js"></script>
+</body></html>

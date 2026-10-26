@@ -9,7 +9,17 @@ TDP.busy = (() => {
   const DONE_MS = 4000;
   let snap = null, host = null;
 
-  const panelW = () => { const c = document.documentElement.classList; return c.contains('tdp-side') ? 380 : c.contains('tdp-rail') ? 48 : 0; };
+  const panelW = () => 0;   // (no sidebar any more)
+  // Matchplay's side drawers (game details…) are pinned to the right edge: keep our card clear of them
+  const drawerW = () => {
+    let w = 0;
+    for (const el of document.querySelectorAll('.fixed, [role=dialog]')) {
+      if ((el.id || '').startsWith('tdp-') || !T.visible(el)) continue;
+      const r = el.getBoundingClientRect();
+      if (r.right >= innerWidth - 2 && r.width < innerWidth * 0.7 && r.height > innerHeight * 0.5) w = Math.max(w, r.width);
+    }
+    return w;
+  };
   const stepText = j => { if (j.sub && j.sub.text) return j.sub.text; const s = j.steps[Math.min(j.i, j.steps.length - 1)]; return s ? (s.label || s.op) : ''; };
   const countText = j => j.sub && j.sub.total > 1 ? ` (${j.sub.done} of ${j.sub.total})` : j.steps.length > 1 ? ` (step ${Math.min(j.i + 1, j.steps.length)} of ${j.steps.length})` : '';
 
@@ -73,6 +83,7 @@ TDP.busy = (() => {
       const cm = b.querySelector('main'), y = snap.mainY;
       if (cm && y) { cm.scrollTop = y; setTimeout(() => { cm.scrollTop = y; }, 0); }
     }
+    if (!j) { host.style.cursor = 'default'; return; }   // still copy only
     const pct = Math.max(4, Math.round(T.jobs.fraction(j) * 100));
     const html = `<div class="${dark ? 'dark' : ''}"><div class="tdpc-dim" style="background:${dark ? 'rgba(17,24,39,.35)' : 'rgba(255,255,255,.35)'}"></div><div class="tdpc-card">
       <div class="tdpc-t"><span class="tdpc-sp"></span>Updating Matchplay…</div>
@@ -80,6 +91,14 @@ TDP.busy = (() => {
       <div class="tdpc-pb"><i style="width:${pct}%"></i></div><div class="tdpc-s" style="margin:-4px 0 8px;text-align:right">${pct}%${T.esc(countText(j))}</div>
       <div class="tdpc-row"><span class="tdpc-f">Please wait - the page is locked until it's done.</span><button class="tdpc-b" data-act="stop">Stop</button></div></div></div>`;
     const ui = root.querySelector('.ui'); if (ui.dataset.h !== html) { ui.dataset.h = html; ui.innerHTML = html; }
+  }
+  // a still copy of the screen while Matchplay reloads its data in place (soft refresh): no card, no dimming
+  let stillOn = false;
+  function still(on) {
+    if (on) {
+      if (host) return;   // a task's cover is already up
+      freeze(); stillOn = true; showCover(null);
+    } else if (stillOn) { stillOn = false; hideCover(); }
   }
   function hideCover() { document.getElementById('tdp-cover-early')?.remove(); if (host) { host.remove(); host = null; } snap = null; }
 
@@ -101,7 +120,7 @@ TDP.busy = (() => {
       document.documentElement.appendChild(card);
     }
     const dark = document.documentElement.classList.contains('dark');
-    card.style.cssText = `position:fixed;bottom:16px;right:${panelW() + 16}px;z-index:2147482000`;
+    card.style.cssText = `position:fixed;bottom:16px;right:${drawerW() + 16}px;z-index:2147482000`;
     const pct = Math.max(4, Math.round(T.jobs.fraction(j) * 100));
     const html = `<div class="${dark ? 'dark' : ''}"><div class="tdpc-card"><div class="tdpc-t"><span class="tdpc-sp"></span>Updating Matchplay…</div>
       <div class="tdpc-s">${T.esc(j.title)}</div><div class="tdpc-s">${T.esc(stepText(j))}</div>
@@ -120,17 +139,19 @@ TDP.busy = (() => {
     for (const el of boxes) if (!el.hasAttribute(LOCK)) { el.setAttribute(LOCK, '1'); el.style.pointerEvents = 'none'; el.style.opacity = '.5'; }
   }
 
+  let doneTimer = null;
   function render() {
     if (T.isFrame) return;   // the worker frame shows nothing
     const j = T.jobs.get();
     const running = j && T.jobs.active();
     const own = running && T.jobs.mine();
-    if (own && j.runner !== 'frame') showCover(j); else hideCover();
+    if (own && j.runner !== 'frame') { stillOn = false; showCover(j); } else if (!stillOn) hideCover();
     if (own && j.runner === 'frame') { showCard(j); lockAreas(T.routeTid() && j.steps.some(s => s.tid === T.routeTid() && s.page === T.routePage())); }
     else { hideCard(); lockAreas(false); }
     // banner: other tabs while running; this tab when done or stopped with an error
     const main = document.querySelector('main');
     const fresh = j && j.done && j.doneAt && Date.now() - j.doneAt < DONE_MS;
+    if (fresh) { clearTimeout(doneTimer); doneTimer = setTimeout(render, DONE_MS - (Date.now() - j.doneAt) + 50); }
     const here = j && T.routeTid() && j.steps.some(s => s.tid === T.routeTid());
     let banner = '';
     if (here && j.error) banner = `<div class="callout err gap" style="margin:8px 0;align-items:center"><span class="flex1"><b>Update stopped:</b> ${T.esc(j.title)} - ${T.esc(j.error)}</span><button class="btn sm" data-act="retry">Retry</button>${T.worker && T.worker.isOpen() ? '<button class="btn sm sec" data-act="show">Show me</button>' : ''}<button class="btn sm sec" data-act="stop">Stop</button></div>`;
@@ -148,6 +169,5 @@ TDP.busy = (() => {
     render();
   }
 
-  setInterval(render, 700);
-  return { render, freeze };
+  return { render, freeze, still };
 })();

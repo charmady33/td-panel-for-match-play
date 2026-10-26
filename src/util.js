@@ -1,7 +1,7 @@
 // Matchplay TD Panel - shared helpers. Every file adds to the one global namespace TDP.
 /* global chrome */
 var TDP = window.TDP || (window.TDP = {});
-TDP.VERSION = '0.9.0';
+TDP.VERSION = '0.10.0';
 
 // the hidden worker frame (worker.js): a copy of Matchplay inside the TD's tab that makes the changes
 TDP.isFrame = (() => { try { return window.top !== window && window.name === 'tdp-worker'; } catch (e) { return false; } })();
@@ -33,11 +33,7 @@ TDP.store = {
 
 // settings shared by every tournament
 TDP.DEFAULT_SETTINGS = {
-  token: '',
-  open: true,            // panel open (not minimized)
-  tab: 'status',
-  labelColor: 'rose',
-  autoCountdown: 10,     // seconds before auto close/start
+  token: '',             // the TD's own Matchplay API token (toolbar button, or the prompt on a tournament page)
 };
 TDP.settings = { ...TDP.DEFAULT_SETTINGS };
 TDP.loadSettings = async () => { TDP.settings = { ...TDP.DEFAULT_SETTINGS, ...(await TDP.store.get('settings', {})) }; return TDP.settings; };
@@ -104,7 +100,8 @@ TDP.waitFor = async (fn, timeout = 8000, step = 50) => {
 TDP.dialog = () => { const d = [...document.querySelectorAll('[role=dialog]')].filter(TDP.visible); return d[d.length - 1] || null; };
 TDP.findBtn = (root, match) => {
   const re = match instanceof RegExp ? match : new RegExp('^\\s*' + match.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*$', 'i');
-  const hit = [...(root || document).querySelectorAll('button, a, [role=menuitem]')].filter(TDP.visible).find(b => re.test(TDP.txt(b))) || null;
+  // our own buttons placed inside Matchplay's page (e.g. a group's "Assign bank") never count
+  const hit = [...(root || document).querySelectorAll('button, a, [role=menuitem]')].filter(b => TDP.visible(b) && !b.closest('[data-tdp]')).find(b => re.test(TDP.txt(b))) || null;
   // some Matchplay menus wrap each item (role=menuitem) around the real button: only the inner one reacts
   const inner = hit && [...hit.querySelectorAll('button, a')].filter(TDP.visible).find(b => re.test(TDP.txt(b)));
   return inner || hit;

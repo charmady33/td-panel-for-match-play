@@ -25,9 +25,11 @@ TDP.api = (() => {
   }
 
   // get(path, maxAgeMs): cached for maxAge; requests are queued one at a time
-  function get(path, maxAge = 0) {
+  // prio: skips the queue (one request the TD is waiting on, e.g. right after check-in)
+  function get(path, maxAge = 0, prio = false) {
     const c = cache.get(path);
     if (c && (forever.has(path) || Date.now() - c.at < maxAge)) return Promise.resolve(c.data);
+    if (prio) return raw(path).then(data => { cache.set(path, { at: Date.now(), data }); return data; });
     const p = chain.then(() => raw(path)).then(data => { cache.set(path, { at: Date.now(), data }); return data; });
     chain = p.catch(() => {});
     return p;
@@ -51,8 +53,8 @@ TDP.api = (() => {
 
 TDP.apiErrorText = e => {
   const m = String(e && e.message || e);
-  if (m === 'NO_TOKEN') return 'Add your Matchplay API token in Settings (app.matchplay.events/account/tokens).';
-  if (m === 'BAD_TOKEN') return 'Matchplay rejected the API token - check it in Settings.';
+  if (m === 'NO_TOKEN') return 'Add your Matchplay API token: click the extension\'s toolbar button (create one at app.matchplay.events/account/tokens).';
+  if (m === 'BAD_TOKEN') return 'Matchplay rejected the API token - check it with the extension\'s toolbar button.';
   if (m === 'RATE_LIMITED') return 'Matchplay asked us to slow down - pausing 30 seconds.';
   return m;
 };

@@ -1,32 +1,16 @@
-# Matchplay TD Panel v0.9.0
+# Matchplay TD Panel v0.10.0
 
-A Chrome extension for tournament directors on app.matchplay.events. On any tournament you run (as organizer, or as a manager) it adds a full-height sidebar on the right and shifts Matchplay's page over. The » button collapses it to a thin strip. Most of the tools also appear directly inside Matchplay's own pages (see below), so the sidebar is optional. It's styled to look like Matchplay's own pages.
+A Chrome extension for tournament directors on app.matchplay.events. On tournaments you run (as organizer, or as a manager) its tools are built straight into Matchplay's own pages, styled like Matchplay. There's no sidebar: a small status chip sits next to the tournament's name, and messages show as short toasts at the bottom.
 
 ## Install (unpacked)
 1. Unzip this folder somewhere permanent.
 2. Open `chrome://extensions` and turn on **Developer mode** (top right).
 3. Click **Load unpacked** and choose the `matchplay-td-panel` folder.
-4. Open one of your tournaments, go to the panel's **Settings** tab, and paste your Matchplay API token. You can create a token at app.matchplay.events → Account → API tokens.
+4. Open one of your tournaments and paste your Matchplay API token in the box at the top of the page (or click the extension's toolbar button). You can create a token at app.matchplay.events → Account → API tokens.
 
 To update to a newer version, replace the folder and click the reload icon on the extension's card in `chrome://extensions`.
 
-## Tabs
-- **Status bar (shown on every tab)**:
-  - active games
-  - pending approvals: every player has a score or place entered
-  - partial scores
-  - the current round
-- **Status**:
-  - round progress
-  - games in progress, with real game timers
-  - tie alerts
-  - whether auto close/start round is on (it's switched on the Matches tab)
-- **Finals**:
-  - divisions come from Matchplay's cut lines
-  - IFPA ranks are read from Matchplay's own IFPA Rankings list
-  - you set a rank cutoff and label for each division (B, C…)
-  - you can preview the labels before applying them
-  - each division shows its planned players and 3 backups, with a "Fix seeds" button
+## What's where
 - **Inside Matchplay's pages**:
   - **USA flag** replaces Matchplay's pride flag next to the Match Play logo
   - **Standings tab (qualifying)**:
@@ -68,22 +52,33 @@ To update to a newer version, replace the folder and click the reload icon on th
   3. **Format notes**, ready to paste, with the Matchplay links
   4. **Submit**: link to IFPA and a checklist
   5. **Done**: until ticked, the Overview shows how many of IFPA's 45 days are left
-- **Timers**:
-  - how long each round took, from the first game's start until every game is done
-  - average, min and max game time per arena
-  - uses the same game-timing rules as the Carpool Pinball remote app
-- **Banks (per round)**:
-  - makes new banks for the round that's waiting for games
-  - no two games share a bank again if they already did in an earlier round, and games held out last round come back first
-  - updates Matchplay's existing banks (and creates more if needed)
-  - assigns each group the bank with the most games its players haven't played yet
-  - **Automatic every round** switch (off by default)
-  - game times come from this tournament, the qualifying, Matchplay tournament IDs you enter, and any tournament you've opened with the extension (saved automatically)
-- **Settings**: your API token, label color, and the auto-round countdown length.
+- **Toolbar button**: your API token, and Clear saved data for the open tournament
 
 - **Matches tab (bank tournaments)**: **Assign banks** gives each group of the new round one of your banks - games its players haven't played, avoiding any bank that shares 2+ games with one a player already had. Preview with **Another option**, then **Assign**. **Automatic** (off by default) does it for every new round without the preview. The bar then shows "Group 2 → Bank 4 · 11 of 12 new"
 - **Overview**: **Submit to IFPA** sits under Re-open tournament, same size and style
 - **Test tournaments only** (Matches tab): **Fill random results** enters a random finishing order for every open game of the round that has its arena; **Every round** does it automatically. With auto close/start and Automatic bank assignment on, a test tournament runs itself.
+
+## New in 0.10.0
+- **No page reloads**: after a change, Matchplay fetches the tournament again in place (its Refresh button, or a quick in-app hop behind a still copy of the screen). Tasks that move between tournaments switch inside Matchplay's app too.
+- **Live sync**: the extension checks the API every 15 s; when something changed (a score from a phone, an approval, a new round, players), Matchplay's page updates by itself, unless you're busy with it (a dialog open, typing, clicked in the last few seconds).
+- **No sidebar**: a status chip next to the tournament name (round, active games, pending approvals); toasts for messages and the auto-round countdown (fixed 10 s, Cancel). API token: first-run box on the page, or the toolbar button (which also clears saved data). Label colors are fixed (B rose, C orange, D purple). One page watcher replaces the old polling timers; Matchplay's Logs are read only on the Arenas and Banks tabs.
+- **Finals check-in**:
+  - the status changes the moment the task finishes (no wait for the API), and this finals' players are re-read first
+  - capped at the finals' bracket size (else its cut line): once full, unticked boxes grey out with "A Finals is full (8 of 8). Untick a player to check someone else in."; more than full says "9 of 8 active: take one out"
+  - a loading card while players load; first visits use the saved data of the other tournaments in the set
+  - once a finals has started, check-in is locked with a note saying to use Matchplay's Activate / Deactivate
+- **Banks**:
+  - finals: no "Rebuild banks every round"; once the finals has started, Refresh / Add are locked ("Finals started: banks are locked")
+  - every preview (Generate / Refresh / Add) shows the most optimized arrangement first, scored on bank times, eras, repeats and machines shared between banks; Another arrangement = next best
+  - click any game in the preview to change it: replacements best first (type, average time, swaps with which bank, ⚠); picks are pinned 📌, kept by Another arrangement; Clear my changes
+  - Matches tab: an **Assign bank** / **Change bank** button next to each group's name opens Matchplay's own Assign bank dialog; the status line counts only groups still without a bank
+- **Ties**:
+  - Finals standings (eligibility applied): the whole tie at a cut-off shows in that division (e.g. 3 tied for 1 spot), then the cut line; a lower division whose list depends on it says "May change: depends on the A cut-off tie (…)" and marks players "(if they lose that tie)"
+  - a lower division's tie window says "Break the A cut-off tie first" with a link to it
+  - tied players who can't play the division a tie decides (ineligible, or not in it) are greyed and don't play; they go after the others in Matchplay's order. Lower-division cut-line ties count eligible players only
+  - tie window options are full-width cards; the window scrolls inside, so buttons stay on screen
+  - bracket finals: every tie in a group is listed (e.g. tied for 1st and for 3rd); **Break tie** plays a tiebreaker (IFPA draw + vote or random game) and records it; the result shows by the group and Submit to IFPA uses it
+- Fixed: Matchplay's game drawer close button was under the extension's strip (the strip is gone; the progress card keeps clear of drawers).
 
 ## New in 0.9.0
 - **Changes run in a hidden helper frame**: Matchplay's pages are worked on out of sight while you keep using your tab. A small "Updating Matchplay…" card shows progress, with **Show me** and **Stop**; tables on the page being changed are greyed until it's done, then the page refreshes in place. If the helper stops responding for 25 s, it falls back to the frozen-screen cover.
@@ -113,7 +108,7 @@ To update to a newer version, replace the folder and click the reload icon on th
 - Rounds are always read oldest first (Matchplay sends newest first) - this fixes auto close/start not firing. Tournament details reload when you switch tabs and when Matchplay says a round/tournament started.
 
 ## While it's updating Matchplay
-- Changes are made in your own tab at full speed, but the screen is **frozen**: a copy of what was showing stays up (slightly dimmed) with an **"Updating Matchplay…"** card, progress and **Stop**. The clicking, dialogs and page changes happen underneath, out of sight. Clicks, scrolling and keys are blocked; the side panel stays usable.
+- Changes normally run in a hidden copy of Matchplay inside your tab (you keep working). If that stops responding, they run in your own tab with the screen **frozen**: a copy of what was showing stays up (slightly dimmed) with an **"Updating Matchplay…"** card, progress and **Stop**. The clicking, dialogs and page changes happen underneath, out of sight. Clicks, scrolling and keys are blocked; the side panel stays usable.
 - When it's done the cover lifts on the page you started from (same scroll position) and a green "Updates done ✓" banner shows. On an error the cover lifts so you can see where it stopped, with Retry / Stop.
 - Other tabs of the same tournament show an "Updating Matchplay in another tab" banner.
 
@@ -123,5 +118,5 @@ To update to a newer version, replace the folder and click the reload icon on th
 
 ## How it works
 - **Reads** use Matchplay's official read-only API with your own token. Requests are kept to about 1 every 0.65 s, standings are fetched no more than every 30 s, and finished data is cached.
-- **Changes** (labels, adding players, check-in, seeds, banks, closing/starting rounds) are made by clicking Matchplay's own buttons. You see a preview or confirm first, and progress shows at the bottom of the panel. If a step fails, the task stops with a message and a Retry button.
+- **Changes** (labels, adding players, check-in, seeds, banks, closing/starting rounds) are made by clicking Matchplay's own buttons. You see a preview or confirm first; progress shows in a small card at the bottom right. If a step fails, the task stops with a message and a Retry button.
 - Everything the panel remembers stays in this browser's extension storage: cutoffs, IFPA ranks, check-in, and bank settings.

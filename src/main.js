@@ -1,5 +1,6 @@
-// Entry point: follows Matchplay's in-app navigation, shows the panel on tournaments you run,
-// resumes unfinished jobs, and runs the optional auto close/start round.
+// Entry point: follows Matchplay's in-app navigation, draws the extension's parts into Matchplay's pages on
+// tournaments you run, resumes unfinished jobs, and runs the optional auto close/start round.
+// One page watcher (MutationObserver) does all the redrawing - no polling timers.
 var TDP = window.TDP || (window.TDP = {});
 
 (async () => {
@@ -14,7 +15,9 @@ var TDP = window.TDP || (window.TDP = {});
   if (T.isFrame) {
     let last = null;
     const go = async () => { if (location.pathname === last) return; last = location.pathname; const tid = T.routeTid(); if (tid) await T.data.useTournament(tid); T.jobs.resume(); };
-    setInterval(go, 300); go();
+    new MutationObserver(() => go()).observe(document.documentElement, { childList: true, subtree: true });
+    addEventListener('popstate', () => setTimeout(go, 0));
+    go();
     return;
   }
 
@@ -24,36 +27,38 @@ var TDP = window.TDP || (window.TDP = {});
   // ---------- route watching (Matchplay is a single-page app) ----------
   let lastPath = null;
   async function onRoute() {
-    if (location.pathname === lastPath) return;
+    if (location.pathname === lastPath || T.sync.hopping()) return;   // (a soft refresh hops away and back - not a new page)
     const prevTid = lastPath ? Number((lastPath.match(/^\/tournaments\/(\d+)/) || [])[1]) : null;
     lastPath = location.pathname;
     if (prevTid && prevTid === T.routeTid()) { T.data.refresh(true); return; }   // another tab of the same tournament: fresh details
     const tid = T.routeTid();
     if (!tid) { T.panel.unmount(); T.data.setTournament(null); return; }
-    T.panel.mount(); T.panel.render(true);
+    T.panel.mount(); T.panel.render();
     T.jobs.resume();   // a task in progress carries on straight away (it doesn't need the tournament data first)
     await T.data.setTournament(tid);
     T.embed.render();
   }
-  setInterval(onRoute, 500);
   onRoute();
+  addEventListener('popstate', () => setTimeout(onRoute, 0));
 
-  // draw our parts the moment Matchplay draws its page (not up to 1.5 s later)
-  let drawTimer = null;
-  new MutationObserver(() => {
-    if (drawTimer) return;
-    drawTimer = setTimeout(() => { drawTimer = null; if (T.data.D.t) { T.inpage.render(); T.embed.render(); } }, 60);
-  }).observe(document.body, { childList: true, subtree: true });
-
-  // Matchplay's own toasts ("Tournament started", "Round started"…): reload details straight away
-  let toastTimer = null;
+  // the page watcher: whenever Matchplay draws or changes its page - a new address (in-app navigation), our parts
+  // put back where Matchplay redrew, the flag, and Matchplay's own toasts ("Round started"…) -> reload details
+  let drawTimer = null, toastTimer = null;
+  const draw = () => {
+    drawTimer = null;
+    onRoute();
+    T.flag.swap();
+    if (T.data.D.t) { T.inpage.render(); T.embed.render(); T.panel.render(); }
+    if (T.jobs.get()) T.busy.render();
+  };
   new MutationObserver(ms => {
     for (const m of ms) for (const n of m.addedNodes) {
       if (n.nodeType !== 1 || (n.id || '').startsWith('tdp-')) continue;
       const tx = n.textContent || ''; if (tx.length > 200) continue;   // toasts are short
-      if (/(Tournament|Round) (started|completed|published)|Round created/i.test(tx)) { clearTimeout(toastTimer); toastTimer = setTimeout(() => T.data.refresh(true), 800); return; }
+      if (/(Tournament|Round) (started|completed|published)|Round created/i.test(tx)) { clearTimeout(toastTimer); toastTimer = setTimeout(() => T.data.refresh(true), 800); }
     }
-  }).observe(document.body, { childList: true, subtree: true });
+    if (!drawTimer) drawTimer = setTimeout(draw, 60);
+  }).observe(document.documentElement, { childList: true, subtree: true });
 
   T.data.on(D => {
     if (D.isTD === false && T.settings.token) { T.panel.unmount(); return; }   // not your tournament: stay out of the way
@@ -61,13 +66,21 @@ var TDP = window.TDP || (window.TDP = {});
     T.embed.render(); T.inpage.render();
     autoTick().then(autoBanks).then(autoAssign).then(autoFill);
   });
-  T.jobs.on(() => { T.panel.render(true); T.embed.render(); T.busy.render(); });
+  T.jobs.on(() => { T.panel.render(); T.embed.render(); T.busy.render(); T.inpage.render(); });
+  // Matchplay doesn't push changes: when the API shows something new (a score from a phone, a new round…),
+  // Matchplay's page fetches again in place - unless the TD is busy with it
+  T.data.onChange(() => T.sync.auto());
   // a setting changed (here or in another tab): redraw everything that shows settings
   let sharedTimer = null;
-  T.onShared(() => { clearTimeout(sharedTimer); sharedTimer = setTimeout(() => { T.panel.render(true); T.embed.render(); T.inpage.render(); }, 150); });
+  let lastToken = T.settings.token;
+  T.onShared(() => {
+    if (T.settings.token !== lastToken) { lastToken = T.settings.token; T.api.clear(); T.data.D.me = null; T.data.refresh(true); }   // token set from the toolbar button
+    clearTimeout(sharedTimer); sharedTimer = setTimeout(() => { T.panel.render(); T.embed.render(); T.inpage.render(); }, 150);
+  });
 
   // ---------- auto close round & start next (default off, per tournament) ----------
   let autoBusy = false;
+  const isFinals = D => !!(D.qual && D.qual.tournamentId !== D.tid);
   async function lock(tid) {
     const k = 'lock:auto:' + tid, cur = await T.store.get(k, null);
     if (cur && cur.tab !== tabId && Date.now() - cur.at < 30000) return false;
@@ -95,11 +108,11 @@ var TDP = window.TDP || (window.TDP = {});
       const ft = T.finals.groupTies(D).filter(t => !t.tbDone);
       if (ft.length) return state('tie needs breaking first: ' + ft[0].why);
       const total = D.t.roundCount || D.t.duration || 0, last = !!total && D.rounds.length >= total;
-      const go = await T.panel.showCountdown(`All games approved in ${r.name}. Closing the round${last ? '' : ' and starting the next one'} in`, Math.max(3, T.settings.autoCountdown || 10));
+      const go = await T.panel.showCountdown(`All games approved in ${r.name}. Closing the round${last ? '' : ' and starting the next one'} in`, 10);
       if (!go || !(T.tstate[tid] || {}).auto) return state('cancelled - will check again');
       const steps = [{ tid, page: 'matches', op: 'closeRound', label: `Closing ${r.name}` }];
       const stt = T.tstate[tid] || {}, banksOn = /bank/i.test(D.t.arenaAssignment || '');
-      const rebuild = banksOn && stt.autoBanks, assign = banksOn && stt.autoAssign;
+      const rebuild = banksOn && stt.autoBanks && !isFinals(D), assign = banksOn && stt.autoAssign;   // finals keep their banks
       if (!last) {
         // Rebuild (Banks tab) and Automatic assign (Matches tab) are separate; with assign on, the round starts
         // unpublished, gets its banks, then goes live
@@ -122,7 +135,7 @@ var TDP = window.TDP || (window.TDP = {});
     const D = T.data.D, tid = D.tid, st = T.tstate[tid] || {};
     // with Rebuild on as well, the rebuild task assigns after rebuilding (one task, never two at once)
     if (!st.autoAssign || assignBusy || !D.t || !D.isTD || D.t.status !== 'started' || T.jobs.active()) return;
-    if (st.autoBanks) { const c = T.bankplan.context(D); if (c.round && st.banksDoneRound !== c.round.roundId) return; }
+    if (st.autoBanks && !isFinals(D)) { const c = T.bankplan.context(D); if (c.round && st.banksDoneRound !== c.round.roundId) return; }
     const ctx = T.bankplan.context(D);
     if (!ctx.round || !ctx.groups.length || st.assignDoneRound === ctx.round.roundId) return;
     if (!(await lock(tid + ':assign'))) return;
@@ -159,7 +172,7 @@ var TDP = window.TDP || (window.TDP = {});
   let banksBusy = false;
   async function autoBanks() {
     const D = T.data.D, tid = D.tid, st = T.tstate[tid] || {};
-    if (!st.autoBanks || banksBusy || !D.t || !D.isTD || D.t.status !== 'started' || !/bank/i.test(D.t.arenaAssignment || '') || T.jobs.active()) return;
+    if (!st.autoBanks || isFinals(D) || banksBusy || !D.t || !D.isTD || D.t.status !== 'started' || !/bank/i.test(D.t.arenaAssignment || '') || T.jobs.active()) return;
     const ctx = T.bankplan.context(D);
     if (!ctx.round || !ctx.groups.length || st.banksDoneRound === ctx.round.roundId) return;
     if (!(await lock(tid + ':banks'))) return;

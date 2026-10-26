@@ -77,7 +77,7 @@ TDP.elig = (() => {
     if (b.dataset.act === 'open') return open(D);
     if (b.dataset.act === 'clear') {
       const g = changes(D, new Map());
-      if (g.length) await T.jobs.start('Remove eligibility labels', [{ tid: D.qual.tournamentId, page: 'players', op: 'labels', args: { groups: g, color: T.settings.labelColor }, label: 'Removing eligibility labels' }]);
+      if (g.length) await T.jobs.start('Remove eligibility labels', [{ tid: D.qual.tournamentId, page: 'players', op: 'labels', args: { groups: g, color: 'rose' }, label: 'Removing eligibility labels' }]);
     }
   }
 
@@ -139,7 +139,7 @@ table{width:100%;border-collapse:collapse}td,th{padding:4px 6px;border-top:1px s
       await T.saveT(qid, { divs: st });
       const groups = changes(D, want(D, cur.cuts));
       close();
-      if (groups.length) await T.jobs.start('Eligibility labels', [{ tid: qid, page: 'players', op: 'labels', args: { groups, color: T.settings.labelColor }, label: 'Setting eligibility labels' }]);
+      if (groups.length) await T.jobs.start('Eligibility labels', [{ tid: qid, page: 'players', op: 'labels', args: { groups, color: 'rose' }, label: 'Setting eligibility labels' }]);
     }
   }
 

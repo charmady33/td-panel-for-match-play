@@ -20,7 +20,6 @@ TDP.flag = (() => {
     }
     const old = document.getElementById('tdp-flag'); if (old) old.remove();   // the v0.3 flag next to the menu button
   }
-  setInterval(swap, 1000);
-  swap();
+  swap();   // and again whenever the page changes (main.js page watcher)
   return { swap };
 })();

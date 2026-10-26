@@ -10,6 +10,8 @@ TDP.bankbar = (() => {
   const active = D => (D.t.banks || []).filter(b => b.status !== 'inactive');
   const st = D => T.tstate[D.tid] || {};
   const sizeOf = D => D.t.gamesPerRound || 3;   // "Matches each round" on Matchplay's Overview
+  const isFinals = D => !!(D.qual && D.qual.tournamentId !== D.tid);
+  const locked = D => isFinals(D) && D.t.status !== 'planned';   // a finals that has started keeps its banks
 
   // ---------- the bar ----------
   // the row holding Matchplay's "Add bank" button; the bar goes right above the bank cards (or under that row).
@@ -26,14 +28,18 @@ TDP.bankbar = (() => {
     const show = D && D.t && D.isTD && T.routePage() === 'banks' && /bank/i.test(D.t.arenaAssignment || '');
     const a = show ? anchor() : null;
     if (!a) return T.inpage.block('tdp-bankbar', null);
-    const has = active(D).length, size = sizeOf(D);
-    const html = `<div class="card" style="margin:0 0 12px"><div class="cb gap" style="flex-wrap:wrap;align-items:center">
+    const has = active(D).length, size = sizeOf(D), fin = isFinals(D);
+    const html = locked(D) ? `<div class="card" style="margin:0 0 12px"><div class="cb gap" style="flex-wrap:wrap;align-items:center">
+      <span class="h" style="margin-right:4px">Bank Builder</span>
+      <span class="badge b-gray">Finals started: banks are locked</span>
+      <span class="small flex1" style="text-align:right">${has} bank${has === 1 ? '' : 's'} · ${size} game${size === 1 ? '' : 's'} each</span>
+    </div></div>` : `<div class="card" style="margin:0 0 12px"><div class="cb gap" style="flex-wrap:wrap;align-items:center">
       <span class="h" style="margin-right:4px">Bank Builder</span>
       <span class="small" title="From &quot;Matches each round&quot; on Matchplay's Overview">${size} game${size === 1 ? '' : 's'} per bank (from Matchplay)</span>
       ${has ? `<button class="btn" data-act="refresh">Refresh banks</button><button class="btn sec" data-act="add">Add banks</button>` : `<button class="btn" data-act="generate">Generate banks</button>`}
       <button class="btn sec" data-act="settings" title="Games and time sources">⚙ Settings</button>
-      <label class="gap" title="Each new round gets new banks (different from earlier rounds). Assigning them to groups is the Matches tab's Assign banks · Automatic."><input type="checkbox" data-f="autoBanks" ${(st(D).autoBanks ? 'checked' : '')}> <span class="lab">Rebuild banks every round</span></label>
-      <span class="small flex1" style="text-align:right">${has ? `${has} bank${has === 1 ? '' : 's'} in Matchplay` : 'No banks yet'}</span>
+      ${fin ? '' : `<label class="gap" title="Each new round gets new banks (different from earlier rounds). Assigning them to groups is the Matches tab's Assign banks · Automatic."><input type="checkbox" data-f="autoBanks" ${(st(D).autoBanks ? 'checked' : '')}> <span class="lab">Rebuild banks every round</span></label>`}
+      <span class="small flex1" style="text-align:right">${has ? `${has} bank${has === 1 ? '' : 's'} in Matchplay` : 'No banks yet'}${fin ? ' · finals: set once, locked when it starts' : ''}</span>
     </div></div>`;
     T.inpage.block('tdp-bankbar', a.el, a.where, html, onBar);
   }
@@ -43,6 +49,7 @@ TDP.bankbar = (() => {
     if (e.type !== 'click') return;
     const a = e.target.closest('[data-act]'); if (!a) return;
     const act = a.dataset.act;
+    if (locked(D)) return;
     if (act === 'settings') return openSettings(D);
     if (act === 'generate') return ask(D, 'create', 'How many banks?');
     if (act === 'refresh') return preview(D, 'refresh', active(D).length);
@@ -52,7 +59,7 @@ TDP.bankbar = (() => {
   // ---------- building ----------
   async function times(D) { return T.bankplan.estimates(D, st(D), await T.bankplan.extras(D)); }
   const namesOf = (D, ids) => { const am = T.data.arenaMap(D.t); return (ids || []).map(id => (am[id] || {}).name).filter(Boolean); };
-  async function build(D, mode, n) {
+  async function build(D, mode, n, pins) {
     const size = sizeOf(D), s = st(D), ctx = T.bankplan.context(D), est = await times(D);
     const existing = active(D).map(b => namesOf(D, b.arenaIds));
     const estBy = new Map(est.map(g => [lc(g.name), g]));
@@ -71,19 +78,25 @@ TDP.bankbar = (() => {
     const { avoid, usage } = T.banks.historyMaps(hist);
     if (mode === 'add') for (const names of existing) for (const nm of names) usage.set(lc(nm), (usage.get(lc(nm)) || 0) + 3);   // prefer games not in the banks already there
     const seen = new Set(shown.map(sig).concat([sig(existing)]));
+    const fixedGames = fixed.map(f => f.games);
+    // the most optimized arrangement first: many tries, each scored on bank times, eras, repeats from earlier rounds
+    // and machines shared between banks (same game number / overlapping times). "Another arrangement" = next best.
     let best = null;
-    for (let tries = 0; tries < 12; tries++) {
+    for (let tries = 0; tries < 30; tries++) {
       const seed = Math.floor(Math.random() * 1e9);
       const res = T.banks.build(est, n, size, { seed, exclude, force: s.bankForce || [], avoid, usage });
+      if (pins) applyPins(res.banks, pins, est);
       const k = sig(res.banks.map(b => b.games.map(g => g.name)));
-      const spread = spreadOf(res.banks);
-      if (!seen.has(k) && (!best || spread < best.spread)) best = { res, spread, seed };
-      if (best && tries >= 3) break;
+      if (seen.has(k)) continue;
+      const overlap = T.banks.schedule(res.banks, fixedGames);   // play order inside each bank
+      const score = T.banks.cost(res.banks.map(b => b.games), avoid) + overlap;
+      if (!best || score < best.score) best = { res, score, seed, overlap };
     }
     if (!best) throw new Error('Every arrangement of these games has been shown already. Change the games in Settings or the bank count.');
-    // play order inside each bank: a machine in more than one bank is played at different times in each
-    best.res.overlap = T.banks.schedule(best.res.banks, fixed.map(f => f.games));
+    best.res.overlap = best.overlap;
     best.res.fixed = fixed;
+    best.res.est = est.filter(g => !(s.bankExclude || []).includes(g.arenaId));   // games the TD may pick by hand (not "Never")
+    best.res.avoid = avoid;
     const names = active(D).map(b => b.name);
     const taken = new Set(names.map(lc));
     let k = names.length;
@@ -98,6 +111,23 @@ TDP.bankbar = (() => {
     return best.res;
   }
   const sig = banks => banks.map(b => [...b].map(lc).sort().join('|')).sort().join('#');
+  // games the TD picked by hand stay in their bank: pins[bi] = [names]
+  function applyPins(banks, pins, est) {
+    const byName = new Map(est.map(g => [lc(g.name), g]));
+    pins.forEach((names, bi) => {
+      const b = banks[bi]; if (!b || !names) return;
+      for (const nm of names) {
+        if (b.games.some(g => lc(g.name) === lc(nm))) continue;
+        const pinnedHere = new Set(names.map(lc));
+        const slot = b.games.findIndex(g => !pinnedHere.has(lc(g.name))); if (slot < 0) continue;
+        const out = b.games[slot];
+        const bj = banks.findIndex((o, j) => j !== bi && o.games.some(g => lc(g.name) === lc(nm)));
+        if (bj >= 0) { const gj = banks[bj].games.findIndex(g => lc(g.name) === lc(nm)); b.games[slot] = banks[bj].games[gj]; banks[bj].games[gj] = out; }
+        else { const g = byName.get(lc(nm)); if (g) b.games[slot] = g; }
+      }
+    });
+    banks.forEach(b => { b.total = b.games.reduce((t, g) => t + g.sec, 0); });
+  }
   const spreadOf = banks => { const t = banks.map(b => b.total); return t.length ? Math.max(...t) - Math.min(...t) : 0; };
 
   // ---------- windows ----------
@@ -114,7 +144,14 @@ TDP.bankbar = (() => {
 .seg{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
 .seg button{border:0;background:var(--card);padding:3px 8px;font:inherit;font-size:12px;cursor:pointer;color:var(--text)}
 .seg button.on{background:var(--pri);color:#fff}
-table{width:100%;border-collapse:collapse}td{padding:4px 6px;border-top:1px solid var(--line)}`;
+table{width:100%;border-collapse:collapse}td{padding:4px 6px;border-top:1px solid var(--line)}
+.gname{background:none;border:0;padding:0;font:inherit;color:inherit;cursor:pointer;text-align:left;border-bottom:1px dashed var(--prib)}
+.gname:hover,.gname.on{color:var(--pri2)}.gname .caret{font-size:10px;color:var(--soft)}
+.picker{display:block!important;border:1px solid var(--prib);border-radius:6px;margin:4px 0 6px;padding:4px;background:var(--card)}
+.plist{max-height:220px;overflow:auto}
+.popt{display:flex;width:100%;gap:8px;align-items:center;background:none;border:0;border-radius:4px;padding:4px 6px;font:inherit;font-size:13px;color:var(--text);cursor:pointer;text-align:left}
+.popt:hover{background:var(--head)}
+.err{color:#be123c}`;
   function show(inner) {
     if (!host) {
       host = document.createElement('div'); host.id = 'tdp-bb-modal';
@@ -123,8 +160,10 @@ table{width:100%;border-collapse:collapse}td{padding:4px 6px;border-top:1px soli
       host.shadowRoot.addEventListener('change', onModal);
       document.documentElement.appendChild(host);
     }
+    const keep = host.shadowRoot.querySelector('.db'), y = keep ? keep.scrollTop : 0;
     host.shadowRoot.innerHTML = `<style>${CSS()}</style><div class="wrap${document.documentElement.classList.contains('dark') ? ' dark' : ''}"><div class="ov" data-act="bg"><div class="dlg">${inner}</div></div></div>`;
     const inp = host.shadowRoot.querySelector('input[data-autofocus]'); if (inp) inp.focus();
+    if (y) { const db = host.shadowRoot.querySelector('.db'); if (db) db.scrollTop = y; }
   }
   function close() { if (host) host.remove(); host = null; cur = null; }
 
@@ -134,10 +173,10 @@ table{width:100%;border-collapse:collapse}td{padding:4px 6px;border-top:1px soli
       <div class="df"><button class="btn sec" data-act="close">Cancel</button><button class="btn" data-act="askOk">Preview</button></div>`);
   }
 
-  async function preview(D, mode, n) {
-    cur = { mode, n };
+  async function preview(D, mode, n, pins) {
+    cur = { mode, n, pins: pins || [] };
     show(`<div class="dh">Building ${n} bank${n === 1 ? '' : 's'}…</div><div class="db small">Working out the arrangement.</div>`);
-    try { cur.res = await build(D, mode, n); } catch (e) {
+    try { cur.res = await build(D, mode, n, cur.pins.some(p => p && p.length) ? cur.pins : null); } catch (e) {
       return show(`<div class="dh">Can't build banks</div><div class="db"><div class="callout">${T.esc(e.message || String(e))}</div></div><div class="df"><button class="btn sec" data-act="settings">Settings</button><button class="btn" data-act="close">Close</button></div>`);
     }
     drawPreview();
@@ -149,15 +188,66 @@ table{width:100%;border-collapse:collapse}td{padding:4px 6px;border-top:1px soli
     const cards = res.banks.map((b, bi) => `<div class="card"><div class="ch"><span class="h">${T.esc(b.name)}</span><span class="small">${at(b.total)}</span></div><div class="cb"><ul style="margin:0;padding:0;list-style:none">${b.games.map((g, gi) => {
       const w = res.when[bi][gi], clash = w.also.filter(x => x.overlap > 0 || x.sameSlot), same = w.also.filter(x => x.sameSlot);
       const also = w.also.length ? `<div class="small ${clash.length ? 'err' : 'muted'}" style="padding-left:44px">${clash.length ? '⚠ ' : ''}also in ${w.also.map(x => `${T.esc(x.bank)} as game ${x.pos + 1} @ ${at(x.s)}`).join(', ')}${same.length ? ` - same game number as ${same.map(x => T.esc(x.bank)).join(', ')}` : clash.length ? ` - overlaps ~${Math.ceil(Math.max(...clash.map(x => x.overlap)) / 60)} min` : ''}</div>` : '';
-      return `<li><span class="small" style="width:44px;flex:none">@${at(w.s)}</span><span class="ell flex1">${T.esc(g.name)}${g.repeat ? ' <span class="badge b-amber">repeat</span>' : ''}</span><span class="small" title="${T.esc(g.src)}">${T.esc(g.era)} · ${at(g.sec)}</span></li>${also}`;
+      const pinned = (cur.pins[bi] || []).some(nm => lc(nm) === lc(g.name)), open = cur.picking && cur.picking.bi === bi && cur.picking.gi === gi;
+      return `<li><span class="small" style="width:44px;flex:none">@${at(w.s)}</span><span class="ell flex1"><button class="gname${open ? ' on' : ''}" data-act="pick" data-b="${bi}" data-g="${gi}" title="Change this game">${pinned ? '📌 ' : ''}${T.esc(g.name)} <span class="caret">▾</span></button>${g.repeat ? ' <span class="badge b-amber">repeat</span>' : ''}</span><span class="small" title="${T.esc(g.src)}">${T.esc(g.era)} · ${at(g.sec)}</span></li>${also}${open ? pickerHtml(bi, gi) : ''}`;
     }).join('')}</ul>${b.repeatPairs ? '<div class="small warn mt">Has a game pair from an earlier round</div>' : ''}</div></div>`).join('');
     const notes = [`Bank times ${at(Math.min(...t))} – ${at(Math.max(...t))} (spread ${at(Math.max(...t) - Math.min(...t))}). @ = expected start; games are played in this order.`];
     if (res.fixed.length) notes.push(res.fixed.length === 1 ? 'Your existing bank stays as it is.' : `Your ${res.fixed.length} existing banks stay as they are.`);
     if (res.banks.some((b, bi) => res.when[bi].some(w => w.also.some(x => x.overlap > 0 || x.sameSlot)))) notes.push('Some machines are in more than one bank at the same game number or at overlapping times (marked ⚠): two groups may wait on the same game. Try another arrangement, or add more games in Matchplay.');
     if (res.dropped.length) notes.push(`Not used this time: ${res.dropped.map(g => g.name).join(', ')}`);
     if (mode === 'refresh') notes.push('Bank names stay the same; their games are replaced.');
+    notes.push('Click a game to change it (best choices first). Games you change are pinned 📌 and stay when you ask for another arrangement.');
+    const pinned = cur.pins.some(p => p && p.length);
     show(`<div class="dh">${title}</div><div class="db"><div class="small mb">${notes.map(T.esc).join('<br>')}</div><div class="bk">${cards}</div></div>
-      <div class="df"><button class="btn sec" data-act="close">Cancel</button><button class="btn sec" data-act="another">Another arrangement</button><button class="btn" data-act="confirm">Confirm</button></div>`);
+      <div class="df">${pinned ? '<button class="btn sec" data-act="unpin" style="margin-right:auto">Clear my changes</button>' : ''}<button class="btn sec" data-act="close">Cancel</button><button class="btn sec" data-act="another">Another arrangement</button><button class="btn" data-act="confirm">Confirm</button></div>`);
+  }
+
+  // ---------- change one game by hand ----------
+  // every usable game, ranked by how good the banks would be with it in this slot (a game already in another bank swaps)
+  function choices(bi, gi) {
+    const res = cur.res, me = res.banks[bi].games[gi], fixedGames = res.fixed.map(f => f.games);
+    const base = layoutScore(res.banks.map(b => ({ games: [...b.games] })), fixedGames, res.avoid);
+    const out = [];
+    for (const g of res.est) {
+      if (lc(g.name) === lc(me.name) || res.banks[bi].games.some((x, k) => k !== gi && lc(x.name) === lc(g.name))) continue;
+      const trial = res.banks.map(b => ({ games: [...b.games] }));
+      const bj = trial.findIndex((b, j) => j !== bi && b.games.some(x => lc(x.name) === lc(g.name)));
+      let swapWith = null;
+      if (bj >= 0) {
+        const gj = trial[bj].games.findIndex(x => lc(x.name) === lc(g.name));
+        if (trial[bj].games.some((x, k) => k !== gj && lc(x.name) === lc(me.name))) continue;   // would put a machine twice in that bank
+        trial[bj].games[gj] = me; swapWith = res.banks[bj].name;
+      }
+      trial[bi].games[gi] = g;
+      const sc = layoutScore(trial, fixedGames, res.avoid);
+      out.push({ g, swapWith, score: sc.score, clash: sc.overlap > base.overlap ? (sc.overlap >= 1e6 && base.overlap < 1e6 ? 'same game number' : 'overlap') : '' });
+    }
+    return out.sort((a, b) => a.score - b.score);
+  }
+  function layoutScore(banks, fixedGames, avoid) {
+    const overlap = T.banks.schedule(banks, fixedGames);
+    return { overlap, score: T.banks.cost(banks.map(b => b.games), avoid) + overlap };
+  }
+  function pickerHtml(bi, gi) {
+    const list = choices(bi, gi), at = sec => T.fmtDur(sec * 1000);
+    if (!list.length) return '<li class="picker small">No other game fits here.</li>';
+    return `<li class="picker"><div class="small" style="padding:2px 4px 4px">Replace with (best first):</div><div class="plist">${list.map((c, i) =>
+      `<button class="popt" data-act="choose" data-name="${T.esc(c.g.name)}"><span class="flex1 ell">${i === 0 ? '<b>' : ''}${T.esc(c.g.name)}${i === 0 ? '</b> <span class="badge b-green">best</span>' : ''}</span><span class="small">${T.esc(c.g.era)} · ${at(c.g.sec)}${c.swapWith ? ` · swaps with ${T.esc(c.swapWith)}` : ' · not used yet'}${c.clash ? ` · <span class="err">⚠ ${c.clash}</span>` : ''}</span></button>`).join('')}</div></li>`;
+  }
+  function choose(name) {
+    const { bi, gi } = cur.picking, res = cur.res, me = res.banks[bi].games[gi];
+    const g = res.est.find(x => lc(x.name) === lc(name)); if (!g) return;
+    const bj = res.banks.findIndex((b, j) => j !== bi && b.games.some(x => lc(x.name) === lc(name)));
+    if (bj >= 0) { const gj = res.banks[bj].games.findIndex(x => lc(x.name) === lc(name)); res.banks[bj].games[gj] = me; }
+    res.banks[bi].games[gi] = g;
+    const pins = cur.pins[bi] = (cur.pins[bi] || []).filter(nm => lc(nm) !== lc(me.name));
+    pins.push(g.name);
+    res.overlap = T.banks.schedule(res.banks, res.fixed.map(f => f.games));
+    res.banks.forEach(b => { b.total = b.games.reduce((t, x) => t + x.sec, 0); });
+    res.when = T.banks.timeline(res.banks, res.fixed);
+    res.dropped = res.est.filter(x => !res.banks.some(b => b.games.some(y => lc(y.name) === lc(x.name))) && !res.fixed.some(f => f.games.some(y => lc(y.name) === lc(x.name))));
+    cur.picking = null;
+    drawPreview();
   }
 
   async function confirm(D) {
@@ -242,7 +332,10 @@ table{width:100%;border-collapse:collapse}td{padding:4px 6px;border-top:1px soli
         if (!n || n < 1) return T.panel.say('Enter how many banks.', 'err');
         return preview(D, cur.mode, n);
       }
-      if (act === 'another') return preview(D, cur.mode, cur.n);
+      if (act === 'another') return preview(D, cur.mode, cur.n, cur.pins);
+      if (act === 'unpin') return preview(D, cur.mode, cur.n, []);
+      if (act === 'pick') { const bi = +a.dataset.b, gi = +a.dataset.g; cur.picking = cur.picking && cur.picking.bi === bi && cur.picking.gi === gi ? null : { bi, gi }; return drawPreview(); }
+      if (act === 'choose') return choose(a.dataset.name);
       if (act === 'nextOpt') return assignPreview(D, cur.k + 1);
       if (act === 'fillGo') { const r = cur.r; close(); return T.jobs.start(`Random results for ${r.name || 'this round'}`, [{ tid: D.tid, page: 'matches', op: 'fillResults', args: { tid: D.tid, roundId: r.roundId }, label: 'Entering random results' }]); }
       if (act === 'assignGo') { const { o, k } = cur; close(); return T.jobs.start(`Assign banks for ${o.ctx.round.name || 'this round'}`, T.bankplan.assignSteps(D, o.ctx, o.list[k])); }
