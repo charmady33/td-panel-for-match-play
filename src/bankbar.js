@@ -188,6 +188,18 @@ table{width:100%;border-collapse:collapse}td{padding:4px 6px;border-top:1px soli
       <div class="df"><button class="btn sec" data-act="close">Cancel</button>${o.list.length > 1 ? '<button class="btn sec" data-act="nextOpt">Another option</button>' : ''}<button class="btn" data-act="assignGo">Assign</button></div>`);
   }
 
+  // ---------- Fill random results (Test tournaments) ----------
+  function fillConfirm(D) {
+    const r = T.data.currentRound(); if (!r || D.t.test !== true) return;
+    const open = D.games.filter(g => g.roundId === r.roundId && !g.bye && g.set !== 9999 && !T.timing.isDone(g)), ready = open.filter(g => g.arenaId != null);
+    cur = { mode: 'fill', r };
+    show(`<div class="dh">Fill random results?</div><div class="db">
+      <div class="mb">Enter a random finishing order for all <b>${ready.length}</b> open game${ready.length === 1 ? '' : 's'} in ${T.esc(r.name || 'this round')}.</div>
+      ${ready.length < open.length ? `<div class="callout warn">${open.length - ready.length} game${open.length - ready.length === 1 ? ' has' : 's have'} no arena yet and will be skipped. Assign banks first.</div>` : ''}
+      <div class="small">Only on Test tournaments. Each game gets its own random order.</div></div>
+      <div class="df"><button class="btn sec" data-act="close">Cancel</button><button class="btn" data-act="fillGo">Fill ${ready.length} game${ready.length === 1 ? '' : 's'}</button></div>`);
+  }
+
   // ---------- settings ----------
   async function openSettings(D) {
     cur = { mode: 'settings' };
@@ -229,6 +241,7 @@ table{width:100%;border-collapse:collapse}td{padding:4px 6px;border-top:1px soli
       }
       if (act === 'another') return preview(D, cur.mode, cur.n);
       if (act === 'nextOpt') return assignPreview(D, cur.k + 1);
+      if (act === 'fillGo') { const r = cur.r; close(); return T.jobs.start(`Random results for ${r.name || 'this round'}`, [{ tid: D.tid, page: 'matches', op: 'fillResults', args: { tid: D.tid, roundId: r.roundId }, label: 'Entering random results' }]); }
       if (act === 'assignGo') { const { o, k } = cur; close(); return T.jobs.start(`Assign banks for ${o.ctx.round.name || 'this round'}`, T.bankplan.assignSteps(D, o.ctx, o.list[k])); }
       if (act === 'confirm') return confirm(D);
       if (act === 'settings') return openSettings(D);
@@ -251,5 +264,5 @@ table{width:100%;border-collapse:collapse}td{padding:4px 6px;border-top:1px soli
   // keyboard: Enter in the "how many" box
   document.addEventListener('keydown', e => { if (e.key === 'Enter' && cur && cur.mode !== 'settings' && host && e.composedPath().some(x => x.dataset && x.dataset.f === 'askN')) host.shadowRoot.querySelector('[data-act=askOk]').click(); }, true);
 
-  return { render, close, assignPreview };
+  return { render, close, assignPreview, fillConfirm };
 })();

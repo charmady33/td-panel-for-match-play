@@ -255,6 +255,35 @@ TDP.mp = (() => {
     tick(`${name} play order`);
   }
 
+  // ---------- Matches tab: enter one game's finishing order (test tournaments: random results) ----------
+  // Finds the game's "Results" / "Enter results" button: the one in the box holding all its players, nearest the
+  // column (or card) headed by its arena. In the dialog, tapping names in order sets 1st, 2nd…; Matchplay fills last.
+  async function enterResults(names, arena, order) {
+    const all = () => [...document.querySelectorAll('main button, main a')].filter(T.visible).filter(b => /^(enter results|results)$/i.test(T.txt(b)));
+    const holder = b => { let c = b; while (c && c.tagName !== 'MAIN') { const t = T.txt(c); if (names.every(n => t.includes(n))) return c; c = c.parentElement; } return null; };
+    const pick = () => {
+      const cands = all().map(b => ({ b, box: holder(b) })).filter(x => x.box);
+      if (!cands.length) return null;
+      const size = x => T.txt(x.box).length; cands.sort((x, y) => size(x) - size(y));
+      const smallest = cands.filter(x => x.box === cands[0].box);
+      if (smallest.length === 1) return smallest[0].b;
+      const head = [...smallest[0].box.querySelectorAll('th, h3, h4, div, span, a')].find(e => e.children.length <= 1 && T.txt(e) === arena);
+      if (!head) return null;
+      const hx = head.getBoundingClientRect(), cx = hx.left + hx.width / 2;
+      return smallest.map(x => ({ b: x.b, d: Math.abs(x.b.getBoundingClientRect().left + x.b.getBoundingClientRect().width / 2 - cx) })).sort((x, y) => x.d - y.d)[0].b;
+    };
+    const btn = await T.waitFor(pick, 8000) || fail(`No results button for ${arena} (${names.join(', ')}).`);
+    T.click(btn);
+    const d = await needDialog();
+    const nameEl = n => [...d.querySelectorAll('div, span, td')].find(e => e.children.length === 0 && T.txt(e) === n && T.visible(e));
+    for (const n of order.slice(0, Math.max(1, order.length - 1))) {
+      const el = await T.waitFor(() => nameEl(n), 3000) || (T.click(T.findBtn(d, 'Cancel')), fail(`${n} isn't in the results window for ${arena}.`));
+      T.click(el); await T.sleep(180);
+    }
+    T.click(await needBtn('Save', d));
+    await dialogClosed();
+  }
+
   // ---------- Matches tab: group Actions -> Assign bank -> tick one bank -> Update arenas ----------
   async function assignBank(groupNo, bankName) {
     const head = await T.waitFor(() => [...document.querySelectorAll('main th, main td, main div, main span')].find(e => e.children.length === 0 && new RegExp('^Group ' + groupNo + '(\\s|$|-)').test(T.txt(e)) && T.visible(e)), 8000) || fail(`Group ${groupNo} not found on the Matches tab.`);
@@ -295,5 +324,5 @@ TDP.mp = (() => {
     await dialogClosed();
   }
 
-  return { goTab, menu, playerRows, selectPlayers, setLabels, bulk, setActive, readIfpaRanks, addFromQualifying, setSeeds, closeRound, startNextRound, createBank, setBankArenas, reorderBank, assignBank, resolveTie, needBtn, needDialog, dialogClosed };
+  return { goTab, menu, playerRows, selectPlayers, setLabels, bulk, setActive, readIfpaRanks, addFromQualifying, setSeeds, closeRound, startNextRound, createBank, setBankArenas, reorderBank, assignBank, enterResults, resolveTie, needBtn, needDialog, dialogClosed };
 })();

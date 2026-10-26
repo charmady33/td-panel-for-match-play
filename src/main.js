@@ -30,7 +30,7 @@ var TDP = window.TDP || (window.TDP = {});
     if (D.isTD === false && T.settings.token) { T.panel.unmount(); return; }   // not your tournament: stay out of the way
     T.panel.mount(); T.panel.render();
     T.embed.render(); T.inpage.render();
-    autoTick().then(autoBanks).then(autoAssign);
+    autoTick().then(autoBanks).then(autoAssign).then(autoFill);
   });
   T.jobs.on(() => { T.panel.render(true); T.embed.render(); T.busy.render(); });
 
@@ -89,6 +89,24 @@ var TDP = window.TDP || (window.TDP = {});
       await T.jobs.start(`Assign banks for ${ctx.round.name}`, T.bankplan.assignSteps(D, opts.ctx, opts.list[0]));
     } catch (e) { T.panel.say('Assign banks: ' + (e.message || e), 'err'); }
     finally { assignBusy = false; }
+  }
+
+  // ---------- Test tournaments: random results every round (Matches tab, default off) ----------
+  let fillBusy = false;
+  async function autoFill() {
+    const D = T.data.D, tid = D.tid, st = T.tstate[tid] || {};
+    if (!st.autoFill || fillBusy || !D.t || D.t.test !== true || !D.isTD || D.t.status !== 'started' || T.jobs.active()) return;
+    const r = T.data.currentRound(); if (!r || st.fillDoneRound === r.roundId) return;
+    const gs = D.games.filter(g => g.roundId === r.roundId && !g.bye && g.set !== 9999);
+    if (!gs.length || gs.some(g => g.arenaId == null)) return;   // wait until every game has its arena / bank
+    if (!gs.some(g => !T.timing.isDone(g))) return;
+    if (!(await lock(tid + ':fill'))) return;
+    fillBusy = true;
+    try {
+      await T.saveT(tid, { fillDoneRound: r.roundId });
+      await T.jobs.start(`Random results for ${r.name || 'this round'}`, [{ tid, page: 'matches', op: 'fillResults', args: { tid, roundId: r.roundId }, label: 'Entering random results' }]);
+    } catch (e) { T.panel.say('Random results: ' + (e.message || e), 'err'); }
+    finally { fillBusy = false; }
   }
 
   // ---------- automatic banks each round (Banks tab switch, default off) ----------

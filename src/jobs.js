@@ -73,6 +73,25 @@ TDP.jobs = (() => {
     },
     async noop() { /* just brings you back to a page */ },
     async resolveTie(a) { await T.mp.resolveTie(a.from, a.names); if (a.key) await T.ties.markApplied(a.qid, a.key); },
+    // TEST tournaments only: a random finishing order for every open game of the round that has its arena
+    async fillResults(a) {
+      const t = await T.data.loadTournament(a.tid, 0);
+      if (!t || t.test !== true) throw new Error('Random results are only for Test tournaments.');
+      const pm = T.data.playerMap(t), am = T.data.arenaMap(t);
+      const games = (await T.api.all(`/tournaments/${a.tid}/games?round=${a.roundId}`, 0)).filter(g => !g.bye && g.set !== 9999 && !T.timing.isDone(g));
+      const ready = games.filter(g => g.arenaId != null).sort((x, y) => (x.set - y.set) || (x.index - y.index));
+      const P = counter(ready.length);
+      for (const [i, g] of ready.entries()) {
+        const names = (g.playerIds || []).map(id => (pm[id] || {}).name).filter(Boolean);
+        const order = [...names].sort(() => Math.random() - 0.5);
+        P.to(i, `Group ${g.set + 1} · Game ${g.index + 1} (${(am[g.arenaId] || {}).name || 'arena'})`);
+        await T.mp.enterResults(names, (am[g.arenaId] || {}).name || '', order);
+        P.tick(`Group ${g.set + 1} · Game ${g.index + 1}: ${order[0]} won`);
+      }
+      await T.saveT(a.tid, { fillDoneRound: a.roundId });
+      const skipped = games.length - ready.length;
+      return `${ready.length} game${ready.length === 1 ? '' : 's'} filled${skipped ? `, ${skipped} skipped (no arena yet - assign banks first)` : ''}`;
+    },
     async closeRound() { await T.mp.closeRound(); },
     async startNextRound() { await T.mp.startNextRound(); },
   };

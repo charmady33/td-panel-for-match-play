@@ -162,16 +162,29 @@ TDP.inpage = (() => {
         <span class="small flex1">${!nb ? 'No banks yet - make them on the Banks tab.' : need ? `${ctx.groups.length} group${ctx.groups.length === 1 ? '' : 's'} in ${T.esc(ctx.round.name || 'this round')} need a bank${st.autoAssign ? ' - assigning automatically' : ''}.` : sum.length ? sum.map(x => `Group ${x.group} → ${T.esc(x.bank)} · ${x.fresh} of ${x.total} new`).join(' &nbsp;·&nbsp; ') : 'Every group has its games.'}</span>
       </div>`;
     }
+    let testRow = '';
+    if (D.t.test === true && D.t.status === 'started') {
+      const r = T.data.currentRound(), gs = r ? D.games.filter(g => g.roundId === r.roundId && !g.bye && g.set !== 9999) : [];
+      const open = gs.filter(g => !T.timing.isDone(g)), ready = open.filter(g => g.arenaId != null);
+      testRow = `<div class="cb gap" style="border-top:1px solid var(--line);flex-wrap:wrap;align-items:center;background:#fffbeb">
+        <span class="badge b-amber">Test</span>
+        <button class="btn sm sec" data-act="fill" ${ready.length && !T.jobs.active() ? '' : 'disabled'}>Fill random results</button>
+        <label class="gap"><input type="checkbox" data-act="autoFill" ${st.autoFill ? 'checked' : ''}> <span class="lab">Every round</span></label>
+        <span class="small flex1">${!r ? 'No round in progress.' : !open.length ? 'Every game in this round has a result.' : `${open.length} open game${open.length === 1 ? '' : 's'}${ready.length < open.length ? ` - ${open.length - ready.length} still need an arena (assign banks first)` : ''}.`} Test tournaments only.</span>
+      </div>`;
+    }
     const html = D.t && D.t.status === 'started' ? `<div class="card" style="margin:12px 0"><div class="cb gap">
       <label class="gap"><input type="checkbox" data-act="auto" ${st.auto ? 'checked' : ''}> <span class="lab">Auto close round &amp; start next round</span></label>
       <span class="small flex1">${st.auto ? T.esc(autoState || 'watching') : 'When every game is approved (no pending or partial scores, no open tiebreakers), closes the round and starts the next after a countdown you can cancel. Never past the last round; never completes the tournament.'}</span>
-      </div>${bankRow}</div>` : '';
+      </div>${bankRow}${testRow}</div>` : '';
     block('tdp-auto', html ? bar : null, 'after', html, async e => {
       const el = e.target;
       if (e.type === 'click' && el.closest && el.closest('[data-act=assign]')) return T.bankbar.assignPreview(T.data.D);
+      if (e.type === 'click' && el.closest && el.closest('[data-act=fill]')) return T.bankbar.fillConfirm(T.data.D);
       if (e.type !== 'change') return;
       if (el.dataset.act === 'auto') { await T.saveT(D.tid, { auto: el.checked }); autoState = ''; render(); T.panel.render(true); }
       if (el.dataset.act === 'autoAssign') { await T.saveT(D.tid, { autoAssign: el.checked }); render(); }
+      if (el.dataset.act === 'autoFill') { await T.saveT(D.tid, { autoFill: el.checked }); render(); }
     });
     // finals: outline groups that are tied at the advance line / in the final
     const gt = (() => { try { return T.finals.groupTies(D); } catch (e) { return []; } })();

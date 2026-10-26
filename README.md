@@ -1,4 +1,4 @@
-# Matchplay TD Panel v0.7.2
+# Matchplay TD Panel v0.7.3
 
 A Chrome extension for tournament directors on app.matchplay.events. On any tournament you run (as organizer, or as a manager) it adds a full-height sidebar on the right and shifts Matchplay's page over. The » button collapses it to a thin strip. Most of the tools also appear directly inside Matchplay's own pages (see below), so the sidebar is optional. It's styled to look like Matchplay's own pages.
 
@@ -83,6 +83,7 @@ To update to a newer version, replace the folder and click the reload icon on th
 
 - **Matches tab (bank tournaments)**: **Assign banks** gives each group of the new round one of your banks - games its players haven't played, avoiding any bank that shares 2+ games with one a player already had. Preview with **Another option**, then **Assign**. **Automatic** (off by default) does it for every new round without the preview. The bar then shows "Group 2 → Bank 4 · 11 of 12 new"
 - **Overview**: **Submit to IFPA** sits under Re-open tournament, same size and style
+- **Test tournaments only** (Matches tab): **Fill random results** enters a random finishing order for every open game of the round that has its arena; **Every round** does it automatically. With auto close/start and Automatic bank assignment on, a test tournament runs itself.
 
 ## While it's updating Matchplay
 - Changes are made in your own tab at full speed, but the screen is **frozen**: a copy of what was showing stays up (slightly dimmed) with an **"Updating Matchplay…"** card, progress and **Stop**. The clicking, dialogs and page changes happen underneath, out of sight. Clicks, scrolling and keys are blocked; the side panel stays usable.
