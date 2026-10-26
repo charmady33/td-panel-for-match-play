@@ -10,12 +10,16 @@ TDP.jobs = (() => {
   let job = null, running = false;
   const listeners = new Set();
   const emit = () => listeners.forEach(f => { try { f(job); } catch (e) { /* ignore */ } });
-  const save = async () => { if (job && T.isFrame) job.beat = Date.now(); await T.store.set('job', job); emit(); };
+  const save = async () => { if (job && runsHereNow()) job.beat = Date.now(); await T.store.set('job', job); emit(); };
+  const runsHereNow = () => running;   // the side running the steps keeps the heartbeat
+  // a short note of what the running step is doing right now (shown in the progress card and Details)
+  async function note(text) { if (!job) return; job.sub = { done: 0, total: 0, text }; job.log.push('  · ' + text); job.log = job.log.slice(-60); await save(); }
   const active = () => !!(job && !job.done && !job.error);
   const mine = () => !!(job && job.owner === T.tabId);
   // where the steps run: the worker frame, or the owner tab itself (backup)
   const runsHere = () => mine() && ((job.runner === 'frame') === !!T.isFrame);
   const ORIGIN = 'https://app.matchplay.events';
+  const STEP_LIMIT = 150000;
   const stepUrl = s => `${location.origin || ORIGIN}/tournaments/${s.tid}/${s.page === 'overview' ? '' : s.page}`;
   const canFrame = () => !T.isFrame && !T.settings.noWorkerFrame && !!T.worker;
 
@@ -46,10 +50,15 @@ TDP.jobs = (() => {
   // the owner tab keeps an eye on its worker frame: finish up when it's done, take over if it stops responding
   let finishing = false;
   async function watchFrame() {
-    if (T.isFrame || !job || !mine() || job.runner !== 'frame' || job.done || job.error) return;
+    if (T.isFrame || !job || !mine() || job.done || job.error) return;
+    // this tab runs the steps itself: if nothing at all has happened for a minute, stop and say where it was
+    if (job.runner === 'top') {
+      if (!running && job.beat && Date.now() - job.beat > 60000) { job.error = `Nothing happened for a minute (${(job.sub && job.sub.text) || (job.steps[job.i] || {}).label || 'starting'}).`; await save(); }
+      return;
+    }
     if (job.stepsDone) { if (!finishing) { finishing = true; try { await finish(); } finally { finishing = false; } } return; }
     if (!T.worker.isOpen()) { T.worker.open(stepUrl(job.steps[Math.min(job.i, job.steps.length - 1)])); job.beat = Date.now(); await save(); return; }   // this tab reloaded mid-task
-    if (job.beat && Date.now() - job.beat > 25000) {   // the frame is stuck: run it here instead, behind the frozen screen
+    if (job.beat && Date.now() - job.beat > 45000) {   // the frame is stuck: run it here instead, behind the frozen screen
       T.worker.close(); job.runner = 'top'; job.log.push('Worker frame not responding - finishing in this tab.'); T.busy.freeze(); await save(); run();
     }
   }
@@ -109,6 +118,7 @@ TDP.jobs = (() => {
     async deleteTest(a) {
       // each tournament's outcome goes in job.del for the result card on the Organized page
       const put = async (status, why) => { job.del = [...(job.del || []).filter(x => x.tid !== a.tid), { tid: a.tid, name: a.name, status, why: why || '' }]; await save(); return `${a.name}: ${status}${why ? ' - ' + why : ''}`; };
+      await note('Reading the tournament');
       const me = T.data.D.me || T.data.unwrap(await T.api.get('/users/profile', 3600e3));
       let t = null;
       try { t = await T.data.loadTournament(a.tid, 0); }
@@ -117,9 +127,10 @@ TDP.jobs = (() => {
       if (!me || t.organizerId !== me.userId) return put('skipped', "you're not the organizer");
       if (!/\bTest\b/.test(T.txt(document.querySelector('main')))) return put('skipped', "the page doesn't show it as Test");
       job.delTry = a.tid; await save();
-      try { await T.mp.deleteTournament(t.name); }
+      try { await T.mp.deleteTournament(t.name, { note }); }
       catch (e) { return put('failed', e.message || String(e)); }
       // make sure it's really gone
+      await note('Checking Matchplay deleted it');
       let gone = false;
       for (let k = 0; k < 6 && !gone; k++) { try { await T.api.get(`/tournaments/${a.tid}`, 0, true); await T.sleep(800); } catch (e) { gone = true; } }
       if (!gone) return put('failed', 'Matchplay still lists it');
@@ -217,7 +228,12 @@ TDP.jobs = (() => {
         await T.sleep(250);
         job.log.push(s.label || s.op); await save();
         job.sub = null;
-        const res = await ops[s.op](s.args || {});
+        // every step has a time limit: a step that hangs stops with where it was, instead of spinning forever
+        let timer = null;
+        const limit = new Promise((_, rej) => { timer = setTimeout(() => rej(new Error(`Timed out: ${s.label || s.op}${job && job.sub && job.sub.text ? ` (at: ${job.sub.text})` : ''}`)), STEP_LIMIT); });
+        const beat = setInterval(() => { if (job) { job.beat = Date.now(); T.store.set('job', job); } }, 5000);   // alive, even during long waits
+        let res;
+        try { res = await Promise.race([ops[s.op](s.args || {}), limit]); } finally { clearTimeout(timer); clearInterval(beat); }
         if (res) job.log.push('  ' + res);
         job.i++; job.sub = null; await save();
       }

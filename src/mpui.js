@@ -337,8 +337,12 @@ TDP.mp = (() => {
   // (it only allows test tournaments; otherwise it shows "Not a test tournament").
   // dryRun: open the window, check the button is there, then Cancel (nothing deleted).
   async function deleteTournament(name, opts = {}) {
+    const note = opts.note || (async () => {});
+    await note('Opening More…');
     T.click(T.findBtn(document.querySelector('main') || document, /^More/) || fail('No More… menu on the Overview.'));
+    await note('Clicking Delete tournament');
     T.click(await needBtn(/^Delete tournament$/));
+    await note("Waiting for Matchplay's delete window");
     const d = await needDialog();
     const cancel = () => { const c = T.findBtn(d, /^(Cancel|Close|OK|Okay)$/); if (c) T.click(c); };
     if (/Not a test tournament/i.test(T.txt(d))) { cancel(); fail('Matchplay says it is not a test tournament'); }
@@ -350,7 +354,9 @@ TDP.mp = (() => {
     const ok = await T.waitFor(() => [...d.querySelectorAll('button')].find(b => T.visible(b) && !b.disabled && /^(delete tournament permanently|delete( tournament)?|yes,? delete( it)?|confirm)$/i.test(T.txt(b))), 4000);
     if (!ok) { cancel(); fail("Couldn't find Matchplay's \"Delete tournament permanently\" button."); }
     if (opts.dryRun) { cancel(); await dialogClosed(5000); return T.txt(ok); }
+    await note('Clicking Delete tournament permanently');
     T.click(ok);
+    await note('Waiting for Matchplay to delete it');
     // wait for Matchplay's "Tournament deleted" (or an error in the window)
     const res = await T.waitFor(() => {
       if ([...document.querySelectorAll('body *')].some(e => e.children.length === 0 && /^Tournament deleted$/i.test(T.txt(e)))) return 'ok';

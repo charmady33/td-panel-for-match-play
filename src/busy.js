@@ -91,6 +91,7 @@ TDP.busy = (() => {
       <div class="tdpc-pb"><i style="width:${pct}%"></i></div><div class="tdpc-s" style="margin:-4px 0 8px;text-align:right">${pct}%${T.esc(countText(j))}</div>
       <div class="tdpc-row"><span class="tdpc-f">Please wait - the page is locked until it's done.</span><button class="tdpc-b" data-act="stop">Stop</button></div></div></div>`;
     const ui = root.querySelector('.ui'); if (ui.dataset.h !== html) { ui.dataset.h = html; ui.innerHTML = html; }
+    host.dataset.tdpLog = (j.log || []).slice(-10).join(' | ');   // (for troubleshooting)
   }
   // a still copy of the screen while Matchplay reloads its data in place (soft refresh): no card, no dimming
   let stillOn = false;
@@ -127,6 +128,7 @@ TDP.busy = (() => {
       <div class="tdpc-pb"><i style="width:${pct}%"></i></div><div class="tdpc-s" style="margin:-4px 0 8px;text-align:right">${pct}%${T.esc(countText(j))}</div>
       <div class="tdpc-row"><span class="tdpc-f">You can keep working.</span><button class="tdpc-b" data-act="show">Show me</button><button class="tdpc-b" data-act="stop">Stop</button></div></div></div>`;
     const w = card.shadowRoot.querySelector('.w'); if (w.dataset.h !== html) { w.dataset.h = html; w.innerHTML = html; }
+    card.dataset.tdpLog = (j.log || []).slice(-10).join(' | ');   // (for troubleshooting)
   }
   function hideCard() { if (card) { card.remove(); card = null; } }
   const LOCK = 'data-tdp-lock';
@@ -152,9 +154,9 @@ TDP.busy = (() => {
     const main = document.querySelector('main');
     const fresh = j && j.done && j.doneAt && Date.now() - j.doneAt < DONE_MS;
     if (fresh) { clearTimeout(doneTimer); doneTimer = setTimeout(render, DONE_MS - (Date.now() - j.doneAt) + 50); }
-    const here = j && T.routeTid() && j.steps.some(s => s.tid === T.routeTid());
+    const here = j && ((T.routeTid() && j.steps.some(s => s.tid === T.routeTid())) || (j.returnTo === location.pathname && T.jobs.mine()));
     let banner = '';
-    if (here && j.error) banner = `<div class="callout err gap" style="margin:8px 0;align-items:center"><span class="flex1"><b>Update stopped:</b> ${T.esc(j.title)} - ${T.esc(j.error)}</span><button class="btn sm" data-act="retry">Retry</button>${T.worker && T.worker.isOpen() ? '<button class="btn sm sec" data-act="show">Show me</button>' : ''}<button class="btn sm sec" data-act="stop">Stop</button></div>`;
+    if (here && j.error) banner = `<div class="callout err gap" style="margin:8px 0;align-items:center"><span class="flex1"><b>Update stopped:</b> ${T.esc(j.title)} - ${T.esc(j.error)}<details style="margin-top:4px"><summary style="cursor:pointer">Details</summary><div style="font:11px/1.4 ui-monospace,monospace;white-space:pre-wrap;max-height:200px;overflow:auto">${T.esc((j.log || []).slice(-25).join('\n'))}</div></details></span><button class="btn sm" data-act="retry">Retry</button>${T.worker && T.worker.isOpen() ? '<button class="btn sm sec" data-act="show">Show me</button>' : ''}<button class="btn sm sec" data-act="stop">Stop</button></div>`;
     else if (here && fresh) banner = `<div class="callout ok" style="margin:8px 0"><b>Updates done ✓</b> ${T.esc(j.title)}</div>`;
     else if (here && running && !T.jobs.mine()) banner = `<div class="callout gap" style="margin:8px 0;align-items:center"><span class="flex1"><b>Updating Matchplay in another tab:</b> ${T.esc(j.title)} - ${T.esc(stepText(j))} · ${Math.round(T.jobs.fraction(j) * 100)}%. Changes will show when it's done.</span><button class="btn sm sec" data-act="stop">Stop</button></div>`;
     const top = main ? (document.getElementById('tdp-tb-reminder') || [...main.children].find(e => !/^tdp-/.test(e.id || ''))) : null;

@@ -1,4 +1,4 @@
-# Matchplay TD Panel v0.11.1
+# Matchplay TD Panel v0.11.2
 
 A Chrome extension for tournament directors on app.matchplay.events. On tournaments you run (as organizer, or as a manager) its tools are built straight into Matchplay's own pages, styled like Matchplay. There's no sidebar: a small status chip sits next to the tournament's name, and messages show as short toasts at the bottom.
 
@@ -57,6 +57,11 @@ To update to a newer version, replace the folder and click the reload icon on th
 - **Matches tab (bank tournaments)**: **Assign banks** gives each group of the new round one of your banks - games its players haven't played, avoiding any bank that shares 2+ games with one a player already had. Preview with **Another option**, then **Assign**. **Automatic** (off by default) does it for every new round without the preview. The bar then shows "Group 2 → Bank 4 · 11 of 12 new"
 - **Overview**: **Submit to IFPA** sits under Re-open tournament, same size and style
 - **Test tournaments only** (Matches tab): **Fill random results** enters a random finishing order for every open game of the round that has its arena; **Every round** does it automatically. With auto close/start and Automatic bank assignment on, a test tournament runs itself.
+
+## New in 0.11.2
+- Updates never spin forever: each step has a time limit (2.5 min) and stops with where it was; the helper sends a heartbeat during long waits, so a slow Matchplay isn't mistaken for a stuck helper; if nothing happens for a minute the update stops with a message.
+- **Update stopped** banners now also show on the page you started from (e.g. the Organized page), with **Details** (the step-by-step log).
+- Deleting shows each sub-step in the progress card (Opening More…, Matchplay's delete window, deleting, checking).
 
 ## New in 0.11.1
 - **Delete test tournaments now deletes**: it clicks Matchplay's **Delete tournament permanently** (0.11.0 looked for a button called just "Delete" and cancelled each one). Each delete is counted only when Matchplay says "Tournament deleted" and the tournament is gone from the API.
