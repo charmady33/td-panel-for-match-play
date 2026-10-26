@@ -43,7 +43,7 @@ TDP.bankplan = (() => {
   // this tournament, the qualifying (finals only), Matchplay IDs loaded by the TD, past events run with the extension
   function sources(D, st, extra) {
     const am = T.data.arenaMap(D.t), out = {};
-    const put = (key, name, v) => { if (!name || !v || !v.count) return; const k = lc(name); (out[k] = out[k] || {})[key] = { count: v.count, avg: v.avg }; };
+    const put = (key, name, v) => { if (!name || !v || !v.count) return; const k = lc(name); (out[k] = out[k] || {})[key] = { count: v.count, avg: v.avg, dropped: v.dropped || 0 }; };
     for (const [id, v] of Object.entries(T.timing.arenaTimes(D.games))) put('live', (am[id] || {}).name, v);
     for (const [k, v] of Object.entries((extra && extra.qual) || {})) put('qual', k, v);
     for (const [k, v] of Object.entries(st.pastTimes || {})) put('past', k, v);
@@ -57,7 +57,7 @@ TDP.bankplan = (() => {
     return out;
   }
   const SRC_NAME = { live: 'This event', qual: 'Qualifying', past: 'Matchplay IDs', hist: 'Past events' };
-  const breakdownText = v => ['live', 'qual', 'past', 'hist'].filter(x => v && v[x]).map(x => `${SRC_NAME[x]} ${T.fmtDur(v[x].avg)} (${v[x].count})`).join(' · ');
+  const breakdownText = v => ['live', 'qual', 'past', 'hist'].filter(x => v && v[x]).map(x => `${SRC_NAME[x]} ${T.fmtDur(v[x].avg)} (${v[x].count}${v[x].dropped ? `, ${v[x].dropped} extreme left out` : ''})`).join(' · ') + ' - middle values, combined by game count';
   function estimates(D, st, extra) {
     const arenas = (D.t.arenas || []).filter(a => !a.tournamentArena || a.tournamentArena.status !== 'inactive');
     const src = sources(D, st, extra);
@@ -162,7 +162,7 @@ TDP.bankplan = (() => {
     if (qualCache.id === q.tournamentId && Date.now() - qualCache.at < 300e3) return qualCache.times;
     await T.logs.load(q.tournamentId, q.status === 'completed');
     const am = T.data.arenaMap(q), games = await T.api.all(`/tournaments/${q.tournamentId}/games`, 300e3), out = {};
-    for (const [aid, v] of Object.entries(T.timing.arenaTimes(games))) { const k = lc((am[aid] || {}).name); if (k) out[k] = { count: v.count, avg: v.avg }; }
+    for (const [aid, v] of Object.entries(T.timing.arenaTimes(games))) { const k = lc((am[aid] || {}).name); if (k) out[k] = { count: v.count, avg: v.avg, dropped: v.dropped || 0 }; }
     qualCache = { id: q.tournamentId, at: Date.now(), times: out };
     return out;
   }
@@ -175,10 +175,10 @@ TDP.bankplan = (() => {
       const games = await T.api.all(`/tournaments/${id}/games`, 3600e3);
       for (const [aid, v] of Object.entries(T.timing.arenaTimes(games))) {
         const k = lc((am[aid] || {}).name); if (!k) continue;
-        const m = merged[k] || (merged[k] = { count: 0, sum: 0 }); m.count += v.count; m.sum += v.avg * v.count;
+        const m = merged[k] || (merged[k] = { count: 0, sum: 0, dropped: 0 }); m.count += v.count; m.sum += v.avg * v.count; m.dropped += v.dropped || 0;
       }
     }
-    const pastTimes = {}; for (const [k, m] of Object.entries(merged)) pastTimes[k] = { count: m.count, avg: m.sum / m.count };
+    const pastTimes = {}; for (const [k, m] of Object.entries(merged)) pastTimes[k] = { count: m.count, avg: m.sum / m.count, dropped: m.dropped };
     await T.saveT(D.tid, { pastTimes, bankPast: ids.join(', ') });
     return Object.keys(pastTimes).length;
   }

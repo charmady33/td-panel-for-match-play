@@ -145,13 +145,13 @@ table{width:100%;border-collapse:collapse}td{padding:4px 6px;border-top:1px soli
     const title = mode === 'refresh' ? `Refresh games in ${n} bank${n === 1 ? '' : 's'}` : mode === 'add' ? `Add ${n} bank${n === 1 ? '' : 's'}` : `Create ${n} bank${n === 1 ? '' : 's'}`;
     const at = sec => T.fmtDur(sec * 1000);
     const cards = res.banks.map((b, bi) => `<div class="card"><div class="ch"><span class="h">${T.esc(b.name)}</span><span class="small">${at(b.total)}</span></div><div class="cb"><ul style="margin:0;padding:0;list-style:none">${b.games.map((g, gi) => {
-      const w = res.when[bi][gi], clash = w.also.filter(x => x.overlap > 0);
-      const also = w.also.length ? `<div class="small ${clash.length ? 'err' : 'muted'}" style="padding-left:44px">${clash.length ? '⚠ ' : ''}also in ${w.also.map(x => `${T.esc(x.bank)} @ ${at(x.s)}`).join(', ')}${clash.length ? ` - overlaps ~${Math.ceil(Math.max(...clash.map(x => x.overlap)) / 60)} min` : ''}</div>` : '';
+      const w = res.when[bi][gi], clash = w.also.filter(x => x.overlap > 0 || x.sameSlot), same = w.also.filter(x => x.sameSlot);
+      const also = w.also.length ? `<div class="small ${clash.length ? 'err' : 'muted'}" style="padding-left:44px">${clash.length ? '⚠ ' : ''}also in ${w.also.map(x => `${T.esc(x.bank)} as game ${x.pos + 1} @ ${at(x.s)}`).join(', ')}${same.length ? ` - same game number as ${same.map(x => T.esc(x.bank)).join(', ')}` : clash.length ? ` - overlaps ~${Math.ceil(Math.max(...clash.map(x => x.overlap)) / 60)} min` : ''}</div>` : '';
       return `<li><span class="small" style="width:44px;flex:none">@${at(w.s)}</span><span class="ell flex1">${T.esc(g.name)}${g.repeat ? ' <span class="badge b-amber">repeat</span>' : ''}</span><span class="small" title="${T.esc(g.src)}">${T.esc(g.era)} · ${at(g.sec)}</span></li>${also}`;
     }).join('')}</ul>${b.repeatPairs ? '<div class="small warn mt">Has a game pair from an earlier round</div>' : ''}</div></div>`).join('');
     const notes = [`Bank times ${at(Math.min(...t))} – ${at(Math.max(...t))} (spread ${at(Math.max(...t) - Math.min(...t))}). @ = expected start; games are played in this order.`];
     if (res.fixed.length) notes.push(res.fixed.length === 1 ? 'Your existing bank stays as it is.' : `Your ${res.fixed.length} existing banks stay as they are.`);
-    if (res.overlap > 0 && res.banks.some((b, bi) => res.when[bi].some(w => w.also.some(x => x.overlap > 0)))) notes.push('Some machines are in more than one bank at overlapping times (marked ⚠): two groups may wait on the same game. Try another arrangement, or add more games in Matchplay.');
+    if (res.banks.some((b, bi) => res.when[bi].some(w => w.also.some(x => x.overlap > 0 || x.sameSlot)))) notes.push('Some machines are in more than one bank at the same game number or at overlapping times (marked ⚠): two groups may wait on the same game. Try another arrangement, or add more games in Matchplay.');
     if (res.dropped.length) notes.push(`Not used this time: ${res.dropped.map(g => g.name).join(', ')}`);
     if (mode === 'refresh') notes.push('Bank names stay the same; their games are replaced.');
     show(`<div class="dh">${title}</div><div class="db"><div class="small mb">${notes.map(T.esc).join('<br>')}</div><div class="bk">${cards}</div></div>

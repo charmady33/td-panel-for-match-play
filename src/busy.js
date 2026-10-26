@@ -1,98 +1,114 @@
-// While the worker tab is changing Matchplay: a banner at the top of the tournament's pages, a progress card in
-// the corner, and the part of the page being changed greyed out and locked. Green "done" for a few seconds after,
-// then the page reloads its data if it shows what was changed. Red with Retry / Show me / Stop on an error.
+// While the extension is changing Matchplay in this tab: the screen is frozen. A copy of what was showing is laid
+// over the page (in a shadow root, so the clicking scripts never see it), with an "Updating Matchplay…" card and
+// Stop; clicks, scrolling and keys are blocked; the side panel stays live. Matchplay's dialogs and page changes
+// happen underneath, out of sight. Other tabs of the tournament show a banner. Green banner when done, red on error.
 var TDP = window.TDP || (window.TDP = {});
 
 TDP.busy = (() => {
   const T = TDP;
   const DONE_MS = 4000;
-  const LOCK = 'data-tdp-lock';
-  // which part of which page each kind of step changes
-  const AREA = {
-    createBanks: 'banks', bankArenas: 'banks', labels: 'players', addPlayers: 'players', deactivate: 'players', activate: 'players',
-    seeds: 'players', readRanks: 'players', assignBanks: 'matches', closeRound: 'matches', startNextRound: 'matches', resolveTie: 'resolve-ties',
-  };
-  const tidsOf = j => new Set(j.steps.map(s => s.tid));
-  const pagesOf = j => new Set(j.steps.map(s => s.page));
+  let snap = null, host = null;
+
+  const panelW = () => { const c = document.documentElement.classList; return c.contains('tdp-side') ? 380 : c.contains('tdp-rail') ? 48 : 0; };
   const stepText = j => { const s = j.steps[Math.min(j.i, j.steps.length - 1)]; return s ? (s.label || s.op) : ''; };
 
-  const spinner = '<span style="display:inline-block;width:14px;height:14px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:tdpspin .8s linear infinite;vertical-align:-2px"></span><style>@keyframes tdpspin{to{transform:rotate(360deg)}}</style>';
-
-  function lockAreas(on) {
-    document.querySelectorAll(`[${LOCK}]`).forEach(el => { if (!on) { el.style.pointerEvents = ''; el.style.opacity = ''; el.style.filter = ''; el.removeAttribute(LOCK); } });
-    if (!on) return;
-    const main = document.querySelector('main'); if (!main) return;
-    const page = T.routePage();
-    let targets = [];
-    if (page === 'banks') targets = [...main.querySelectorAll('div.grid')];
-    else if (page === 'players') targets = [...main.querySelectorAll('table')].map(t => t.closest('div.shadow, div.overflow-hidden') || t);
-    else targets = [...main.children].filter(e => !/^tdp-/.test(e.id || ''));
-    for (const el of targets) { if (el.id && /^tdp-/.test(el.id)) continue; el.setAttribute(LOCK, '1'); el.style.pointerEvents = 'none'; el.style.opacity = '.45'; el.style.filter = 'grayscale(.4)'; }
+  // the page's background colour (body, else html, else white/dark) - the cover must be solid
+  const solidBg = () => {
+    for (const el of [document.body, document.documentElement]) { const c = el && getComputedStyle(el).backgroundColor; if (c && !/rgba\(\s*0,\s*0,\s*0,\s*0\)|transparent/.test(c)) return c; }
+    return document.documentElement.classList.contains('dark') ? '#111827' : '#ffffff';
+  };
+  // ---------- snapshot of the screen, taken just before a task starts ----------
+  function freeze() {
+    try {
+      const body = document.body, clone = body.cloneNode(true);
+      const pair = sel => [[...body.querySelectorAll(sel)], [...clone.querySelectorAll(sel)]];
+      // live form values aren't attributes: copy them so the copy looks the same
+      { const [a, b] = pair('input, select, textarea'); a.forEach((el, i) => { const c = b[i]; if (!c) return; if (el.type === 'checkbox' || el.type === 'radio') { if (el.checked) c.setAttribute('checked', ''); else c.removeAttribute('checked'); } else if (el.tagName === 'SELECT') { [...c.options].forEach((o, k) => { if (k === el.selectedIndex) o.setAttribute('selected', ''); else o.removeAttribute('selected'); }); } else c.setAttribute('value', el.value); }); }
+      // videos, embeds, canvases and our own shadow-DOM boxes don't copy: grey boxes of the same size
+      { const [a, b] = pair('iframe, video, canvas, [id^="tdp-"]'); a.forEach((el, i) => { const c = b[i]; if (!c || !c.parentNode) return; const r = el.getBoundingClientRect(), f = getComputedStyle(el).position === 'fixed'; const ph = document.createElement('div'); ph.style.cssText = f ? 'display:none' : `width:${r.width}px;height:${r.height}px;max-width:100%;background:${/^tdp-/.test(el.id) ? 'transparent' : '#e5e7eb'};border-radius:6px`;
+        if (!f && /^tdp-/.test(el.id) && el.shadowRoot) { ph.style.background = 'none'; ph.style.height = ''; ph.attachShadow({ mode: 'open' }).innerHTML = el.shadowRoot.innerHTML; }   // our own boxes: copy them too
+        c.replaceWith(ph); }); }
+      clone.querySelectorAll('script, noscript').forEach(e => e.remove());
+      const cs = getComputedStyle(body), r = body.getBoundingClientRect();
+      snap = { node: clone, htmlClass: document.documentElement.className, bodyClass: body.className, bg: solidBg(), font: cs.font, color: cs.color, left: r.left, width: r.width, x: scrollX, y: scrollY, path: location.pathname };
+    } catch (e) { snap = null; }
   }
 
-  function render() {
-    const j = T.jobs.get(), main = document.querySelector('main');
-    const fresh = j && j.done && j.doneAt && Date.now() - j.doneAt < DONE_MS;
-    const show = j && (T.jobs.active() || j.error || fresh);
-    const here = show && T.routeTid() && tidsOf(j).has(T.routeTid());
-    // locked area: only while running, only on a page this task changes
-    lockAreas(!!(j && T.jobs.active() && here && pagesOf(j).has(T.routePage()) && AREA[j.steps[Math.min(j.i, j.steps.length - 1)].op]));
-    // banner
-    let banner = '';
-    if (here) {
-      const n = j.steps.length, at = Math.min(j.i + 1, n);
-      if (j.error) banner = `<div class="callout err gap" style="margin:8px 0;align-items:center"><span class="flex1"><b>Update stopped:</b> ${T.esc(j.title)} - ${T.esc(j.error)}</span><button class="btn sm" data-act="retry">Retry</button><button class="btn sm sec" data-act="show">Show me</button><button class="btn sm sec" data-act="stop">Stop</button></div>`;
-      else if (fresh) banner = `<div class="callout ok" style="margin:8px 0"><b>Updates done ✓</b> ${T.esc(j.title)}</div>`;
-      else banner = `<div class="callout gap" style="margin:8px 0;align-items:center;background:#eff6ff;color:#1e40af;border-color:#bfdbfe">${spinner}<span class="flex1"><b>Updating Matchplay in the background:</b> ${T.esc(j.title)} - ${T.esc(stepText(j))}${n > 1 ? ` (${at} of ${n})` : ''}. Changes will show when it's done.</span></div>`;
+  // ---------- the cover ----------
+  const CARD_CSS = `.dim{position:fixed;inset:0}.card{position:fixed;left:50%;top:38%;transform:translate(-50%,-50%);width:340px;max-width:90vw;background:#fff;color:#111827;border-radius:10px;box-shadow:0 20px 45px rgba(0,0,0,.22);padding:16px 18px;font:14px/1.4 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+.dark .card{background:#1f2937;color:#f3f4f6}.t{font-weight:600;font-size:15px;display:flex;gap:8px;align-items:center}.s{font-size:12px;color:#6b7280;margin-top:3px}.dark .s{color:#9ca3af}
+.pb{height:6px;background:#e5e7eb;border-radius:3px;overflow:hidden;margin:12px 0 10px}.pb i{display:block;height:100%;background:#4f46e5;transition:width .3s}
+.row{display:flex;align-items:center;gap:8px}.f{flex:1;font-size:12px;color:#6b7280}
+.b{font:500 13px ui-sans-serif,system-ui,sans-serif;border:1px solid #c7d2fe;background:#fff;color:#4338ca;border-radius:6px;padding:5px 12px;cursor:pointer}.b:hover{background:#eef2ff}
+.sp{width:16px;height:16px;border:2px solid #4f46e5;border-right-color:transparent;border-radius:50%;animation:sp .8s linear infinite;flex:none}@keyframes sp{to{transform:rotate(360deg)}}`;
+
+  function showCover(j) {
+    document.getElementById('tdp-cover-early')?.remove();
+    const dark = document.documentElement.classList.contains('dark');
+    if (!host) {
+      host = document.createElement('div'); host.id = 'tdp-cover';
+      const root = host.attachShadow({ mode: 'open' });
+      // Matchplay's own stylesheets, so the copied screen looks the same
+      document.querySelectorAll('link[rel="stylesheet"], style').forEach(s => { if (!s.closest('[id^="tdp-"]')) root.appendChild(s.cloneNode(true)); });
+      const st = document.createElement('style'); st.textContent = CARD_CSS; root.appendChild(st);
+      const pg = document.createElement('div'); pg.className = 'pg'; root.appendChild(pg);
+      const ui = document.createElement('div'); ui.className = 'ui'; root.appendChild(ui);
+      root.addEventListener('click', onClick);
+      host.addEventListener('wheel', e => e.preventDefault(), { passive: false });
+      host.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
+      document.documentElement.appendChild(host);
     }
-    // above the tiebreak reminder when there is one, else above Matchplay's first block (stable order, no jumping)
+    host.style.cssText = `position:fixed;top:0;left:0;bottom:0;right:${panelW()}px;z-index:2147483000;overflow:hidden;background:${snap ? snap.bg : solidBg()};cursor:progress`;
+    const root = host.shadowRoot, pg = root.querySelector('.pg');
+    if (snap && !pg.firstChild) {
+      const wrap = document.createElement('div');
+      wrap.className = snap.htmlClass;
+      const b = document.createElement('div');
+      b.className = snap.bodyClass;
+      b.style.cssText = `position:absolute;left:${snap.left - snap.x}px;top:${-snap.y}px;width:${snap.width}px;min-height:100vh;background:${snap.bg};font:${snap.font};color:${snap.color}`;
+      [...snap.node.childNodes].forEach(n => b.appendChild(n));   // moved, not copied, so our boxes' contents stay
+      wrap.appendChild(b); pg.appendChild(wrap);
+    }
+    const n = j.steps.length, at = Math.min(j.i + 1, n), pct = Math.max(6, Math.round((Math.min(j.i, n) / n) * 100));
+    const html = `<div class="${dark ? 'dark' : ''}"><div class="dim" style="background:${dark ? 'rgba(17,24,39,.35)' : 'rgba(255,255,255,.35)'}"></div><div class="card">
+      <div class="t"><span class="sp"></span>Updating Matchplay…</div>
+      <div class="s">${T.esc(j.title)}</div><div class="s">${T.esc(stepText(j))}${n > 1 ? ` (${at} of ${n})` : ''}</div>
+      <div class="pb"><i style="width:${pct}%"></i></div>
+      <div class="row"><span class="f">Please wait - the page is locked until it's done.</span><button class="b" data-act="stop">Stop</button></div></div></div>`;
+    const ui = root.querySelector('.ui'); if (ui.dataset.h !== html) { ui.dataset.h = html; ui.innerHTML = html; }
+  }
+  function hideCover() { document.getElementById('tdp-cover-early')?.remove(); if (host) { host.remove(); host = null; } snap = null; }
+
+  // keys don't reach Matchplay while covered (the side panel still works)
+  document.addEventListener('keydown', e => {
+    if (!host) return;
+    if (e.composedPath().some(x => x && x.id === 'tdp-host')) return;
+    e.preventDefault(); e.stopPropagation();
+  }, true);
+
+  function render() {
+    const j = T.jobs.get();
+    const running = j && T.jobs.active();
+    if (running && T.jobs.mine()) showCover(j); else hideCover();
+    // banner: other tabs while running; this tab when done or stopped with an error
+    const main = document.querySelector('main');
+    const fresh = j && j.done && j.doneAt && Date.now() - j.doneAt < DONE_MS;
+    const here = j && T.routeTid() && j.steps.some(s => s.tid === T.routeTid());
+    let banner = '';
+    if (here && j.error) banner = `<div class="callout err gap" style="margin:8px 0;align-items:center"><span class="flex1"><b>Update stopped:</b> ${T.esc(j.title)} - ${T.esc(j.error)}</span><button class="btn sm" data-act="retry">Retry</button><button class="btn sm sec" data-act="stop">Stop</button></div>`;
+    else if (here && fresh) banner = `<div class="callout ok" style="margin:8px 0"><b>Updates done ✓</b> ${T.esc(j.title)}</div>`;
+    else if (here && running && !T.jobs.mine()) banner = `<div class="callout gap" style="margin:8px 0;align-items:center"><span class="flex1"><b>Updating Matchplay in another tab:</b> ${T.esc(j.title)} - ${T.esc(stepText(j))}${j.steps.length > 1 ? ` (${Math.min(j.i + 1, j.steps.length)} of ${j.steps.length})` : ''}. Changes will show when it's done.</span><button class="btn sm sec" data-act="stop">Stop</button></div>`;
     const top = main ? (document.getElementById('tdp-tb-reminder') || [...main.children].find(e => !/^tdp-/.test(e.id || ''))) : null;
     T.inpage.block('tdp-busy-banner', banner ? top : null, 'before', banner, onClick);
-    // corner card (any Matchplay page)
-    let card = document.getElementById('tdp-busy-card');
-    if (!show || fresh || j.error) { if (card) card.remove(); }
-    else {
-      if (!card) {
-        card = document.createElement('div'); card.id = 'tdp-busy-card';
-        const r = card.attachShadow({ mode: 'open' });
-        r.innerHTML = `<style>${T.panel.CSS}:host{all:initial}.wrap{position:static}.c{width:300px;background:var(--card);border-radius:8px;box-shadow:0 10px 25px rgba(0,0,0,.18);padding:12px 14px;font:14px ui-sans-serif,system-ui,sans-serif;color:var(--text)}.pb{height:6px;background:#e5e7eb;border-radius:3px;overflow:hidden;margin:8px 0}.pb i{display:block;height:100%;background:#4f46e5;transition:width .3s}</style><div class="wrap"><div class="c"></div></div>`;
-        r.addEventListener('click', onClick);
-        document.documentElement.appendChild(card);
-      }
-      const cls = document.documentElement.classList, right = cls.contains('tdp-side') ? 396 : cls.contains('tdp-rail') ? 64 : 16;
-      card.style.cssText = `position:fixed;bottom:16px;right:${right}px;z-index:2147482000`;
-      const n = j.steps.length, pct = Math.round((Math.min(j.i, n) / n) * 100);
-      const html = `<div class="gap" style="align-items:center">${spinner}<b class="flex1">Updating Matchplay…</b></div>
-        <div class="small" style="margin-top:4px">${T.esc(j.title)}</div><div class="small">${T.esc(stepText(j))}${n > 1 ? ` (${Math.min(j.i + 1, n)} of ${n})` : ''}</div>
-        <div class="pb"><i style="width:${Math.max(6, pct)}%"></i></div>
-        <div class="gap" style="align-items:center"><span class="small flex1">Working in a hidden tab</span><button class="btn sm sec" data-act="show">Show me</button><button class="btn sm sec" data-act="stop">Stop</button></div>`;
-      const c = card.shadowRoot.querySelector('.c'); if (c.dataset.h !== html) { c.dataset.h = html; c.innerHTML = html; }
-      card.shadowRoot.querySelector('.wrap').classList.toggle('dark', document.documentElement.classList.contains('dark'));
-    }
-    // finished: reload this page once if it shows what was changed
-    if (fresh && here && pagesOf(j).has(T.routePage())) {
-      const k = 'tdp-reloaded-' + j.startedAt;
-      try { if (!sessionStorage.getItem(k)) { sessionStorage.setItem(k, '1'); setTimeout(() => location.reload(), 1500); } } catch (e) { /* storage blocked: skip */ }
-    }
   }
 
   async function onClick(e) {
     const a = e.target.closest && e.target.closest('[data-act]'); if (!a) return;
     if (a.dataset.act === 'retry') await T.jobs.retry();
-    if (a.dataset.act === 'show') await T.jobs.showWorker();
     if (a.dataset.act === 'stop') await T.jobs.cancel();
     render();
   }
 
-  // inside the worker tab itself
-  function workerNote() {
-    const n = document.createElement('div');
-    n.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:2147483000;background:#4f46e5;color:#fff;font:600 13px ui-sans-serif,system-ui,sans-serif;padding:6px 12px;text-align:center;pointer-events:none';
-    n.textContent = 'TD Panel is updating Matchplay in this tab. It closes by itself when done - please leave it alone.';
-    const add = () => { if (!n.isConnected && document.body) document.body.appendChild(n); };
-    add(); setInterval(add, 1000);
-  }
-
-  setInterval(() => { if (!T.jobs.isWorker()) render(); }, 1000);
-  return { render, workerNote };
+  setInterval(render, 700);
+  return { render, freeze };
 })();

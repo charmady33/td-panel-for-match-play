@@ -1,4 +1,4 @@
-# Matchplay TD Panel v0.6.0
+# Matchplay TD Panel v0.7.0
 
 A Chrome extension for tournament directors on app.matchplay.events. On any tournament you run (as organizer, or as a manager) it adds a full-height sidebar on the right and shifts Matchplay's page over. The » button collapses it to a thin strip. Most of the tools also appear directly inside Matchplay's own pages (see below), so the sidebar is optional. It's styled to look like Matchplay's own pages.
 
@@ -85,9 +85,13 @@ To update to a newer version, replace the folder and click the reload icon on th
 - **Overview**: **Submit to IFPA** sits under Re-open tournament, same size and style
 
 ## While it's updating Matchplay
-- Changes are made in a hidden **worker tab** (a collapsed purple "TD Panel" tab group next to your tab) that closes itself when done. Nothing clicks on your page.
-- Your tournament's pages show a blue **"Updating Matchplay in the background"** banner, a progress card in the corner (Show me / Stop), and the part being changed is greyed out and locked.
-- Done: the banner turns green and the page reloads its data. Error: the banner turns red with Retry / Show me / Stop.
+- Changes are made in your own tab at full speed, but the screen is **frozen**: a copy of what was showing stays up (slightly dimmed) with an **"Updating Matchplay…"** card, progress and **Stop**. The clicking, dialogs and page changes happen underneath, out of sight. Clicks, scrolling and keys are blocked; the side panel stays usable.
+- When it's done the cover lifts on the page you started from (same scroll position) and a green "Updates done ✓" banner shows. On an error the cover lifts so you can see where it stopped, with Retry / Stop.
+- Other tabs of the same tournament show an "Updating Matchplay in another tab" banner.
+
+## Bank Builder details
+- A game in more than one bank is never the same game number in two banks (groups move at about the same pace); after that, its start times are kept apart. Anything that can't be avoided is marked ⚠.
+- Game times use each game's **middle value** (median); a single game more than 3× that is left out (a game left open by mistake), and the Arenas tab hover says how many were left out.
 
 ## How it works
 - **Reads** use Matchplay's official read-only API with your own token. Requests are kept to about 1 every 0.65 s, standings are fetched no more than every 30 s, and finished data is cached.

@@ -88,8 +88,13 @@ TDP.timing = (() => {
       if (ms == null || ms < GAME_MIN_MS || ms > GAME_MAX_MS) continue;
       (lists[g.arenaId] = lists[g.arenaId] || []).push(ms);
     }
+    // the middle value (median), leaving out any game more than 3x that game's median (a game left open, etc.)
+    const med = l => { const x = [...l].sort((a, b) => a - b), m = x.length >> 1; return x.length % 2 ? x[m] : (x[m - 1] + x[m]) / 2; };
     const out = {};
-    for (const [id, l] of Object.entries(lists)) out[id] = { count: l.length, avg: l.reduce((a, b) => a + b, 0) / l.length, min: Math.min(...l), max: Math.max(...l), list: l };
+    for (const [id, all] of Object.entries(lists)) {
+      const m0 = med(all), l = all.filter(v => v <= 3 * m0);
+      out[id] = { count: l.length, avg: med(l), min: Math.min(...l), max: Math.max(...l), list: l, dropped: all.length - l.length };
+    }
     return out;
   }
 

@@ -8,13 +8,8 @@ var TDP = window.TDP || (window.TDP = {});
   await T.loadSettings();
   const tabId = Math.random().toString(36).slice(2);
 
-  // ---------- the hidden worker tab: only runs the task, shows a note, nothing else ----------
-  if (await T.jobs.init()) {
-    T.busy.workerNote();
-    let last = null;
-    setInterval(() => { if (location.pathname !== last) { last = location.pathname; T.jobs.resume(); } }, 500);
-    return;
-  }
+  await T.jobs.init();
+  T.busy.render();   // mid-task reload: cover the page straight away
 
   // ---------- route watching (Matchplay is a single-page app) ----------
   let lastPath = null;

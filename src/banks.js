@@ -229,11 +229,14 @@ TDP.banks = (() => {
   // Groups play a bank's games in order, so each game has an expected window [start, end) in its bank.
   // When the same machine is in more than one bank, order the games so those windows don't overlap
   // (two groups waiting on one machine). `fixed` banks (already in Matchplay) keep their order.
+  // Groups move through their games at about the same pace, so a shared machine must never be the same game
+  // number in two banks (hard rule); after that, its expected start times are kept as far apart as possible.
   const BUFFER = 60;   // seconds of slack between one group finishing a machine and the next starting
-  function windows(games) { let t = 0; return games.map(g => { const w = { key: nk(g), s: t, e: t + g.sec }; t += g.sec; return w; }); }
-  function clash(a, b) {   // seconds two banks' windows overlap on shared machines
+  const SAME_SLOT = 1e6;
+  function windows(games) { let t = 0; return games.map((g, pos) => { const w = { key: nk(g), pos, s: t, e: t + g.sec }; t += g.sec; return w; }); }
+  function clash(a, b) {   // cost of two banks sharing machines: same game number (hard) + time overlap
     let t = 0;
-    for (const x of a) for (const y of b) if (x.key === y.key) t += Math.max(0, Math.min(x.e, y.e) + BUFFER - Math.max(x.s, y.s));
+    for (const x of a) for (const y of b) if (x.key === y.key) t += (x.pos === y.pos ? SAME_SLOT : 0) + Math.max(0, Math.min(x.e, y.e) + BUFFER - Math.max(x.s, y.s));
     return t;
   }
   function perms(arr) {
@@ -255,7 +258,7 @@ TDP.banks = (() => {
         if (!b.games.some(g => shared.has(nk(g)))) return;
         const ow = others(i), cost = gs => { const w = windows(gs); return ow.reduce((t, o) => t + clash(w, o), 0); };
         let best = b.games, bestC = cost(b.games);
-        const cands = perms(b.games) || [...Array(60)].map(() => [...b.games].sort(() => Math.random() - 0.5));
+        const cands = perms(b.games) || [...Array(400)].map(() => [...b.games].sort(() => Math.random() - 0.5));
         for (const p of cands) { const c = cost(p); if (c < bestC - 0.5) { best = p; bestC = c; } }
         if (best !== b.games) { b.games = best; changed = true; }
       });
@@ -273,7 +276,7 @@ TDP.banks = (() => {
       const i = fixed.length + bi;
       return b.games.map((g, gi) => {
         const me = w[i][gi], also = [];
-        all.forEach((o, j) => { if (j === i) return; w[j].forEach(x => { if (x.key === me.key) also.push({ bank: o.name, s: x.s, e: x.e, overlap: Math.max(0, Math.min(x.e, me.e) - Math.max(x.s, me.s)) }); }); });
+        all.forEach((o, j) => { if (j === i) return; w[j].forEach(x => { if (x.key === me.key) also.push({ bank: o.name, pos: x.pos, s: x.s, e: x.e, sameSlot: x.pos === me.pos, overlap: Math.max(0, Math.min(x.e, me.e) - Math.max(x.s, me.s)) }); }); });
         return { s: me.s, e: me.e, also };
       });
     });

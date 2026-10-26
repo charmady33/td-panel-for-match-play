@@ -1,46 +1,43 @@
 // Multi-step jobs that click through Matchplay's UI, possibly across pages/tournaments.
 // A job survives page reloads (saved in storage) and resumes when its next page is open.
-// In the extension, jobs run in a hidden "worker" tab (bg.js) - never in the TD's own tab, which only shows progress.
+// A job runs in the tab that started it ("owner"), behind a frozen copy of the screen (busy.js); other tabs of
+// the tournament just show a banner. When it's done, the owner tab goes back to the page it started on.
 var TDP = window.TDP || (window.TDP = {});
 
 TDP.jobs = (() => {
   const T = TDP;
-  let job = null, running = false, worker = false;
+  let job = null, running = false;
   const listeners = new Set();
   const emit = () => listeners.forEach(f => { try { f(job); } catch (e) { /* ignore */ } });
   const save = async () => { await T.store.set('job', job); emit(); };
   const active = () => !!(job && !job.done && !job.error);
-  const ORIGIN = 'https://app.matchplay.events';
-  const stepUrl = s => `${ORIGIN}/tournaments/${s.tid}/${s.page === 'overview' ? '' : s.page}`;
-  const bg = msg => new Promise(res => { try { chrome.runtime.sendMessage(msg, r => { void chrome.runtime.lastError; res(r || {}); }); } catch (e) { res({}); } });   // eslint-disable-line no-undef
-  const useWorker = () => !!T.hasChrome;
+  const mine = () => !!(job && job.owner === T.tabId);
 
-  // is this tab the worker? (asked once at startup)
+  // keep other tabs' view of the job current; a task left from 0.6.0's background tab shows as stopped
   async function init() {
-    if (!T.hasChrome) return false;
-    worker = !!(await bg({ t: 'whoami' })).worker;
+    const j = await T.store.get('job', null);
+    if (j && j.worker && !j.done && !j.error) { j.error = 'Interrupted (it was running in the old background tab). Retry to run it here.'; j.worker = false; await T.store.set('job', j); }
+    if (!T.hasChrome) return;
     chrome.storage.onChanged.addListener((ch, area) => {   // eslint-disable-line no-undef
       if (area !== 'local' || !ch.job) return;
       const nv = ch.job.newValue || null;
-      if (running && worker) { if (!nv || !job || nv.startedAt !== job.startedAt) { job = nv; emit(); } return; }   // ignore echoes of our own saves
+      if (running) { if (!nv || !job || nv.startedAt !== job.startedAt) { job = nv; emit(); } return; }   // ignore echoes of our own saves
       job = nv; emit();
     });
-    chrome.runtime.onMessage.addListener(m => { if (m && m.t === 'resume') resume(); });   // eslint-disable-line no-undef
-    return worker;
   }
 
   // step: { tid, page: 'players'|'banks'|'matches'|..., op, args, label }
   async function start(title, steps) {
     if (job && !job.done && !job.error) throw new Error('Another task is still running.');
-    job = { title, steps, i: 0, log: [], startedAt: Date.now(), worker: useWorker() };
+    T.busy.freeze();   // snapshot what's on screen before anything moves
+    job = { title, steps, i: 0, log: [], startedAt: Date.now(), owner: T.tabId, returnTo: location.pathname, scroll: [scrollX, scrollY] };
     await save();
-    if (job.worker) await bg({ t: 'openWorker', url: stepUrl(steps[0]) });
-    else run();
+    run();
   }
-  async function cancel() { const w = job && job.worker; job = null; await T.store.del('job'); emit(); if (w) bg({ t: 'closeWorker' }); }
+  async function cancel() { job = null; await T.store.del('job'); emit(); }
   async function resume() {
     job = await T.store.get('job', null); emit();
-    if (active() && (!job.worker || worker)) run();
+    if (active() && mine()) run();
   }
 
   const ops = {
@@ -87,8 +84,16 @@ TDP.jobs = (() => {
         job.i++; await save();
       }
       if (job && job.i >= job.steps.length) {
+        // back to the page the TD was on
+        if (job.returnTo && location.pathname !== job.returnTo) {
+          const m = job.returnTo.match(/^\/tournaments\/(\d+)\/?([^/?#]*)/);
+          if (m && T.routeTid() === +m[1]) { try { await T.mp.goTab(+m[1], m[2] || 'overview'); } catch (e) { /* fall through */ } }
+          if (location.pathname !== job.returnTo) { await save(); location.assign(job.returnTo); return; }
+        }
+        await T.sleep(400);
+        if (job.scroll) scrollTo(job.scroll[0], job.scroll[1]);
         job.done = true; job.doneAt = Date.now(); job.log.push('Done.'); await save();
-        if (worker) setTimeout(() => bg({ t: 'closeWorker' }), 1200); else T.data.refresh(true);
+        T.data.refresh(true);
       }
     } catch (e) {
       if (job) { job.error = e.message || String(e); await save(); }
@@ -96,11 +101,9 @@ TDP.jobs = (() => {
   }
   async function retry() {
     if (!job) return;
-    job.error = null; await save();
-    if (job.worker && !worker) await bg({ t: 'ensureWorker', url: stepUrl(job.steps[Math.min(job.i, job.steps.length - 1)]) });
-    else run();
+    job.error = null; job.owner = T.tabId; await save();   // retrying from another tab takes the task over
+    run();
   }
-  const showWorker = () => bg({ t: 'showWorker' });
 
-  return { init, start, cancel, resume, retry, showWorker, active, isWorker: () => worker, get: () => job, on: f => listeners.add(f) };
+  return { init, start, cancel, resume, retry, active, mine, running: () => running, get: () => job, on: f => listeners.add(f) };
 })();
