@@ -48,9 +48,9 @@ TDP.ties = (() => {
   function qualArenas(D) {
     return (D.qual.arenas || []).filter(a => !a.tournamentArena || a.tournamentArena.status !== 'inactive');
   }
-  function drawIfpa(D) {   // one random Old (EM), Mid (SS), New (DMD); if an era is missing, draw from the rest
+  function drawIfpa(D) {   // one random Old (EM), Mid (SS), New (DMD + LCD); if an era is missing, draw from the rest
     const all = qualArenas(D), byEra = { EM: [], SS: [], DMD: [] };
-    all.forEach(a => { const e = T.banks.eraOf(a); if (byEra[e]) byEra[e].push(a); });
+    all.forEach(a => { const e = T.banks.eraOf(a) === 'LCD' ? 'DMD' : T.banks.eraOf(a); if (byEra[e]) byEra[e].push(a); });
     const out = [], used = new Set();
     for (const [label, era] of [['Old', 'EM'], ['Mid', 'SS'], ['New', 'DMD']]) {
       let pool = byEra[era].filter(a => !used.has(a.arenaId)); if (!pool.length) pool = all.filter(a => !used.has(a.arenaId));

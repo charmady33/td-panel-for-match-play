@@ -65,7 +65,7 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--pri);vertical-ali
 .mt{margin-top:8px}.mb{margin-bottom:8px}.gap{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
 .tie{border-radius:6px;padding:8px 10px;margin-bottom:8px;font-size:13px}
 .era{font-size:11px;font-weight:600;border-radius:4px;padding:1px 5px}
-.era-EM{background:#fef3c7;color:#92400e}.era-SS{background:#dbeafe;color:#1e40af}.era-DMD{background:#ede9fe;color:#5b21b6}.era-Unknown{background:#f3f4f6;color:#374151}
+.era-EM{background:#fef3c7;color:#92400e}.era-SS{background:#dbeafe;color:#1e40af}.era-DMD{background:#ede9fe;color:#5b21b6}.era-LCD{background:#dcfce7;color:#166534}.era-Unknown{background:#f3f4f6;color:#374151}
 .rail{height:100%;width:48px;background:var(--card);border-left:1px solid var(--line);display:flex;flex-direction:column;align-items:center;gap:10px;padding-top:14px}
 .pill{background:var(--pri);color:#fff;border:0;border-radius:9999px;width:36px;height:36px;font:inherit;font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 2px 6px rgba(79,70,229,.35)}
 .rail .n{border-radius:9999px;padding:1px 7px;font-size:12px;font-weight:600;min-width:24px;text-align:center;background:#d1fae5;color:#065f46}
@@ -290,7 +290,7 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--pri);vertical-ali
     </div></div>`;
     const est = T.bankplan.estimates(d, st, bankExtra()), ex = new Set(o.exclude);
     h += `<div class="card"><div class="ch"><span class="h">Arenas</span><span class="badge b-gray">${est.length - est.filter(e => ex.has(e.arenaId)).length}/${est.length} used</span></div>
-      <table><tr><th></th><th>Arena</th><th>Era</th><th class="num">Est.</th><th>From</th></tr>${est.sort((a, b) => b.sec - a.sec).map(e => `<tr><td><input type="checkbox" data-incl="${e.arenaId}" ${ex.has(e.arenaId) ? '' : 'checked'}></td><td class="ell" style="max-width:130px">${T.esc(e.name)}</td><td><span class="era era-${e.era}">${e.era}</span></td><td class="num">${T.fmtDur(e.sec * 1000)}</td><td class="small">${e.src}</td></tr>`).join('')}</table></div>`;
+      <table><tr><th></th><th>Arena</th><th>Era</th><th class="num">Est.</th><th>From</th></tr>${est.sort((a, b) => b.sec - a.sec).map(e => `<tr><td><input type="checkbox" data-incl="${e.arenaId}" ${ex.has(e.arenaId) ? '' : 'checked'}></td><td class="ell" style="max-width:130px">${T.esc(e.name)}</td><td><span class="era era-${e.era}">${e.era}</span></td><td class="num">${T.fmtDur(e.sec * 1000)}</td><td class="small" title="${T.esc(e.src)}">${e.src === 'era estimate' ? 'era' : 'times'}</td></tr>`).join('')}</table></div>`;
     return h;
   }
   function bankResultHtml(bankMode) {

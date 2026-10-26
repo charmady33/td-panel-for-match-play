@@ -1,19 +1,20 @@
 // Bank builder - cleaned-up port of the Pinball Tournament Bank Builder balancing.
 // Goals, in order: every bank exactly `size` games, never the same arena twice in a bank, eras spread
-// (EM / SS / DMD), bank play-times as even as possible. Seeded "try another" gives a different valid layout.
+// (EM / SS / DMD / LCD), bank play-times as even as possible. Seeded "try another" gives a different valid layout.
 var TDP = window.TDP || (window.TDP = {});
 
 TDP.banks = (() => {
-  const ERA_ORDER = ['EM', 'SS', 'DMD'];
-  const ERA_DEFAULT_SEC = { EM: 9 * 60, SS: 12 * 60, DMD: 17 * 60, Unknown: 13 * 60 };
-  // Matchplay arena categoryId (from OPDB): 1 EM, 2 SS, 3 DMD/modern
-  const eraOf = a => ({ 1: 'EM', 2: 'SS', 3: 'DMD' }[a && a.categoryId] || 'Unknown');
+  const T = TDP;
+  const ERA_ORDER = ['EM', 'SS', 'DMD', 'LCD'];
+  const ERA_DEFAULT_SEC = { EM: 9 * 60, SS: 12 * 60, DMD: 17 * 60, LCD: 18 * 60, Unknown: 13 * 60 };
+  // Matchplay's category (1 EM, 2 SS, 3 DMD), with LCD from OPDB and the TD's overrides (cats.js)
+  const eraOf = a => T.cats ? T.cats.of(a) : ({ 1: 'EM', 2: 'SS', 3: 'DMD' }[a && a.categoryId] || 'Unknown');
 
   function eraPair(a, b) {
     const i = ERA_ORDER.indexOf(a), j = ERA_ORDER.indexOf(b);
     if (i < 0 || j < 0) return 0;
     const d = Math.abs(i - j);
-    return d === 0 ? 750 : (ERA_ORDER.length - 1 - d) * 300;
+    return d === 0 ? 750 : (ERA_ORDER.length - 1 - d) * 200;
   }
   const bankEra = gs => { let t = 0; for (let a = 0; a < gs.length; a++) for (let b = a + 1; b < gs.length; b++) t += eraPair(gs[a].era, gs[b].era); return t; };
   // "banks feel unique": two games that already shared a bank in an earlier round cost this much to pair again
@@ -188,5 +189,59 @@ TDP.banks = (() => {
     return groups.map((g, i) => ({ group: g.key, bank: banks[pick[i]].key, cost: M[i][pick[i]] }));
   }
 
-  return { build, estimates, eraOf, cost, historyMaps, assignGroups, pairKey, ERA_DEFAULT_SEC };
+  // ---------- play order ----------
+  // Groups play a bank's games in order, so each game has an expected window [start, end) in its bank.
+  // When the same machine is in more than one bank, order the games so those windows don't overlap
+  // (two groups waiting on one machine). `fixed` banks (already in Matchplay) keep their order.
+  const BUFFER = 60;   // seconds of slack between one group finishing a machine and the next starting
+  function windows(games) { let t = 0; return games.map(g => { const w = { key: nk(g), s: t, e: t + g.sec }; t += g.sec; return w; }); }
+  function clash(a, b) {   // seconds two banks' windows overlap on shared machines
+    let t = 0;
+    for (const x of a) for (const y of b) if (x.key === y.key) t += Math.max(0, Math.min(x.e, y.e) + BUFFER - Math.max(x.s, y.s));
+    return t;
+  }
+  function perms(arr) {
+    if (arr.length > 6) return null;
+    const out = []; (function go(pre, rest) { if (!rest.length) return out.push(pre); rest.forEach((x, i) => go([...pre, x], [...rest.slice(0, i), ...rest.slice(i + 1)])); })([], arr);
+    return out;
+  }
+  // banks: [{games:[{name,sec,...}]}] (reordered in place); fixed: [[{name,sec}]]  -> total overlap seconds left
+  function schedule(banks, fixed = []) {
+    const fixedW = fixed.map(windows);
+    const shared = new Set();
+    const count = {}; [...fixed, ...banks.map(b => b.games)].forEach(gs => new Set(gs.map(nk)).forEach(k => { count[k] = (count[k] || 0) + 1; }));
+    Object.entries(count).forEach(([k, c]) => { if (c > 1) shared.add(k); });
+    if (!shared.size) return 0;
+    const others = i => [...fixedW, ...banks.filter((_, j) => j !== i).map(b => windows(b.games))];
+    for (let pass = 0; pass < 4; pass++) {
+      let changed = false;
+      banks.forEach((b, i) => {
+        if (!b.games.some(g => shared.has(nk(g)))) return;
+        const ow = others(i), cost = gs => { const w = windows(gs); return ow.reduce((t, o) => t + clash(w, o), 0); };
+        let best = b.games, bestC = cost(b.games);
+        const cands = perms(b.games) || [...Array(60)].map(() => [...b.games].sort(() => Math.random() - 0.5));
+        for (const p of cands) { const c = cost(p); if (c < bestC - 0.5) { best = p; bestC = c; } }
+        if (best !== b.games) { b.games = best; changed = true; }
+      });
+      if (!changed) break;
+    }
+    let left = 0; const all = [...fixedW, ...banks.map(b => windows(b.games))];
+    for (let a = 0; a < all.length; a++) for (let c = a + 1; c < all.length; c++) left += clash(all[a], all[c]);
+    return Math.max(0, left - 0);
+  }
+  // for the preview: each game's expected start and where else that machine is played
+  function timeline(banks, fixed = []) {
+    const all = [...fixed.map(f => ({ name: f.name, games: f.games, fixed: true })), ...banks];
+    const w = all.map(b => windows(b.games));
+    return banks.map((b, bi) => {
+      const i = fixed.length + bi;
+      return b.games.map((g, gi) => {
+        const me = w[i][gi], also = [];
+        all.forEach((o, j) => { if (j === i) return; w[j].forEach(x => { if (x.key === me.key) also.push({ bank: o.name, s: x.s, e: x.e, overlap: Math.max(0, Math.min(x.e, me.e) - Math.max(x.s, me.s)) }); }); });
+        return { s: me.s, e: me.e, also };
+      });
+    });
+  }
+
+  return { build, estimates, eraOf, cost, historyMaps, assignGroups, pairKey, schedule, timeline, ERA_ORDER, ERA_DEFAULT_SEC };
 })();

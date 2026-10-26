@@ -5,59 +5,64 @@ var TDP = window.TDP || (window.TDP = {});
 TDP.bankbar = (() => {
   const T = TDP;
   const lc = s => String(s || '').toLowerCase();
-  let host = null, cur = null;   // modal host + state {mode, n, size, plan, seed}
+  let host = null, cur = null;   // modal host + state {mode, n, res}
 
   const active = D => (D.t.banks || []).filter(b => b.status !== 'inactive');
   const st = D => T.tstate[D.tid] || {};
-  const sizeOf = D => +st(D).barSize || D.t.gamesPerRound || 3;
+  const sizeOf = D => D.t.gamesPerRound || 3;   // "Matches each round" on Matchplay's Overview
 
   // ---------- the bar ----------
+  // the row holding Matchplay's "Add bank" button; the bar goes right above the bank cards (or under that row).
+  // Found from the button's own row, so the bar sitting there doesn't change where it's placed next time.
   function anchor() {
     const add = T.findBtn(document.querySelector('main') || document, /^Add bank$/);
     if (!add) return null;
-    let row = add; while (row.parentElement && !(row.nextElementSibling && /grid/.test(row.nextElementSibling.className || ''))) { row = row.parentElement; if (row.tagName === 'MAIN') return add.parentElement; }
-    return row;
+    const row = add.closest('div.justify-between') || add.parentElement.parentElement;
+    let nx = row.nextElementSibling;
+    if (nx && nx.id === 'tdp-bankbar') nx = nx.nextElementSibling;
+    return nx && /\bgrid\b/.test(nx.className || '') ? { el: nx, where: 'before' } : { el: row, where: 'after' };
   }
   function render(D) {
     const show = D && D.t && D.isTD && T.routePage() === 'banks' && /bank/i.test(D.t.arenaAssignment || '');
     const a = show ? anchor() : null;
     if (!a) return T.inpage.block('tdp-bankbar', null);
-    const s = st(D), has = active(D).length;
-    const html = `<div class="card" style="margin:0 0 12px"><div class="cb gap" style="flex-wrap:wrap;align-items:flex-end">
-      <span class="h" style="margin-right:4px">Bank builder</span>
-      <label style="width:90px"><div class="lab">Banks</div><input type="number" min="1" data-f="barN" value="${s.barN || ''}"></label>
-      <label style="width:130px"><div class="lab" style="white-space:nowrap">Games per bank</div><input type="number" min="1" data-f="barSize" value="${sizeOf(D)}"></label>
+    const has = active(D).length, size = sizeOf(D);
+    const html = `<div class="card" style="margin:0 0 12px"><div class="cb gap" style="flex-wrap:wrap;align-items:center">
+      <span class="h" style="margin-right:4px">Bank Builder</span>
+      <span class="small" title="From &quot;Matches each round&quot; on Matchplay's Overview">${size} game${size === 1 ? '' : 's'} per bank (from Matchplay)</span>
       ${has ? `<button class="btn" data-act="refresh">Refresh banks</button><button class="btn sec" data-act="add">Add banks</button>` : `<button class="btn" data-act="generate">Generate banks</button>`}
       <button class="btn sec" data-act="settings" title="Games and time sources">⚙ Settings</button>
       <span class="small flex1" style="text-align:right">${has ? `${has} bank${has === 1 ? '' : 's'} in Matchplay` : 'No banks yet'}</span>
     </div></div>`;
-    T.inpage.block('tdp-bankbar', a, 'after', html, onBar);
+    T.inpage.block('tdp-bankbar', a.el, a.where, html, onBar);
   }
   async function onBar(e) {
     const D = T.data.D; if (!D || !D.t) return;
-    const f = e.target.dataset && e.target.dataset.f;
-    if (e.type === 'change' && f) { await T.saveT(D.tid, { [f]: e.target.value ? +e.target.value : null }); return; }
     if (e.type !== 'click') return;
     const a = e.target.closest('[data-act]'); if (!a) return;
-    const act = a.dataset.act, root = a.getRootNode();
-    const nBox = root.querySelector('[data-f=barN]'), sBox = root.querySelector('[data-f=barSize]');
-    const size = +sBox.value || sizeOf(D);
+    const act = a.dataset.act;
     if (act === 'settings') return openSettings(D);
-    if (act === 'generate') { const n = +nBox.value; return n ? preview(D, 'create', n, size) : ask(D, 'create', size, 'How many banks?'); }
-    if (act === 'refresh') return preview(D, 'refresh', active(D).length, size);
-    if (act === 'add') return ask(D, 'add', size, 'How many banks to add?');
+    if (act === 'generate') return ask(D, 'create', 'How many banks?');
+    if (act === 'refresh') return preview(D, 'refresh', active(D).length);
+    if (act === 'add') return ask(D, 'add', 'How many banks to add?');
   }
 
   // ---------- building ----------
-  async function times(D) {
-    const s = st(D), use = new Set(s.histUse || []), hist = await T.store.get('hist', {});
-    let qual = null; try { qual = await T.bankplan.qualTimes(D); } catch (e) { /* qualifying times are optional */ }
-    return T.bankplan.estimates(D, s, { qual, hist: Object.entries(hist).filter(([id]) => use.has(id) && +id !== D.tid).map(([, h]) => h.arenas) });
-  }
+  async function times(D) { return T.bankplan.estimates(D, st(D), await T.bankplan.extras(D)); }
   const namesOf = (D, ids) => { const am = T.data.arenaMap(D.t); return (ids || []).map(id => (am[id] || {}).name).filter(Boolean); };
-  async function build(D, mode, n, size) {
-    const s = st(D), ctx = T.bankplan.context(D), est = await times(D);
+  async function build(D, mode, n) {
+    const size = sizeOf(D), s = st(D), ctx = T.bankplan.context(D), est = await times(D);
     const existing = active(D).map(b => namesOf(D, b.arenaIds));
+    const estBy = new Map(est.map(g => [lc(g.name), g]));
+    // Add: the banks already there stay as they are. Leave their games out of the new banks when there are
+    // enough other games; otherwise the fewest-used ones may repeat (and get spread out in time below).
+    let exclude = [...(s.bankExclude || [])];
+    if (mode === 'add') {
+      const inUse = new Set(existing.flat().map(lc));
+      const free = est.filter(g => !exclude.includes(g.arenaId) && !inUse.has(lc(g.name)));
+      if (free.length >= n * size) exclude = [...exclude, ...est.filter(g => inUse.has(lc(g.name))).map(g => g.arenaId)];
+    }
+    const fixed = mode === 'add' ? active(D).map(b => ({ name: b.name, games: namesOf(D, b.arenaIds).map(nm => estBy.get(lc(nm)) || { name: nm, sec: T.banks.ERA_DEFAULT_SEC.Unknown }) })) : [];
     // never repeat an arrangement already shown or created: shown/existing banks count as history
     const shown = (s.bankShown || []).map(x => x.banks);
     const hist = [...ctx.history, ...shown, existing];
@@ -67,13 +72,16 @@ TDP.bankbar = (() => {
     let best = null;
     for (let tries = 0; tries < 12; tries++) {
       const seed = Math.floor(Math.random() * 1e9);
-      const res = T.banks.build(est, n, size, { seed, exclude: s.bankExclude || [], force: s.bankForce || [], avoid, usage });
+      const res = T.banks.build(est, n, size, { seed, exclude, force: s.bankForce || [], avoid, usage });
       const k = sig(res.banks.map(b => b.games.map(g => g.name)));
       const spread = spreadOf(res.banks);
       if (!seen.has(k) && (!best || spread < best.spread)) best = { res, spread, seed };
       if (best && tries >= 3) break;
     }
     if (!best) throw new Error('Every arrangement of these games has been shown already. Change the games in Settings or the bank count.');
+    // play order inside each bank: a machine in more than one bank is played at different times in each
+    best.res.overlap = T.banks.schedule(best.res.banks, fixed.map(f => f.games));
+    best.res.fixed = fixed;
     const names = active(D).map(b => b.name);
     const taken = new Set(names.map(lc));
     let k = names.length;
@@ -81,6 +89,7 @@ TDP.bankbar = (() => {
       if (mode === 'refresh') b.name = names[i];
       else { do k++; while (taken.has(lc('Bank ' + k))); b.name = 'Bank ' + k; taken.add(lc(b.name)); }
     });
+    best.res.when = T.banks.timeline(best.res.banks, fixed);
     // remember it so Refresh / Another arrangement never shows it again
     const list = [...(s.bankShown || []), { at: Date.now(), banks: best.res.banks.map(b => b.games.map(g => g.name)) }].slice(-20);
     await T.saveT(D.tid, { bankShown: list });
@@ -93,11 +102,11 @@ TDP.bankbar = (() => {
   const CSS = () => `${T.panel.CSS}
 :host{all:initial}
 .ov{position:fixed;inset:0;background:rgba(17,24,39,.5);z-index:2147483000;display:flex;align-items:flex-start;justify-content:center;padding:6vh 16px;overflow:auto}
-.dlg{background:var(--card);border-radius:8px;box-shadow:0 20px 40px rgba(0,0,0,.25);width:640px;max-width:100%;font-family:ui-sans-serif,system-ui,sans-serif;font-size:14px;color:var(--text)}
+.dlg{background:var(--card);border-radius:8px;box-shadow:0 20px 40px rgba(0,0,0,.25);width:800px;max-width:100%;font-family:ui-sans-serif,system-ui,sans-serif;font-size:14px;color:var(--text)}
 .dh{padding:16px 20px 8px;font-size:18px;font-weight:500}
 .db{padding:4px 20px 16px;max-height:65vh;overflow:auto}
 .df{background:var(--head);padding:12px 20px;display:flex;justify-content:flex-end;gap:8px;border-radius:0 0 8px 8px;flex-wrap:wrap}
-.bk{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px}
+.bk{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px}
 .bk .card{margin:0}
 .bk li{display:flex;justify-content:space-between;gap:6px;padding:2px 0}
 .seg{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
@@ -117,16 +126,16 @@ table{width:100%;border-collapse:collapse}td{padding:4px 6px;border-top:1px soli
   }
   function close() { if (host) host.remove(); host = null; cur = null; }
 
-  function ask(D, mode, size, q) {
-    cur = { mode, size };
-    show(`<div class="dh">${T.esc(q)}</div><div class="db"><input type="number" min="1" data-autofocus data-f="askN" value="${mode === 'create' ? (st(D).barN || '') : ''}"></div>
+  function ask(D, mode, q) {
+    cur = { mode };
+    show(`<div class="dh">${T.esc(q)}</div><div class="db"><input type="number" min="1" data-autofocus data-f="askN" value=""></div>
       <div class="df"><button class="btn sec" data-act="close">Cancel</button><button class="btn" data-act="askOk">Preview</button></div>`);
   }
 
-  async function preview(D, mode, n, size) {
-    cur = { mode, n, size };
+  async function preview(D, mode, n) {
+    cur = { mode, n };
     show(`<div class="dh">Building ${n} bank${n === 1 ? '' : 's'}…</div><div class="db small">Working out the arrangement.</div>`);
-    try { cur.res = await build(D, mode, n, size); } catch (e) {
+    try { cur.res = await build(D, mode, n); } catch (e) {
       return show(`<div class="dh">Can't build banks</div><div class="db"><div class="callout">${T.esc(e.message || String(e))}</div></div><div class="df"><button class="btn sec" data-act="settings">Settings</button><button class="btn" data-act="close">Close</button></div>`);
     }
     drawPreview();
@@ -134,8 +143,15 @@ table{width:100%;border-collapse:collapse}td{padding:4px 6px;border-top:1px soli
   function drawPreview() {
     const { mode, n, res } = cur, t = res.banks.map(b => b.total);
     const title = mode === 'refresh' ? `Refresh games in ${n} bank${n === 1 ? '' : 's'}` : mode === 'add' ? `Add ${n} bank${n === 1 ? '' : 's'}` : `Create ${n} bank${n === 1 ? '' : 's'}`;
-    const cards = res.banks.map(b => `<div class="card"><div class="ch"><span class="h">${T.esc(b.name)}</span><span class="small">${T.fmtDur(b.total * 1000)}</span></div><div class="cb"><ul style="margin:0;padding:0;list-style:none">${b.games.map(g => `<li><span class="ell">${T.esc(g.name)}${g.repeat ? ' <span class="badge b-amber">repeat</span>' : ''}</span><span class="small" title="${T.esc(g.src)}">${T.esc(g.era)} · ${T.fmtDur(g.sec * 1000)}</span></li>`).join('')}</ul>${b.repeatPairs ? '<div class="small warn mt">Has a game pair from an earlier round</div>' : ''}</div></div>`).join('');
-    const notes = [`Bank times ${T.fmtDur(Math.min(...t) * 1000)} – ${T.fmtDur(Math.max(...t) * 1000)} (spread ${T.fmtDur((Math.max(...t) - Math.min(...t)) * 1000)})`];
+    const at = sec => T.fmtDur(sec * 1000);
+    const cards = res.banks.map((b, bi) => `<div class="card"><div class="ch"><span class="h">${T.esc(b.name)}</span><span class="small">${at(b.total)}</span></div><div class="cb"><ul style="margin:0;padding:0;list-style:none">${b.games.map((g, gi) => {
+      const w = res.when[bi][gi], clash = w.also.filter(x => x.overlap > 0);
+      const also = w.also.length ? `<div class="small ${clash.length ? 'err' : 'muted'}" style="padding-left:44px">${clash.length ? '⚠ ' : ''}also in ${w.also.map(x => `${T.esc(x.bank)} @ ${at(x.s)}`).join(', ')}${clash.length ? ` - overlaps ~${Math.ceil(Math.max(...clash.map(x => x.overlap)) / 60)} min` : ''}</div>` : '';
+      return `<li><span class="small" style="width:44px;flex:none">@${at(w.s)}</span><span class="ell flex1">${T.esc(g.name)}${g.repeat ? ' <span class="badge b-amber">repeat</span>' : ''}</span><span class="small" title="${T.esc(g.src)}">${T.esc(g.era)} · ${at(g.sec)}</span></li>${also}`;
+    }).join('')}</ul>${b.repeatPairs ? '<div class="small warn mt">Has a game pair from an earlier round</div>' : ''}</div></div>`).join('');
+    const notes = [`Bank times ${at(Math.min(...t))} – ${at(Math.max(...t))} (spread ${at(Math.max(...t) - Math.min(...t))}). @ = expected start; games are played in this order.`];
+    if (res.fixed.length) notes.push(res.fixed.length === 1 ? 'Your existing bank stays as it is.' : `Your ${res.fixed.length} existing banks stay as they are.`);
+    if (res.overlap > 0 && res.banks.some((b, bi) => res.when[bi].some(w => w.also.some(x => x.overlap > 0)))) notes.push('Some machines are in more than one bank at overlapping times (marked ⚠): two groups may wait on the same game. Try another arrangement, or add more games in Matchplay.');
     if (res.dropped.length) notes.push(`Not used this time: ${res.dropped.map(g => g.name).join(', ')}`);
     if (mode === 'refresh') notes.push('Bank names stay the same; their games are replaced.');
     show(`<div class="dh">${title}</div><div class="db"><div class="small mb">${notes.map(T.esc).join('<br>')}</div><div class="bk">${cards}</div></div>
@@ -166,7 +182,7 @@ table{width:100%;border-collapse:collapse}td{padding:4px 6px;border-top:1px soli
       <div class="lab">Games</div><div class="small mb">Use = may be picked · Never = left out · Always = in every set of banks</div>
       <table>${rows}</table>
       <div class="lab mt">Game times from</div>
-      <div class="small mb">This tournament's own games always count first.${isFinals ? ' The qualifying tournament is included automatically.' : ''}</div>
+      <div class="small mb">All sources are combined, weighted by how many games each has: this tournament${isFinals ? ', the qualifying (automatic)' : ''}, the Matchplay IDs below, and the past events you tick. Same list as the Arenas tab.</div>
       <div class="gap mb"><input type="text" data-f="pastIds" placeholder="Matchplay tournament IDs, e.g. 201234, 205678" value="${T.esc(s.bankPast || '')}"><button class="btn sm sec" data-act="loadPast">Load</button></div>
       ${s.pastTimes ? `<div class="small mb">${Object.keys(s.pastTimes).length} arenas loaded from those IDs.</div>` : ''}
       <div class="lab mt">Past events run with the extension</div>${histRows}
@@ -188,10 +204,9 @@ table{width:100%;border-collapse:collapse}td{padding:4px 6px;border-top:1px soli
       if (act === 'askOk') {
         const n = +host.shadowRoot.querySelector('[data-f=askN]').value;
         if (!n || n < 1) return T.panel.say('Enter how many banks.', 'err');
-        if (cur.mode === 'create') await T.saveT(D.tid, { barN: n });
-        return preview(D, cur.mode, n, cur.size);
+        return preview(D, cur.mode, n);
       }
-      if (act === 'another') return preview(D, cur.mode, cur.n, cur.size);
+      if (act === 'another') return preview(D, cur.mode, cur.n);
       if (act === 'confirm') return confirm(D);
       if (act === 'settings') return openSettings(D);
       if (act === 'mode') {

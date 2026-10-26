@@ -1,4 +1,4 @@
-# Matchplay TD Panel v0.4.0
+# Matchplay TD Panel v0.5.0
 
 A Chrome extension for tournament directors on app.matchplay.events. On any tournament you run (as organizer, or as a manager) it adds a full-height sidebar on the right and shifts Matchplay's page over. The » button collapses it to a thin strip. Most of the tools also appear directly inside Matchplay's own pages (see below), so the sidebar is optional. It's styled to look like Matchplay's own pages.
 
@@ -48,12 +48,26 @@ To update to a newer version, replace the folder and click the reload icon on th
     - the qualifiers in seed order, plus 3 backups
     - ticking a player adds them as **Active**; unticking deactivates them
     - seeds are kept in qualifying order, with backups lowest
-- **Banks tab (in Matchplay)**: a Bank builder bar
-  - Banks (you enter it) and Games per bank (defaults to Matches each round)
-  - no banks yet: **Generate banks** → preview → Confirm creates them (asks how many if the box is empty)
+- **Banks tab (in Matchplay)**: the **Bank Builder** bar, right above the bank cards
+  - games per bank come from Matchplay's "Matches each round" (shown, not editable)
+  - no banks yet: **Generate banks** asks how many → preview → Confirm creates them
   - banks exist: **Refresh banks** replaces their games (names kept); **Add banks** asks how many, then creates Bank N+1…
+  - Add leaves your existing banks alone and keeps their games out of the new banks when there are enough other games
+  - groups play a bank's games in order, so the preview shows each game's expected start (@0:00, @13:20…). A machine in more than one bank is ordered so the groups reach it at different times; any overlap left is marked ⚠
+  - games are added to Matchplay in that order (using the bank's Re-order)
   - **Another arrangement** never repeats one already shown or created, and keeps bank times balanced
-  - **⚙ Settings**: each game Use / Never / Always; game times from this tournament, the qualifying, Matchplay IDs, and past events run with the extension
+  - **⚙ Settings**: each game Use / Never / Always; time sources
+- **Arenas tab (in Matchplay)**:
+  - **Display**: EM / SS / DMD / **LCD**. LCD comes from Matchplay's OPDB data (e.g. Ninja Eclipse); a menu per game overrides it, saved for that arena in every tournament. Bank Builder balances all four; tiebreaker draws count LCD as "New" with DMD
+  - **This event**: running average game time; **Combined**: this event + qualifying + Matchplay IDs + ticked past events, weighted by games (what Bank Builder uses; hover for the breakdown)
+  - **Game times from** bar: the qualifying is included automatically for a linked finals; add other Matchplay IDs and Load
+- **Game times**: a game starts when the group's previous game ends; it ends when its scores were entered. For games the extension didn't watch, that time is read from Matchplay's Logs ("Suggestion created"), so late approvals don't stretch the times
+- **Submit to IFPA** (Overview, once the tournament is completed): a step-by-step page
+  1. **Results**: finals places first (A, then B, C…), then everyone else by qualifying position; ties numbered right; checks for missing or duplicate IFPA numbers; copy button
+  2. **Meaningful games** for the format played (match play, brackets, strikes, Frenzy, best game…) with the math shown; byes, cuts under 50% and formats IFPA wants to hear about are flagged; you can change the number
+  3. **Format notes**, ready to paste, with the Matchplay links
+  4. **Submit**: link to IFPA and a checklist
+  5. **Done**: until ticked, the Overview shows how many of IFPA's 45 days are left
 - **Timers**:
   - how long each round took, from the first game's start until every game is done
   - average, min and max game time per arena

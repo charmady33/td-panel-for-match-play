@@ -170,6 +170,32 @@ TDP.mp = (() => {
     if (hit !== want.size) { T.click(T.findBtn(d, 'Close')); fail(`Bank "${name}": only matched ${hit} of ${want.size} arenas.`); }
     T.click(await needBtn(/^Add \d+ arenas?$/, d));
     await dialogClosed();
+    await reorderBank(name, arenaNames);
+  }
+
+  // ---------- banks: play order = the bank's arena order (Re-order: click a game, then "Move to arena N") ----------
+  async function reorderBank(name, arenaNames) {
+    await T.sleep(600);
+    let card = await T.waitFor(() => bankCard(name), 8000) || fail(`Bank "${name}" not found.`);
+    const listed = () => [...bankCard(name).querySelectorAll('li')].map(T.txt).filter(t => t && !/^Add arenas/.test(t));
+    if (listed().join('|') === arenaNames.join('|')) return;
+    let box = card; for (let k = 0; k < 4 && box && !T.findBtn(box, /^Re-order$/); k++) box = box.parentElement;
+    T.click((box && T.findBtn(box, /^Re-order$/)) || fail(`No Re-order button on "${name}".`));
+    const d = await needDialog();
+    const rows = () => [...d.querySelectorAll('button')].filter(b => /^A\d+/.test(T.txt(b)));
+    const order = () => rows().map(b => T.txt(b).replace(/^A\d+\s*/, ''));
+    await T.waitFor(() => rows().length >= arenaNames.length, 5000);
+    for (let i = 0; i < arenaNames.length; i++) {
+      const cur = order();
+      if (cur[i] === arenaNames[i]) continue;
+      const src = rows().find(b => T.txt(b).replace(/^A\d+\s*/, '') === arenaNames[i]) || fail(`"${arenaNames[i]}" is not in bank "${name}".`);
+      src.click(); await T.sleep(200);
+      const tgt = await T.waitFor(() => rows().find(b => new RegExp('Move to arena ' + (i + 1) + '$').test(T.txt(b))), 3000) || fail('Re-order: no target slot.');
+      tgt.click(); await T.sleep(200);
+    }
+    if (order().join('|') !== arenaNames.join('|')) { T.click(T.findBtn(d, 'Cancel')); fail(`Bank "${name}": couldn't set the play order.`); }
+    T.click(await needBtn('Save', d));
+    await dialogClosed();
   }
 
   // ---------- banks: change an existing bank's games (trash icons remove instantly, no confirm) ----------
@@ -199,7 +225,7 @@ TDP.mp = (() => {
       T.click(await needBtn(/^Add \d+ arenas?$/, d));
       await dialogClosed();
     }
-    // play order = the order given (Re-order modal is click-to-move like seeds; skipped when already right)
+    await reorderBank(name, arenaNames);   // play order = the order given
   }
 
   // ---------- Matches tab: group Actions -> Assign bank -> tick one bank -> Update arenas ----------
@@ -242,5 +268,5 @@ TDP.mp = (() => {
     await dialogClosed();
   }
 
-  return { goTab, menu, playerRows, selectPlayers, setLabels, bulk, setActive, readIfpaRanks, addFromQualifying, setSeeds, closeRound, startNextRound, createBank, setBankArenas, assignBank, resolveTie, needBtn, needDialog, dialogClosed };
+  return { goTab, menu, playerRows, selectPlayers, setLabels, bulk, setActive, readIfpaRanks, addFromQualifying, setSeeds, closeRound, startNextRound, createBank, setBankArenas, reorderBank, assignBank, resolveTie, needBtn, needDialog, dialogClosed };
 })();

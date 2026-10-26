@@ -1,8 +1,9 @@
 // Game timing, ported from the Carpool Pinball remote app (server.js: realStart / gEnd / doneish / arenaTimes).
 //  - a game STARTS at the latest of: its own startedAt, the end of its group's earlier games, the end of the
 //    arena's earlier games in that round (Matchplay gives every game the round's start time, so we correct it)
-//  - a game ENDS at the earlier of: the approved result (startedAt + duration) or the first moment every player
-//    had a suggested score or position (full pending approval). A partial suggestion does NOT end a game.
+//  - a game ENDS at the earlier of: the approved result (startedAt + duration), the first moment every player
+//    had a suggested score or position (full pending approval), or the "Suggestion created" time in Matchplay's
+//    Logs (logs.js - covers games the extension didn't watch). A partial suggestion does NOT end a game.
 //  - games under 2 minutes or over 2 hours are left out of averages.
 var TDP = window.TDP || (window.TDP = {});
 
@@ -47,9 +48,10 @@ TDP.timing = (() => {
     if (st == null || g.duration == null || !isFinite(d)) return null;
     return st + (d > 86400 ? d : d * 1000);
   }
+  const logEnd = {};   // gameId -> ms (from Matchplay's Logs: when the approved scores were entered)
   function gEnd(g) {
-    const e = isDone(g) ? approvedEnd(g) : null, p = fullSeen[g.gameId] || null;
-    return e != null && p != null ? Math.min(e, p) : (e != null ? e : p);
+    const c = [isDone(g) ? approvedEnd(g) : null, fullSeen[g.gameId] || null, isDone(g) ? (logEnd[g.gameId] || null) : null].filter(v => v != null);
+    return c.length ? Math.min(...c) : null;
   }
 
   // real start of a game within its round's list of games
@@ -104,5 +106,5 @@ TDP.timing = (() => {
     });
   }
 
-  return { ts, isDone, isTiebreak, suggestState, noteSuggestions, fullSeen, doneish, gEnd, realStart, gameLen, arenaTimes, roundTimes, GAME_MIN_MS, GAME_MAX_MS };
+  return { logEnd, ts, isDone, isTiebreak, suggestState, noteSuggestions, fullSeen, doneish, gEnd, realStart, gameLen, arenaTimes, roundTimes, GAME_MIN_MS, GAME_MAX_MS };
 })();

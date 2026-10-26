@@ -184,7 +184,7 @@ TDP.inpage = (() => {
     const D = T.data.D;
     const page0 = T.routePage();
     if (page0 !== lastPage) { lastPage = page0; if ((page0 === 'standings' || page0 === 'resolve-ties') && D.qual) T.data.refresh(true); }
-    if (!D.isTD || !D.t) { clearMarks(); ['tdp-ties-standings', 'tdp-elig', 'tdp-ties-resolve', 'tdp-auto', 'tdp-tb-reminder', 'tdp-bankbar'].forEach(id => { const e = document.getElementById(id); if (e) e.remove(); }); return; }
+    if (!D.isTD || !D.t) { clearMarks(); ['tdp-ties-standings', 'tdp-elig', 'tdp-ties-resolve', 'tdp-auto', 'tdp-tb-reminder', 'tdp-bankbar', 'tdp-arena-times', 'tdp-ifpa-btn'].forEach(id => { const e = document.getElementById(id); if (e) e.remove(); }); return; }
     const page = T.routePage();
     try {
       reminder(D);
@@ -192,6 +192,8 @@ TDP.inpage = (() => {
       if (page === 'resolve-ties') resolveTies(D); else block('tdp-ties-resolve', null);
       if (page === 'matches') matches(D); else block('tdp-auto', null);
       if (T.bankbar) T.bankbar.render(D);
+      if (T.arenatab) T.arenatab.render(D);
+      if (T.ifpa) T.ifpa.render(D);
     } catch (e) { T.warn('inpage', e); }
   }
   setInterval(render, 1500);   // Matchplay re-renders its pages; put our bits back

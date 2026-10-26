@@ -49,6 +49,7 @@ TDP.data = (() => {
       if (done) { doneRounds.add(r.roundId); }
     }
     D.games = [...keep.values()];
+    if (T.logs) await T.logs.load(D.tid, isCompleted(D.t));   // when scores were really entered (Matchplay's Logs)
     T.timing.noteSuggestions(D.games);
     await T.saveT(D.tid, { fullSeen: { ...T.timing.fullSeen } });
     await recordHistory();
@@ -82,6 +83,7 @@ TDP.data = (() => {
       }
       D.isTD = !!(D.me && D.t && D.me.userId === D.t.organizerId) || pageShowsTdControls();
       if (!D.isTD) return;
+      if (fullDue && T.cats) T.cats.lookup(D.t.arenas, emit);   // LCD vs DMD from OPDB, in the background
       await loadGames();
       // standings of the qualifying tournament: at most every 15 s (we use 30 s)
       if (D.qual && (force || now - lastStand > 30e3)) {
@@ -107,6 +109,7 @@ TDP.data = (() => {
     Object.assign(D, { tid, t: null, isTD: null, qual: null, finals: [], rounds: [], games: [], standings: [], error: null });
     doneRounds.clear(); lastFull = 0; lastStand = 0;
     const st = await T.loadT(tid);
+    if (T.cats) await T.cats.load();
     Object.keys(T.timing.fullSeen).forEach(k => delete T.timing.fullSeen[k]);
     Object.assign(T.timing.fullSeen, st.fullSeen || {});
     if (tid) { await refresh(true); start(); }
