@@ -1,4 +1,4 @@
-# Matchplay TD Panel v0.8.1
+# Matchplay TD Panel v0.9.0
 
 A Chrome extension for tournament directors on app.matchplay.events. On any tournament you run (as organizer, or as a manager) it adds a full-height sidebar on the right and shifts Matchplay's page over. The » button collapses it to a thin strip. Most of the tools also appear directly inside Matchplay's own pages (see below), so the sidebar is optional. It's styled to look like Matchplay's own pages.
 
@@ -84,6 +84,18 @@ To update to a newer version, replace the folder and click the reload icon on th
 - **Matches tab (bank tournaments)**: **Assign banks** gives each group of the new round one of your banks - games its players haven't played, avoiding any bank that shares 2+ games with one a player already had. Preview with **Another option**, then **Assign**. **Automatic** (off by default) does it for every new round without the preview. The bar then shows "Group 2 → Bank 4 · 11 of 12 new"
 - **Overview**: **Submit to IFPA** sits under Re-open tournament, same size and style
 - **Test tournaments only** (Matches tab): **Fill random results** enters a random finishing order for every open game of the round that has its arena; **Every round** does it automatically. With auto close/start and Automatic bank assignment on, a test tournament runs itself.
+
+## New in 0.9.0
+- **Changes run in a hidden helper frame**: Matchplay's pages are worked on out of sight while you keep using your tab. A small "Updating Matchplay…" card shows progress, with **Show me** and **Stop**; tables on the page being changed are greyed until it's done, then the page refreshes in place. If the helper stops responding for 25 s, it falls back to the frozen-screen cover.
+- **Rebuild banks every round** (Banks tab) and **Assign banks · Automatic** (Matches tab) can both be on. Auto close/start: close the round → rebuild banks (if on) → start the next round (unpublished when Automatic assign is on) → assign banks → publish.
+- **Matches tab** status: "N groups in Round X need a bank", "All N groups have banks", or "No banks yet". The per-group "x of y new" line is gone.
+- **Ties that don't matter** show plain "tied" text on the Finals standings table (no color, no "Other ties" list). Matchplay's Ties column ("-" / "Manual") is hidden. Click a decimal points value to see how that tie was resolved.
+- **Finals check-in**:
+  - columns In / Seed / Name / Status, with "Checking in…" showing right away
+  - 3 backups, then **Show more (N)** / **Show less**
+  - a player checked in to a higher division drops off the lower division's list and everyone moves up; you're asked first if they're already checked in lower down
+  - seeds are only set when the finals uses manual seeding (fixes "Couldn't find 'Update seeds'")
+- **Loads with the page**: the last data for each tournament is kept, so the extension's parts show together with Matchplay's instead of a moment later.
 
 ## New in 0.8.1
 - Settings save safely: each save changes only that setting, so another open tab of the same tournament can't put an old value back; changes show in every open tab right away.

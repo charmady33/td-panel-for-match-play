@@ -50,52 +50,70 @@ tr.back td{background:var(--head)}`;
     return true;
   }
 
+  const more = new Set();   // divisions showing all their backups
   function render() {
     if (!ensure()) return;
     const D = T.data.D, w = root.querySelector('.wrap');
     w.classList.toggle('dark', document.documentElement.classList.contains('dark'));
-    const ranks = F().ranksOf(D), job = T.jobs.get();
+    const job = T.jobs.get(), busy = !!(job && !job.done && !job.error);
     const divs = F().plan(D).filter(x => x.finals && x.finals.tid === D.tid);
     if (D.qual.status !== 'completed') {
       w.querySelector('.embed').innerHTML = `<div class="card"><div class="cb"><b>Finals check-in</b> opens here once the qualifying (${T.esc(D.qual.name)}) is completed.</div></div>`;
       return;
     }
-    const busy = job && !job.done && !job.error;
-    let h = `<h2>Finals check-in</h2><div class="sub">Who made each finals, in seed order. Tick a player when they check in: they're added to that finals tournament as <b>Active</b>. Untick to deactivate. Backups can be ticked in place of a no-show; they take the lowest seed.${busy ? ' <b>Updating Matchplay…</b>' : pending.size ? ` <b>${pending.size} change${pending.size === 1 ? '' : 's'} waiting…</b> <button class="link" data-act="now">Apply now</button>` : ''}</div>`;
+    // players the running task is changing (shown as "Checking in…" until Matchplay has them)
+    const inJob = new Map();
+    if (busy) for (const st of job.steps.slice(job.i)) for (const id of (st.args && st.args.ids) || []) inJob.set(id, st.op === 'deactivate' ? 'off' : 'on');
+    let h = `<h2>Finals check-in</h2><div class="sub">Tick a player when they check in: they're added to this finals as <b>Active</b>. Untick to take them out. Backups go in place of a no-show.${pending.size ? ` <button class="link" data-act="now">Apply now</button>` : ''}</div>`;
     for (const x of divs) {
       const f = x.finals, started = f && f.t && f.t.status !== 'planned';
       const fp = x.inFinals, inN = Object.values(fp).filter(p => (p.tournamentPlayer || {}).status === 'active').length;
       const row = (r, label, isBackup) => {
-        const p = fp[r.playerId], active = p && (p.tournamentPlayer || {}).status === 'active', pend = pending.get(r.playerId);
-        const on = pend ? pend.on : !!active;
-        const seed = p && p.tournamentPlayer && p.tournamentPlayer.seed != null ? p.tournamentPlayer.seed : null;
-        const state = pend ? '<span class="badge b-amber">Saving…</span>' : active ? '<span class="badge b-green">Checked in</span>' : p ? '<span class="badge b-gray">Inactive</span>' : '<span class="badge b-gray">Not checked in</span>';
+        const p = fp[r.playerId], active = p && (p.tournamentPlayer || {}).status === 'active';
+        const pend = pending.get(r.playerId), working = inJob.get(r.playerId);
+        const want = pend ? pend.on : working ? working === 'on' : !!active;
+        const state = pend || working ? `<span class="badge b-amber">${want ? 'Checking in…' : 'Taking out…'}</span>`
+          : active ? '<span class="badge b-green">Checked in</span>' : '<span class="badge b-gray">Not checked in</span>';
         const from = isBackup && r.from ? ` <span class="small">(in ${r.from.letter})</span>` : '';
-        return `<tr class="${pend ? 'pend' : isBackup ? 'back' : ''}"><td><input class="ck" type="checkbox" data-p="${r.playerId}" data-div="${x.i}" ${on ? 'checked' : ''} ${!f || started || busy ? 'disabled' : ''}></td>
-          <td class="small">${label}</td><td>${T.esc(r.p.name)}${from} ${F().labelsOf(r.p).map(l => `<span class="badge b-rose" style="padding:0 6px">${T.esc(l)}</span>`).join(' ')}</td>
-          <td class="num small">${T.ord(r.position)}</td><td class="num small">${ranks[r.playerId] || '–'}</td><td>${state}</td></tr>`;
+        return `<tr class="${pend || working ? 'pend' : isBackup ? 'back' : ''}"><td><input class="ck" type="checkbox" data-p="${r.playerId}" data-div="${x.i}" ${want ? 'checked' : ''} ${!f || started || working ? 'disabled' : ''}></td>
+          <td class="small">${label}</td><td>${T.esc(r.p.name)}${from}</td><td>${state}</td></tr>`;
       };
       const extras = x.finalsPlayers.filter(p => !x.picks.some(r => r.playerId === p.playerId) && !x.backups.some(r => r.playerId === p.playerId));
+      const showAll = more.has(x.i), bks = showAll ? x.backups : x.backups.slice(0, 3);
+      const seedNote = f && f.t && f.t.seeding && f.t.seeding !== 'manual' ? `<div class="small" style="padding:6px 12px">Seeding is ${T.esc(f.t.seeding)} in this finals: seeds aren't set from here.</div>` : '';
       h += `<div class="card"><div class="ch" style="border-left:4px solid ${(T.panel.cutColor(x.color))[2]}"><span class="h">${x.letter} Finals · top ${x.size}${x.i ? ` (${x.letter}-eligible)` : ''}</span>
           ${f ? `<span class="badge ${inN >= x.size ? 'b-green' : 'b-amber'}">${inN}/${x.size} checked in</span>` : '<span class="badge b-amber">No playoff linked</span>'}${started ? '<span class="badge b-green">Started</span>' : ''}</div>
         ${f ? '' : `<div class="cb"><div class="callout warn">Create the ${x.letter} playoff: Overview → More… → Manage playoffs → Create playoffs (same order as the cut lines).</div></div>`}
-        <table><tr><th style="width:36px">In</th><th>Seed</th><th>Player</th><th class="num">Qual</th><th class="num">IFPA</th><th>Status</th></tr>
+        <table><tr><th style="width:36px">In</th><th style="width:60px">Seed</th><th>Name</th><th>Status</th></tr>
         ${x.picks.map((r, i) => row(r, 'S' + (i + 1), false)).join('')}
         ${extras.map(p => { const r = T.finals.order(D).find(q => q.playerId === p.playerId); return r ? row(r, 'Added', true) : ''; }).join('')}
-        ${x.backups.length ? `<tr><th colspan="6">Backups</th></tr>${x.backups.map((r, i) => row(r, 'B' + (i + 1), true)).join('')}` : ''}
+        ${x.backups.length ? `<tr><th colspan="4">Backups</th></tr>${bks.map((r, i) => row(r, 'B' + (i + 1), true)).join('')}` : ''}
         </table>
+        ${x.backups.length > 3 ? `<div style="padding:6px 12px"><button class="link" data-act="more" data-div="${x.i}">${showAll ? 'Show less' : `Show more (${x.backups.length - 3})`}</button></div>` : ''}
+        ${seedNote}
         ${inN > x.size ? `<div class="cb"><div class="callout warn">${inN} checked in for ${x.size} spots - untick someone.</div></div>` : ''}</div>`;
     }
-    w.querySelector('.embed').innerHTML = h;
+    const e = w.querySelector('.embed'); if (e.dataset.h !== h) { e.dataset.h = h; e.innerHTML = h; }
   }
 
   function onChange(e) {
     const cb = e.target; if (!cb.dataset.p) return;
-    pending.set(+cb.dataset.p, { div: +cb.dataset.div, on: cb.checked });
-    clearTimeout(timer); timer = setTimeout(apply, 3000);
+    const id = +cb.dataset.p, div = +cb.dataset.div, D = T.data.D;
+    // already checked in to another (lower) division? moving them takes them out there
+    if (cb.checked) {
+      const other = F().plan(D).find(o => o.i !== div && o.finals && o.inFinals[id] && (o.inFinals[id].tournamentPlayer || {}).status === 'active');
+      const here = F().plan(D).find(o => o.i === div);
+      if (other && !confirm(`${nameOf(D, id)} is checked in to ${other.letter}. Move them to ${here ? here.letter : 'this'} finals? They'll be taken out of ${other.letter}.`)) { cb.checked = false; return; }
+    }
+    pending.set(id, { div, on: cb.checked });
+    clearTimeout(timer); timer = setTimeout(apply, 1000);   // a quick second tick joins the same update
     render();
   }
-  function onClick(e) { const a = e.target.closest('[data-act]'); if (a && a.dataset.act === 'now') { clearTimeout(timer); apply(); } }
+  function onClick(e) {
+    const a = e.target.closest('[data-act]'); if (!a) return;
+    if (a.dataset.act === 'now') { clearTimeout(timer); apply(); }
+    if (a.dataset.act === 'more') { const i = +a.dataset.div; if (more.has(i)) more.delete(i); else more.add(i); render(); }
+  }
 
   // build one job: per finals tournament add / activate / deactivate, fix seeds, then come back here
   async function apply() {
@@ -123,7 +141,8 @@ tr.back td{background:var(--head)}`;
       const inAfter = new Set([...Object.keys(x.inFinals).map(Number), ...add]);
       const names = x.picks.filter(r => inAfter.has(r.playerId)).map(r => r.p.name)
         .concat(T.finals.order(D).filter(r => inAfter.has(r.playerId) && !x.picks.some(q => q.playerId === r.playerId)).map(r => r.p.name));
-      if (add.length && names.length > 1) steps.push({ tid, page: 'players', op: 'seeds', args: { names }, label: `${x.letter}: seeds in qualifying order` });
+      // only when this finals uses manual seeding (otherwise Matchplay has no "Update seeds")
+      if (add.length && names.length > 1 && x.finals.t && x.finals.t.seeding === 'manual') steps.push({ tid, page: 'players', op: 'seeds', args: { names }, label: `${x.letter}: seeds in qualifying order` });
     }
     if (!steps.length) { render(); return; }
     steps.push({ tid: D.tid, page: 'players', op: 'noop', label: 'Back to this Players tab' });

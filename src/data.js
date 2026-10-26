@@ -91,7 +91,8 @@ TDP.data = (() => {
         D.standings = arr(unwrap(await api.get(`/tournaments/${D.qual.tournamentId}/standings`, force ? 0 : 29e3)));   // force = fresh (tie just resolved)
         lastStand = now;
       }
-      D.error = null;
+      D.error = null; D.cached = false;
+      saveCache();
     } catch (e) {
       D.error = T.apiErrorText(e);
     } finally {
@@ -104,6 +105,31 @@ TDP.data = (() => {
     return !!(document.querySelector(`a[href="/tournaments/${D.tid}/edit"]`) || T.findBtn(document, /^(Start next round|Start tournament|Complete tournament|Add players)$/));
   }
 
+  // the worker frame: just which tournament it's on (tasks refresh what they need themselves)
+  async function useTournament(tid) {
+    if (D.tid === tid) return;
+    Object.assign(D, { tid, t: null, isTD: null, qual: null, finals: [], rounds: [], games: [], standings: [], error: null });
+    await T.loadT(tid); if (T.cats) await T.cats.load();
+  }
+
+  // last data seen for each tournament, so a reload draws everything straight away (then it's refreshed)
+  const CACHE_KEEP = 6;
+  let cacheAt = 0;
+  async function saveCache() {
+    if (!D.tid || !D.t || !D.isTD || Date.now() - cacheAt < 20000) return;
+    cacheAt = Date.now();
+    const idx = (await T.store.get('cacheIdx', [])).filter(x => x !== D.tid); idx.unshift(D.tid);
+    for (const old of idx.splice(CACHE_KEEP)) await T.store.del('cache:' + old);
+    await T.store.set('cacheIdx', idx);
+    await T.store.set('cache:' + D.tid, { at: Date.now(), me: D.me, t: D.t, qual: D.qual, finals: D.finals, rounds: D.rounds, games: D.games, standings: D.standings });
+  }
+  async function loadCache(tid) {
+    const c = await T.store.get('cache:' + tid, null);
+    if (!c || !c.t || Date.now() - c.at > 7 * 864e5) return false;
+    Object.assign(D, { me: c.me || D.me, t: c.t, qual: c.qual, finals: c.finals || [], rounds: c.rounds || [], games: c.games || [], standings: c.standings || [], isTD: true, cached: true });
+    return true;
+  }
+
   async function setTournament(tid) {
     if (D.tid === tid) return;
     stop();
@@ -113,6 +139,7 @@ TDP.data = (() => {
     if (T.cats) await T.cats.load();
     Object.keys(T.timing.fullSeen).forEach(k => delete T.timing.fullSeen[k]);
     Object.assign(T.timing.fullSeen, st.fullSeen || {});
+    if (tid && await loadCache(tid)) emit();   // draw from the saved copy at once
     if (tid) { await refresh(true); start(); }
     emit();
   }
@@ -135,5 +162,5 @@ TDP.data = (() => {
     return { round: r, active, pending, partial, total: gs.length, done: gs.filter(T.timing.doneish).length };
   }
 
-  return { D, refresh, setTournament, stop, on: f => listeners.add(f), playerMap, arenaMap, currentRound, latestRound, counts, loadTournament, unwrap, arr };
+  return { D, refresh, setTournament, useTournament, stop, on: f => listeners.add(f), playerMap, arenaMap, currentRound, latestRound, counts, loadTournament, unwrap, arr };
 })();

@@ -37,14 +37,14 @@ TDP.inpage = (() => {
   // short list: the reasons live in the tiebreaker window
   const tieCard = (ties, D, link) => {
     const other = ties.other || [];
-    if (!ties.length && !other.length) return '';
+    if (!ties.length) return '';
     const rows = ties.map(t => {
       const c = colorOf(t, D), key = T.ties.keyOf(t), rec = tieRec(D, t);
       const kinds = [...new Set([t.kind, ...(t.reasons || []).map(r => /bye/.test(r) ? 'bye' : /picks games/.test(r) ? 'pick' : null)].filter(Boolean).map(k => KIND[k]))].join(' + ');
       const btn = rec.status === 'playing' ? `<button class="btn sm" data-act="tb" data-key="${key}">Enter results · ${T.esc(rec.game || '')}</button>` : `<button class="btn sm sec" data-act="tb" data-key="${key}">Resolve</button>`;
       return `<div class="tie gap" style="background:${c[0]};color:${c[1]};border-left:4px solid ${c[2]};align-items:center"><div class="flex1"><b>Positions ${t.pos}–${t.pos + (t.span || t.players.length) - 1}</b> · ${T.esc(kinds)} <span class="small">(${T.esc(t.players.map(r => r.p ? r.p.name : r.playerId).join(', '))})</span></div>${btn}</div>`;
     }).join('');
-    const others = other.length ? `<details class="small mt"><summary>Other ties (don't change the finals): ${other.length}</summary>${other.map(o => `<div>Positions ${o.pos}–${o.pos + o.players.length - 1}: ${T.esc(o.players.map(r => r.p ? r.p.name : r.playerId).join(', '))}</div>`).join('')}</details>` : '';
+    const others = '';   // ties that don't change the finals: plain "tied" text on the eligibility table instead
     return `<div class="card" style="margin:16px 0"><div class="ch"><span class="h">Ties to break before finals</span>${ties.length ? `<span class="badge b-rose">${ties.length} unresolved</span>` : '<span class="badge b-green">none that matter</span>'}${link ? `<a class="btn sm" href="/tournaments/${D.tid}/resolve-ties">Resolve ties page</a>` : ''}</div><div class="cb">${rows}${others}</div></div>`;
   };
   // clicks inside our shadow blocks: open the tiebreaker window
@@ -54,8 +54,10 @@ TDP.inpage = (() => {
   function eligTable(D) {
     const divs = T.finals.plan(D), ranks = T.finals.ranksOf(D), rows = T.finals.order(D);
     const ties = qualTies(D), tieOf = new Map(); ties.forEach(t => t.players.forEach(r => { if (!tieOf.has(r.playerId)) tieOf.set(r.playerId, t); }));
+    const otherIds = new Set((ties.other || []).flatMap(o => o.players.map(r => r.playerId)));
     const tag = r => {   // clickable "Unresolved tie" tag: opens the tiebreaker window
-      const t = tieOf.get(r.playerId); if (!t) return '';
+      const t = tieOf.get(r.playerId);
+      if (!t) return otherIds.has(r.playerId) ? ' <span class="small" title="Tied, but it doesn\'t change the finals - nothing to resolve">tied</span>' : '';
       const c = colorOf(t, D), rec = tieRec(D, t), key = T.ties.keyOf(t);
       const label = rec.status === 'playing' ? `Tiebreaker in progress: ${rec.game}` : 'Unresolved tie';
       return ` <button data-act="tb" data-key="${key}" title="${T.esc(t.why || '')} - click for how to resolve it" style="font:600 11px ui-sans-serif,system-ui,sans-serif;padding:1px 8px;border-radius:9999px;background:#fff;color:${c[1]};border:1px solid ${c[2]};white-space:nowrap;cursor:pointer">${T.esc(label)}</button>`;
@@ -90,6 +92,7 @@ TDP.inpage = (() => {
     } else block('tdp-elig', null);
     if (!table) return;
     const dec = T.ties.decimals(D);
+    hideTiesColumn(table);
     for (const tr of table.querySelectorAll('tr')) {
       const a = tr.querySelector('a[href*="/players/"]'); if (!a) continue;
       const id = Number((a.getAttribute('href').match(/\/players\/(\d+)/) || [])[1]);
@@ -97,12 +100,23 @@ TDP.inpage = (() => {
       const ptsCell = [...tr.children].find(td => /pts\.?$/.test(T.txt(td)) || td.dataset.tdpPts);
       if (ptsCell) {
         const dv = dec.get(id);
-        if (dv) { if (!ptsCell.dataset.tdpPts) ptsCell.dataset.tdpPts = T.txt(ptsCell); const want = `${dv.pts} pts.`; if (T.txt(ptsCell) !== want) ptsCell.textContent = want; ptsCell.title = dv.title; }
-        else if (ptsCell.dataset.tdpPts) { ptsCell.textContent = ptsCell.dataset.tdpPts; delete ptsCell.dataset.tdpPts; ptsCell.title = ''; }
+        if (dv) {
+          if (!ptsCell.dataset.tdpPts) ptsCell.dataset.tdpPts = T.txt(ptsCell);
+          const want = `${dv.pts} pts.`; if (T.txt(ptsCell) !== want) ptsCell.textContent = want;
+          ptsCell.title = dv.title + ' - click for details'; ptsCell.style.cursor = 'pointer'; ptsCell.dataset.tdpPid = id;
+        } else if (ptsCell.dataset.tdpPts) { ptsCell.textContent = ptsCell.dataset.tdpPts; delete ptsCell.dataset.tdpPts; delete ptsCell.dataset.tdpPid; ptsCell.title = ''; ptsCell.style.cursor = ''; }
       }
       // tie tags live on the eligibility table now: clear any left on Matchplay's own rows
       if (tr.hasAttribute(MARK)) { tr.style.background = ''; tr.style.boxShadow = ''; tr.removeAttribute(MARK); tr.querySelectorAll('[data-tdp=note]').forEach(n => n.remove()); }
     }
+  }
+
+  // Matchplay's "Ties" column only shows "-" or "Manual"; the decimals already show resolved ties: hide it
+  function hideTiesColumn(table) {
+    const hr = table.querySelector('thead tr') || table.querySelector('tr'); if (!hr) return;
+    const head = [...hr.children], i = head.findIndex(th => /^ties$/i.test(T.txt(th)));
+    if (i < 0) return;
+    for (const tr of table.querySelectorAll('tr')) { const c = tr.children[i]; if (c && c.style.display !== 'none') c.style.display = 'none'; }
   }
 
   // ---------- Resolve ties page ----------
@@ -160,8 +174,8 @@ TDP.inpage = (() => {
       const nb = (D.t.banks || []).filter(b => b.status !== 'inactive').length;
       bankRow = `<div class="cb gap" style="border-top:1px solid var(--line);flex-wrap:wrap;align-items:center">
         <button class="btn sm" data-act="assign" ${need && nb && !T.jobs.active() ? '' : 'disabled'}>Assign banks</button>
-        ${st.autoBanks ? `<span class="small">Banks: rebuilt and assigned automatically every round (<a href="/tournaments/${D.tid}/banks" style="color:var(--pri)">set on the Banks tab</a>)</span>` : `<label class="gap" title="Each new round, assign your existing banks automatically"><input type="checkbox" data-act="autoAssign" ${st.autoAssign ? 'checked' : ''}> <span class="lab">Automatic</span></label>`}
-        <span class="small flex1">${!nb ? 'No banks yet - make them on the Banks tab.' : need ? `${ctx.groups.length} group${ctx.groups.length === 1 ? '' : 's'} in ${T.esc(ctx.round.name || 'this round')} need a bank${st.autoAssign ? ' - assigning automatically' : ''}.` : sum.length ? sum.map(x => `Group ${x.group} → ${T.esc(x.bank)} · ${x.fresh} of ${x.total} new`).join(' &nbsp;·&nbsp; ') : 'Every group has its games.'}</span>
+        <label class="gap" title="Each new round, give every group a bank automatically${st.autoBanks ? ' (after the banks are rebuilt - Banks tab)' : ''}"><input type="checkbox" data-act="autoAssign" ${st.autoAssign ? 'checked' : ''}> <span class="lab">Automatic</span></label>
+        <span class="small flex1">${!nb ? 'No banks yet - make them on the Banks tab.' : need ? `${ctx.groups.length} group${ctx.groups.length === 1 ? '' : 's'} in ${T.esc(ctx.round.name || 'this round')} need a bank${st.autoAssign ? ' - assigning automatically' : ''}.` : sum.length ? `All ${sum.length} group${sum.length === 1 ? ' has' : 's have'} banks.` : 'Every group has its games.'}</span>
       </div>`;
     }
     let testRow = '';
@@ -185,12 +199,7 @@ TDP.inpage = (() => {
       if (e.type === 'click' && el.closest && el.closest('[data-act=fill]')) return T.bankbar.fillConfirm(T.data.D);
       if (e.type !== 'change') return;
       if (el.dataset.act === 'auto') { await T.saveT(D.tid, { auto: el.checked }); autoState = ''; render(); T.panel.render(true); }
-      if (el.dataset.act === 'autoAssign') {
-        const was = (T.tstate[D.tid] || {}).autoBanks;
-        await T.saveT(D.tid, el.checked ? { autoAssign: true, autoBanks: false } : { autoAssign: false });   // only one automatic bank option
-        if (el.checked && was) T.panel.say('Turned off "Rebuild banks every round" on the Banks tab - your existing banks will be assigned each round.', 'ok');
-        render();
-      }
+      if (el.dataset.act === 'autoAssign') { await T.saveT(D.tid, { autoAssign: el.checked }); render(); }
       if (el.dataset.act === 'autoFill') { await T.saveT(D.tid, { autoFill: el.checked }); render(); }
     });
     // finals: outline groups that are tied at the advance line / in the final
@@ -215,6 +224,7 @@ TDP.inpage = (() => {
   }
   let lastPage = null;
   function render() {
+    if (T.isFrame) return;   // the hidden worker frame shows nothing
     const D = T.data.D;
     const page0 = T.routePage();
     if (page0 !== lastPage) { lastPage = page0; if ((page0 === 'standings' || page0 === 'resolve-ties') && D.qual) T.data.refresh(true); }
@@ -234,11 +244,10 @@ TDP.inpage = (() => {
   setInterval(render, 1500);   // Matchplay re-renders its pages; put our bits back
   // Matchplay's "Manual" button in the standings Ties column: show our resolved-tie window instead of its info box
   document.addEventListener('click', e => {
-    const b = e.target.closest && e.target.closest('main table button');
-    if (!b || T.txt(b) !== 'Manual' || T.routePage() !== 'standings' || !T.data.D.isTD) return;
-    const a = b.closest('tr') && b.closest('tr').querySelector('a[href*="/players/"]'); if (!a) return;
-    e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
-    T.ties.openResolved(T.data.D, Number(a.getAttribute('href').match(/\/players\/(\d+)/)[1]));
+    const c = e.target.closest && e.target.closest('main table [data-tdp-pid]');
+    if (!c || T.routePage() !== 'standings' || !T.data.D.isTD) return;
+    e.preventDefault(); e.stopPropagation();
+    T.ties.openResolved(T.data.D, Number(c.dataset.tdpPid));
   }, true);
   return { render, block, setAutoState: s => { autoState = s; render(); } };
 })();

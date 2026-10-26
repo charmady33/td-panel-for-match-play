@@ -32,19 +32,14 @@ TDP.bankbar = (() => {
       <span class="small" title="From &quot;Matches each round&quot; on Matchplay's Overview">${size} game${size === 1 ? '' : 's'} per bank (from Matchplay)</span>
       ${has ? `<button class="btn" data-act="refresh">Refresh banks</button><button class="btn sec" data-act="add">Add banks</button>` : `<button class="btn" data-act="generate">Generate banks</button>`}
       <button class="btn sec" data-act="settings" title="Games and time sources">⚙ Settings</button>
-      <label class="gap" title="Each new round: new banks (different from earlier rounds), then each group gets one. With auto close/start on, the round starts unpublished, gets its banks, then is published."><input type="checkbox" data-f="autoBanks" ${(st(D).autoBanks ? 'checked' : '')}> <span class="lab">Rebuild banks every round</span></label>${st(D).autoBanks ? '<span class="small">- includes assigning a bank to each group</span>' : ''}
+      <label class="gap" title="Each new round gets new banks (different from earlier rounds). Assigning them to groups is the Matches tab's Assign banks · Automatic."><input type="checkbox" data-f="autoBanks" ${(st(D).autoBanks ? 'checked' : '')}> <span class="lab">Rebuild banks every round</span></label>
       <span class="small flex1" style="text-align:right">${has ? `${has} bank${has === 1 ? '' : 's'} in Matchplay` : 'No banks yet'}</span>
     </div></div>`;
     T.inpage.block('tdp-bankbar', a.el, a.where, html, onBar);
   }
   async function onBar(e) {
     const D = T.data.D; if (!D || !D.t) return;
-    if (e.type === 'change' && e.target.dataset && e.target.dataset.f === 'autoBanks') {
-      const on = e.target.checked, was = st(D).autoAssign;
-      await T.saveT(D.tid, on ? { autoBanks: true, autoAssign: false } : { autoBanks: false });   // only one automatic bank option
-      if (on && was) T.panel.say('Turned off "Assign banks · Automatic" on the Matches tab - Rebuild banks every round assigns them now.', 'ok');
-      return;
-    }
+    if (e.type === 'change' && e.target.dataset && e.target.dataset.f === 'autoBanks') { await T.saveT(D.tid, { autoBanks: e.target.checked }); return; }
     if (e.type !== 'click') return;
     const a = e.target.closest('[data-act]'); if (!a) return;
     const act = a.dataset.act;

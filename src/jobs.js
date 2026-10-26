@@ -1,7 +1,8 @@
 // Multi-step jobs that click through Matchplay's UI, possibly across pages/tournaments.
 // A job survives page reloads (saved in storage) and resumes when its next page is open.
-// A job runs in the tab that started it ("owner"), behind a frozen copy of the screen (busy.js); other tabs of
-// the tournament just show a banner. When it's done, the owner tab goes back to the page it started on.
+// A job belongs to the tab that started it ("owner"). It runs in that tab's hidden worker frame (worker.js), so the
+// page doesn't move; if the frame can't run it, the tab runs it itself behind a frozen copy of the screen (busy.js).
+// Other tabs of the tournament just show a banner. When it's done, the owner tab shows the updated page.
 var TDP = window.TDP || (window.TDP = {});
 
 TDP.jobs = (() => {
@@ -9,9 +10,14 @@ TDP.jobs = (() => {
   let job = null, running = false;
   const listeners = new Set();
   const emit = () => listeners.forEach(f => { try { f(job); } catch (e) { /* ignore */ } });
-  const save = async () => { await T.store.set('job', job); emit(); };
+  const save = async () => { if (job && T.isFrame) job.beat = Date.now(); await T.store.set('job', job); emit(); };
   const active = () => !!(job && !job.done && !job.error);
   const mine = () => !!(job && job.owner === T.tabId);
+  // where the steps run: the worker frame, or the owner tab itself (backup)
+  const runsHere = () => mine() && ((job.runner === 'frame') === !!T.isFrame);
+  const ORIGIN = 'https://app.matchplay.events';
+  const stepUrl = s => `${location.origin || ORIGIN}/tournaments/${s.tid}/${s.page === 'overview' ? '' : s.page}`;
+  const canFrame = () => !T.isFrame && !T.settings.noWorkerFrame && !!T.worker;
 
   // progress inside one step (each game, bank, group…): job.sub = { done, total, text }; saved at most ~4x a second
   let lastSub = 0;
@@ -27,13 +33,25 @@ TDP.jobs = (() => {
   async function init() {
     const j = await T.store.get('job', null);
     if (j && j.worker && !j.done && !j.error) { j.error = 'Interrupted (it was running in the old background tab). Retry to run it here.'; j.worker = false; await T.store.set('job', j); }
-    if (!T.hasChrome) return;
-    chrome.storage.onChanged.addListener((ch, area) => {   // eslint-disable-line no-undef
-      if (area !== 'local' || !ch.job) return;
-      const nv = ch.job.newValue || null;
+    job = j;   // known straight away (so a mid-task reload stays covered)
+    const onNew = nv => {
       if (running) { if (!nv || !job || nv.startedAt !== job.startedAt) { job = nv; emit(); } return; }   // ignore echoes of our own saves
-      job = nv; emit();
-    });
+      job = nv; emit(); watchFrame();
+    };
+    if (T.hasChrome) chrome.storage.onChanged.addListener((ch, area) => { if (area === 'local' && ch.job) onNew(ch.job.newValue || null); });   // eslint-disable-line no-undef
+    else addEventListener('storage', e => { if (e.key === 'tdp:job') { try { onNew(JSON.parse(e.newValue)); } catch (x) { onNew(null); } } });   // test pages
+    if (!T.isFrame) setInterval(watchFrame, 4000);
+  }
+
+  // the owner tab keeps an eye on its worker frame: finish up when it's done, take over if it stops responding
+  let finishing = false;
+  async function watchFrame() {
+    if (T.isFrame || !job || !mine() || job.runner !== 'frame' || job.done || job.error) return;
+    if (job.stepsDone) { if (!finishing) { finishing = true; try { await finish(); } finally { finishing = false; } } return; }
+    if (!T.worker.isOpen()) { T.worker.open(stepUrl(job.steps[Math.min(job.i, job.steps.length - 1)])); job.beat = Date.now(); await save(); return; }   // this tab reloaded mid-task
+    if (job.beat && Date.now() - job.beat > 25000) {   // the frame is stuck: run it here instead, behind the frozen screen
+      T.worker.close(); job.runner = 'top'; job.log.push('Worker frame not responding - finishing in this tab.'); T.busy.freeze(); await save(); run();
+    }
   }
 
   // step: { tid, page: 'players'|'banks'|'matches'|..., op, args, label }
@@ -41,15 +59,17 @@ TDP.jobs = (() => {
   const afterHandlers = {};
   async function start(title, steps, opts = {}) {
     if (job && !job.done && !job.error) throw new Error('Another task is still running.');
-    T.busy.freeze();   // snapshot what's on screen before anything moves
-    job = { title, steps, i: 0, log: [], startedAt: Date.now(), owner: T.tabId, returnTo: location.pathname, scroll: [scrollX, scrollY, (document.querySelector('main') || {}).scrollTop || 0], after: opts.after || null };
+    const frame = canFrame();
+    if (!frame) T.busy.freeze();   // backup mode: snapshot what's on screen before anything moves
+    job = { title, steps, i: 0, log: [], startedAt: Date.now(), owner: T.tabId, runner: frame ? 'frame' : 'top', beat: Date.now(), returnTo: location.pathname, scroll: [scrollX, scrollY, (document.querySelector('main') || {}).scrollTop || 0], after: opts.after || null };
     await save();
-    run();
+    if (frame) T.worker.open(stepUrl(steps[0])); else run();
   }
-  async function cancel() { job = null; await T.store.del('job'); emit(); }
+  async function cancel() { job = null; await T.store.del('job'); emit(); if (T.worker && !T.isFrame) T.worker.close(); }
   async function resume() {
     job = await T.store.get('job', null); emit();
-    if (active() && mine()) run();
+    if (active() && runsHere()) run();
+    else watchFrame();
   }
 
   const ops = {
@@ -136,7 +156,7 @@ TDP.jobs = (() => {
   }
 
   async function run() {
-    if (running || !job) return;
+    if (running || !job || !runsHere()) return;
     running = true;
     try {
       while (job && job.i < job.steps.length) {
@@ -159,6 +179,7 @@ TDP.jobs = (() => {
         if (res) job.log.push('  ' + res);
         job.i++; job.sub = null; await save();
       }
+      if (job && job.i >= job.steps.length && T.isFrame) { job.stepsDone = true; await save(); return; }   // the owner tab finishes up
       if (job && job.i >= job.steps.length) {
         // back to the page the TD was on
         if (job.returnTo && location.pathname !== job.returnTo) {
@@ -179,20 +200,40 @@ TDP.jobs = (() => {
         if (job.scroll) { scrollTo(job.scroll[0], job.scroll[1]); const m = document.querySelector('main'); if (m && job.scroll[2]) m.scrollTop = job.scroll[2]; }
         job.done = true; job.doneAt = Date.now(); job.log.push('Done.'); await save();
         T.data.refresh(true);
-        if (job.after && afterHandlers[job.after.what]) { const a = job.after; setTimeout(() => { try { afterHandlers[a.what](a); } catch (e) { T.warn('after', e); } }, 400); }
+        runAfter();
       }
     } catch (e) {
       if (job) { job.error = e.message || String(e); await save(); }
     } finally { running = false; }
   }
+  function runAfter() {
+    if (job && job.after && afterHandlers[job.after.what]) { const a = job.after; setTimeout(() => { try { afterHandlers[a.what](a); } catch (e) { T.warn('after', e); } }, 400); }
+  }
+  // the worker frame finished every step: show the TD the updated page (Matchplay's own Refresh button, or a reload)
+  async function finish() {
+    T.worker.close();
+    const changedHere = job.steps.some(st => st.tid === T.routeTid() && (st.page === T.routePage() || (st.page === 'overview' && T.routePage() === 'overview')));
+    job.done = true; job.doneAt = Date.now(); job.log.push('Done.');
+    if (changedHere) {
+      const rb = T.findBtn(document.querySelector('main') || document, /^Refresh$/);
+      if (!rb) { job.afterOnLoad = !!job.after; await save(); location.reload(); return; }
+      T.click(rb);
+    }
+    await save(); T.data.refresh(true); runAfter();
+  }
   async function retry() {
     if (!job) return;
-    job.error = null; job.owner = T.tabId; await save();   // retrying from another tab takes the task over
-    run();
+    job.error = null; job.owner = T.tabId; job.beat = Date.now();   // retrying from another tab takes the task over
+    if (canFrame()) { job.runner = 'frame'; await save(); T.worker.open(stepUrl(job.steps[Math.min(job.i, job.steps.length - 1)])); }
+    else { job.runner = 'top'; T.busy.freeze(); await save(); run(); }
+  }
+  // after a reload that finished a task: the window that started it opens again
+  async function afterLoad() {
+    if (job && job.done && job.afterOnLoad && mine() && !T.isFrame) { job.afterOnLoad = false; await save(); runAfter(); }
   }
 
   // 0..1 across the whole task (steps + progress inside the current step)
   const fraction = j => { j = j || job; if (!j) return 0; const n = j.steps.length, sub = j.sub && j.sub.total ? j.sub.done / j.sub.total : 0; return Math.min(1, (Math.min(j.i, n) + (j.i < n ? sub : 0)) / n); };
 
-  return { afterHandlers, init, start, cancel, resume, retry, active, mine, fraction, counter, running: () => running, get: () => job, on: f => listeners.add(f) };
+  return { afterLoad, runsHere, afterHandlers, init, start, cancel, resume, retry, active, mine, fraction, counter, running: () => running, get: () => job, on: f => listeners.add(f) };
 })();

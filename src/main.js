@@ -9,7 +9,17 @@ var TDP = window.TDP || (window.TDP = {});
   const tabId = Math.random().toString(36).slice(2);
 
   await T.jobs.init();
+
+  // ---------- inside the hidden worker frame: only run tasks, show nothing ----------
+  if (T.isFrame) {
+    let last = null;
+    const go = async () => { if (location.pathname === last) return; last = location.pathname; const tid = T.routeTid(); if (tid) await T.data.useTournament(tid); T.jobs.resume(); };
+    setInterval(go, 300); go();
+    return;
+  }
+
   T.busy.render();   // mid-task reload: cover the page straight away
+  T.jobs.afterLoad();
 
   // ---------- route watching (Matchplay is a single-page app) ----------
   let lastPath = null;
@@ -21,12 +31,19 @@ var TDP = window.TDP || (window.TDP = {});
     const tid = T.routeTid();
     if (!tid) { T.panel.unmount(); T.data.setTournament(null); return; }
     T.panel.mount(); T.panel.render(true);
+    T.jobs.resume();   // a task in progress carries on straight away (it doesn't need the tournament data first)
     await T.data.setTournament(tid);
     T.embed.render();
-    await T.jobs.resume();
   }
   setInterval(onRoute, 500);
   onRoute();
+
+  // draw our parts the moment Matchplay draws its page (not up to 1.5 s later)
+  let drawTimer = null;
+  new MutationObserver(() => {
+    if (drawTimer) return;
+    drawTimer = setTimeout(() => { drawTimer = null; if (T.data.D.t) { T.inpage.render(); T.embed.render(); } }, 60);
+  }).observe(document.body, { childList: true, subtree: true });
 
   // Matchplay's own toasts ("Tournament started", "Round started"…): reload details straight away
   let toastTimer = null;
@@ -81,14 +98,18 @@ var TDP = window.TDP || (window.TDP = {});
       const go = await T.panel.showCountdown(`All games approved in ${r.name}. Closing the round${last ? '' : ' and starting the next one'} in`, Math.max(3, T.settings.autoCountdown || 10));
       if (!go || !(T.tstate[tid] || {}).auto) return state('cancelled - will check again');
       const steps = [{ tid, page: 'matches', op: 'closeRound', label: `Closing ${r.name}` }];
-      const rebuild = (T.tstate[tid] || {}).autoBanks && /bank/i.test(D.t.arenaAssignment || '');
-      if (!last && rebuild) {
-        // banks rebuilt every round: new banks, then the round starts unpublished, gets its banks, then goes live
-        steps.push({ tid, page: 'banks', op: 'rebuildBanks', args: { tid }, label: 'Rebuilding banks for the next round' });
-        steps.push({ tid, page: 'matches', op: 'startNextRound', args: { publish: false }, label: 'Starting the next round (not published yet)' });
-        steps.push({ tid, page: 'matches', op: 'assignRound', args: { tid }, label: 'Assigning a bank to each group' });
-        steps.push({ tid, page: 'matches', op: 'publishRound', label: 'Publishing the round' });
-      } else if (!last) steps.push({ tid, page: 'matches', op: 'startNextRound', label: 'Starting the next round' });
+      const stt = T.tstate[tid] || {}, banksOn = /bank/i.test(D.t.arenaAssignment || '');
+      const rebuild = banksOn && stt.autoBanks, assign = banksOn && stt.autoAssign;
+      if (!last) {
+        // Rebuild (Banks tab) and Automatic assign (Matches tab) are separate; with assign on, the round starts
+        // unpublished, gets its banks, then goes live
+        if (rebuild) steps.push({ tid, page: 'banks', op: 'rebuildBanks', args: { tid }, label: 'Rebuilding banks for the next round' });
+        steps.push({ tid, page: 'matches', op: 'startNextRound', args: { publish: !assign }, label: assign ? 'Starting the next round (not published yet)' : 'Starting the next round' });
+        if (assign) {
+          steps.push({ tid, page: 'matches', op: 'assignRound', args: { tid }, label: 'Assigning a bank to each group' });
+          steps.push({ tid, page: 'matches', op: 'publishRound', label: 'Publishing the round' });
+        }
+      }
       await T.jobs.start(last ? `Close ${r.name}` : `Close ${r.name} & start next round`, steps);
       state(last ? `closing ${r.name} - that was the last round` : `closing ${r.name} and starting the next round`);
     } catch (e) { state('error: ' + (e.message || e)); }
@@ -99,7 +120,9 @@ var TDP = window.TDP || (window.TDP = {});
   let assignBusy = false;
   async function autoAssign() {
     const D = T.data.D, tid = D.tid, st = T.tstate[tid] || {};
-    if (!st.autoAssign || st.autoBanks || assignBusy || !D.t || !D.isTD || D.t.status !== 'started' || T.jobs.active()) return;
+    // with Rebuild on as well, the rebuild task assigns after rebuilding (one task, never two at once)
+    if (!st.autoAssign || assignBusy || !D.t || !D.isTD || D.t.status !== 'started' || T.jobs.active()) return;
+    if (st.autoBanks) { const c = T.bankplan.context(D); if (c.round && st.banksDoneRound !== c.round.roundId) return; }
     const ctx = T.bankplan.context(D);
     if (!ctx.round || !ctx.groups.length || st.assignDoneRound === ctx.round.roundId) return;
     if (!(await lock(tid + ':assign'))) return;
@@ -143,10 +166,9 @@ var TDP = window.TDP || (window.TDP = {});
     banksBusy = true;
     try {
       await T.saveT(tid, { banksDoneRound: ctx.round.roundId });   // once per round, even if the TD stops the task
-      await T.jobs.start(`Rebuild banks for ${ctx.round.name}`, [
-        { tid, page: 'banks', op: 'rebuildBanks', args: { tid }, label: 'Rebuilding banks' },
-        { tid, page: 'matches', op: 'assignRound', args: { tid }, label: 'Assigning a bank to each group' },
-      ]);
+      const steps = [{ tid, page: 'banks', op: 'rebuildBanks', args: { tid }, label: 'Rebuilding banks' }];
+      if (st.autoAssign) steps.push({ tid, page: 'matches', op: 'assignRound', args: { tid }, label: 'Assigning a bank to each group' });
+      await T.jobs.start(`Rebuild banks for ${ctx.round.name}`, steps);
     } catch (e) { T.panel.say('Rebuild banks: ' + (e.message || e), 'err'); }
     finally { banksBusy = false; }
   }

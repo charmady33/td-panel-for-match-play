@@ -90,16 +90,50 @@ TDP.busy = (() => {
     e.preventDefault(); e.stopPropagation();
   }, true);
 
+  // ---------- worker-frame mode: a small card in the corner, and only the area being changed is greyed ----------
+  let card = null;
+  function showCard(j) {
+    if (!card) {
+      card = document.createElement('div'); card.id = 'tdp-busy-card';
+      const r = card.attachShadow({ mode: 'open' });
+      r.innerHTML = `<style>${CARD_CSS}.tdpc-card{position:static;transform:none;width:300px;padding:12px 14px}</style><div class="w"></div>`;
+      r.addEventListener('click', onClick);
+      document.documentElement.appendChild(card);
+    }
+    const dark = document.documentElement.classList.contains('dark');
+    card.style.cssText = `position:fixed;bottom:16px;right:${panelW() + 16}px;z-index:2147482000`;
+    const pct = Math.max(4, Math.round(T.jobs.fraction(j) * 100));
+    const html = `<div class="${dark ? 'dark' : ''}"><div class="tdpc-card"><div class="tdpc-t"><span class="tdpc-sp"></span>Updating Matchplay…</div>
+      <div class="tdpc-s">${T.esc(j.title)}</div><div class="tdpc-s">${T.esc(stepText(j))}</div>
+      <div class="tdpc-pb"><i style="width:${pct}%"></i></div><div class="tdpc-s" style="margin:-4px 0 8px;text-align:right">${pct}%${T.esc(countText(j))}</div>
+      <div class="tdpc-row"><span class="tdpc-f">You can keep working.</span><button class="tdpc-b" data-act="show">Show me</button><button class="tdpc-b" data-act="stop">Stop</button></div></div></div>`;
+    const w = card.shadowRoot.querySelector('.w'); if (w.dataset.h !== html) { w.dataset.h = html; w.innerHTML = html; }
+  }
+  function hideCard() { if (card) { card.remove(); card = null; } }
+  const LOCK = 'data-tdp-lock';
+  function lockAreas(on) {
+    document.querySelectorAll(`[${LOCK}]`).forEach(el => { if (!on) { el.style.pointerEvents = ''; el.style.opacity = ''; el.removeAttribute(LOCK); } });
+    if (!on) return;
+    const main = document.querySelector('main'); if (!main) return;
+    const boxes = [...main.querySelectorAll('table, div.grid')].map(t => t.closest('div.shadow, div.overflow-hidden, div.rounded-lg') || t)
+      .filter(el => !el.closest('[id^="tdp-"]') && !el.querySelector('[id^="tdp-"]'));
+    for (const el of boxes) if (!el.hasAttribute(LOCK)) { el.setAttribute(LOCK, '1'); el.style.pointerEvents = 'none'; el.style.opacity = '.5'; }
+  }
+
   function render() {
+    if (T.isFrame) return;   // the worker frame shows nothing
     const j = T.jobs.get();
     const running = j && T.jobs.active();
-    if (running && T.jobs.mine()) showCover(j); else hideCover();
+    const own = running && T.jobs.mine();
+    if (own && j.runner !== 'frame') showCover(j); else hideCover();
+    if (own && j.runner === 'frame') { showCard(j); lockAreas(T.routeTid() && j.steps.some(s => s.tid === T.routeTid() && s.page === T.routePage())); }
+    else { hideCard(); lockAreas(false); }
     // banner: other tabs while running; this tab when done or stopped with an error
     const main = document.querySelector('main');
     const fresh = j && j.done && j.doneAt && Date.now() - j.doneAt < DONE_MS;
     const here = j && T.routeTid() && j.steps.some(s => s.tid === T.routeTid());
     let banner = '';
-    if (here && j.error) banner = `<div class="callout err gap" style="margin:8px 0;align-items:center"><span class="flex1"><b>Update stopped:</b> ${T.esc(j.title)} - ${T.esc(j.error)}</span><button class="btn sm" data-act="retry">Retry</button><button class="btn sm sec" data-act="stop">Stop</button></div>`;
+    if (here && j.error) banner = `<div class="callout err gap" style="margin:8px 0;align-items:center"><span class="flex1"><b>Update stopped:</b> ${T.esc(j.title)} - ${T.esc(j.error)}</span><button class="btn sm" data-act="retry">Retry</button>${T.worker && T.worker.isOpen() ? '<button class="btn sm sec" data-act="show">Show me</button>' : ''}<button class="btn sm sec" data-act="stop">Stop</button></div>`;
     else if (here && fresh) banner = `<div class="callout ok" style="margin:8px 0"><b>Updates done ✓</b> ${T.esc(j.title)}</div>`;
     else if (here && running && !T.jobs.mine()) banner = `<div class="callout gap" style="margin:8px 0;align-items:center"><span class="flex1"><b>Updating Matchplay in another tab:</b> ${T.esc(j.title)} - ${T.esc(stepText(j))} · ${Math.round(T.jobs.fraction(j) * 100)}%. Changes will show when it's done.</span><button class="btn sm sec" data-act="stop">Stop</button></div>`;
     const top = main ? (document.getElementById('tdp-tb-reminder') || [...main.children].find(e => !/^tdp-/.test(e.id || ''))) : null;
@@ -109,6 +143,7 @@ TDP.busy = (() => {
   async function onClick(e) {
     const a = e.target.closest && e.target.closest('[data-act]'); if (!a) return;
     if (a.dataset.act === 'retry') await T.jobs.retry();
+    if (a.dataset.act === 'show') { T.worker.show(); return; }
     if (a.dataset.act === 'stop') await T.jobs.cancel();
     render();
   }

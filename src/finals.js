@@ -46,24 +46,27 @@ TDP.finals = (() => {
   }
 
   // who goes where if every qualifier shows up, plus 3 backups per division
+  const isActive = p => !!p && (!p.tournamentPlayer || p.tournamentPlayer.status === 'active');
   function plan(D) {
     const divs = divisions(D), ranks = ranksOf(D), rows = order(D), taken = new Set();
-    for (const d of divs) {
-      d.picks = [];
-      for (const r of rows) { if (d.picks.length >= d.size) break; if (taken.has(r.playerId) || ineligible(r.p, d, ranks)) continue; d.picks.push(r); taken.add(r.playerId); }
-    }
-    // in each finals tournament right now
+    // who's in each finals tournament right now (checked in = active there)
     for (const d of divs) {
       d.inFinals = {}; d.finalsPlayers = [];
       if (d.finals && d.finals.t) for (const p of d.finals.t.players || []) { d.inFinals[p.playerId] = p; d.finalsPlayers.push(p); }
+    }
+    // a player checked in to a higher division (a backup who moved up) leaves the lower ones: everyone below moves up
+    const upAbove = (d, id) => divs.some(o => o.i < d.i && isActive(o.inFinals[id]));
+    for (const d of divs) {
+      d.picks = [];
+      for (const r of rows) { if (d.picks.length >= d.size) break; if (taken.has(r.playerId) || ineligible(r.p, d, ranks) || upAbove(d, r.playerId)) continue; d.picks.push(r); taken.add(r.playerId); }
     }
     for (const d of divs) {
       // backups: next qualifiers (eligible here) not already in this division - may come from a lower division
       d.backups = [];
       const inThis = id => d.picks.some(x => x.playerId === id) || d.inFinals[id];
-      const higher = id => divs.some(o => o.i < d.i && (o.inFinals[id] || o.picks.some(x => x.playerId === id)));
+      const higher = id => divs.some(o => o.i < d.i && (isActive(o.inFinals[id]) || o.picks.some(x => x.playerId === id)));
       for (const r of rows) {
-        if (d.backups.length >= 3) break;
+        if (d.backups.length >= 12) break;   // the check-in list shows 3, "Show more" shows the rest
         if (inThis(r.playerId) || higher(r.playerId) || ineligible(r.p, d, ranks)) continue;
         d.backups.push({ ...r, from: divs.find(o => o.i > d.i && (o.inFinals[r.playerId] || o.picks.some(x => x.playerId === r.playerId))) || null });
       }
