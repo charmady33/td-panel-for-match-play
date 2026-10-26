@@ -1,7 +1,7 @@
 // Matchplay TD Panel - shared helpers. Every file adds to the one global namespace TDP.
 /* global chrome */
 var TDP = window.TDP || (window.TDP = {});
-TDP.VERSION = '0.7.1';
+TDP.VERSION = '0.7.2';
 
 // this browser tab's id (kept across reloads of the same tab), so a task keeps running in the tab that started it
 TDP.tabId = (() => { try { let v = sessionStorage.getItem('tdp-tab'); if (!v) { v = Math.random().toString(36).slice(2); sessionStorage.setItem('tdp-tab', v); } return v; } catch (e) { return 'tab'; } })();
@@ -73,7 +73,10 @@ TDP.waitFor = async (fn, timeout = 8000, step = 150) => {
 TDP.dialog = () => { const d = [...document.querySelectorAll('[role=dialog]')].filter(TDP.visible); return d[d.length - 1] || null; };
 TDP.findBtn = (root, match) => {
   const re = match instanceof RegExp ? match : new RegExp('^\\s*' + match.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*$', 'i');
-  return [...(root || document).querySelectorAll('button, a, [role=menuitem]')].filter(TDP.visible).find(b => re.test(TDP.txt(b))) || null;
+  const hit = [...(root || document).querySelectorAll('button, a, [role=menuitem]')].filter(TDP.visible).find(b => re.test(TDP.txt(b))) || null;
+  // some Matchplay menus wrap each item (role=menuitem) around the real button: only the inner one reacts
+  const inner = hit && [...hit.querySelectorAll('button, a')].filter(TDP.visible).find(b => re.test(TDP.txt(b)));
+  return inner || hit;
 };
 // a real mouse press: some Matchplay menus (group "Actions") only open on pointer/mouse down+up, not a bare .click()
 TDP.click = el => {

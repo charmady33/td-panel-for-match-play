@@ -1,4 +1,4 @@
-# Matchplay TD Panel v0.7.1
+# Matchplay TD Panel v0.7.2
 
 A Chrome extension for tournament directors on app.matchplay.events. On any tournament you run (as organizer, or as a manager) it adds a full-height sidebar on the right and shifts Matchplay's page over. The » button collapses it to a thin strip. Most of the tools also appear directly inside Matchplay's own pages (see below), so the sidebar is optional. It's styled to look like Matchplay's own pages.
 
