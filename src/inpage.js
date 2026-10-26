@@ -86,26 +86,42 @@ TDP.inpage = (() => {
   }
 
   // ---------- Resolve ties page ----------
+  let staleKick = 0;
   function resolveTies(D) {
+    const anchorEl = [...document.querySelectorAll('main *')].find(e => e.children.length === 0 && /^Unresolved ties$/.test(T.txt(e)));
+    // wait for our data before saying anything (no "no ties" flash while loading)
+    if (!D.standings.length || !D.qual || D.tid !== D.qual.tournamentId) { block('tdp-ties-resolve', anchorEl, 'before', '<div class="callout" style="margin:12px 0">Checking which ties matter for finals…</div>'); return; }
     const ties = qualTies(D);
-    const heads = [...document.querySelectorAll('main *')].filter(e => e.children.length === 0 && /^Positions\s+\d+\s*[-–]\s*\d+$/.test(T.txt(e)));
-    for (const h of heads) {
-      const m = T.txt(h).match(/(\d+)\s*[-–]\s*(\d+)/), from = +m[1];
-      let card = h; while (card.parentElement && !T.findBtn(card, /^Resolve$/)) card = card.parentElement;
-      const t = ties.find(x => x.pos === from);
+    // only the cards under "Unresolved ties" (each card = smallest box with one "Positions" heading and a Resolve button)
+    const isHead = e => e.children.length === 0 && /^Positions\s+\d+\s*[-–]\s*\d+$/.test(T.txt(e));
+    const cards = [];
+    for (const h of [...document.querySelectorAll('main *')].filter(isHead)) {
+      let card = h;
+      while (card.parentElement && card.parentElement.tagName !== 'MAIN' && [...card.parentElement.querySelectorAll('*')].filter(isHead).length === 1) card = card.parentElement;
+      if (!T.findBtn(card, /^Resolve$/)) continue;   // resolved card (Delete) - not ours
+      const m = T.txt(h).match(/(\d+)\s*[-–]\s*(\d+)/);
+      cards.push({ card, from: +m[1], to: +m[2] });
+    }
+    const shown = [];
+    for (const c0 of cards) {
+      const { card } = c0, t = ties.find(x => x.pos === c0.from);
       const old = card.querySelector('[data-tdp=note]');
       if (!t) { if (old) old.remove(); if (card.hasAttribute(MARK)) { card.style.boxShadow = ''; card.removeAttribute(MARK); } continue; }
+      shown.push({ t, c0 });
       const c = colorOf(t, D);
       card.setAttribute(MARK, 'card'); card.style.boxShadow = `0 0 0 3px ${c[2]}`;
-      if (!old) {
-        const n = document.createElement('div'); n.dataset.tdp = 'note';
-        n.style.cssText = `margin:8px 12px 12px;padding:6px 8px;border-radius:6px;font-size:12px;background:${c[0]};color:${c[1]};border-left:4px solid ${c[2]}`;
-        n.innerHTML = `<b>Important for finals.</b> ${T.esc(t.why)}`;
-        card.appendChild(n);
-      }
+      const html = `<b>Important for finals.</b> ${T.esc(t.why)}`;
+      let n = old;
+      if (!n) { n = document.createElement('div'); n.dataset.tdp = 'note'; card.appendChild(n); }
+      n.style.cssText = `margin:8px 12px 12px;padding:6px 8px;border-radius:6px;font-size:12px;background:${c[0]};color:${c[1]};border-left:4px solid ${c[2]}`;
+      if (n.innerHTML !== html) n.innerHTML = html;
     }
-    const firstCard = heads[0] && heads[0].closest('main') ? [...document.querySelectorAll('main h2, main h3, main *')].find(e => e.children.length === 0 && /^Unresolved ties$/.test(T.txt(e))) : null;
-    block('tdp-ties-resolve', firstCard, 'before', ties.length ? `<div class="callout warn" style="margin:12px 0">${ties.length} unresolved tie${ties.length === 1 ? '' : 's'} matter for finals - outlined below with the reason.</div>` : `<div class="callout ok" style="margin:12px 0">No unresolved ties affect the finals.</div>`);
+    // a tie we know about with no unresolved card = just resolved in Matchplay: refresh our standings
+    if (ties.length > shown.length && Date.now() - staleKick > 15000) { staleKick = Date.now(); T.data.refresh(true); }
+    const list = shown.map(({ t, c0 }) => { const c = colorOf(t, D); return `<div class="tie" style="background:${c[0]};color:${c[1]};border-left:4px solid ${c[2]}"><b>Positions ${c0.from}–${c0.to}:</b> ${T.esc(t.why)}</div>`; }).join('');
+    block('tdp-ties-resolve', anchorEl, 'before', shown.length
+      ? `<div class="card" style="margin:12px 0"><div class="ch"><span class="h">${shown.length} unresolved tie${shown.length === 1 ? '' : 's'} matter for finals</span></div><div class="cb">${list}<div class="small">Each is outlined below. Other unresolved ties don't change who makes the finals or their seeds.</div></div></div>`
+      : '<div class="callout ok" style="margin:12px 0">No unresolved ties affect the finals.</div>');
   }
 
   // ---------- Matches tab ----------
