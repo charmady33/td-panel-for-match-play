@@ -96,6 +96,58 @@ TDP.bankplan = (() => {
     return { ctx, res, assign, est };
   }
 
+  // ---------- Assign banks (Matches tab): the banks already in Matchplay, to this round's groups ----------
+  // A game a player hasn't played: good. A game they have played: bad, worse each time.
+  // A bank sharing 2+ games with a bank (group's games in a round) the player already had: very bad.
+  const NEW_GAME = -10, REPEAT = 40, SIMILAR = 3000;
+  function assignOptions(D) {
+    const ctx = context(D), am = T.data.arenaMap(D.t), pm = T.data.playerMap(D.t);
+    const banks = (D.t.banks || []).filter(b => b.status !== 'inactive').map(b => ({ name: b.name, games: (b.arenaIds || []).map(id => (am[id] || {}).name).filter(Boolean) }));
+    if (!ctx.round || !ctx.groups.length || !banks.length) return { ctx, banks, list: [] };
+    // each player's earlier "banks": the games their group played in each earlier round
+    const past = {};   // playerId -> [{ round, games:Set }]
+    const rname = {}; (D.rounds || []).forEach((r, i) => { rname[r.roundId] = r.name || `Round ${i + 1}`; });
+    const sets = {};
+    for (const g of D.games) {
+      if (g.bye || g.arenaId == null || g.set === 9999 || g.roundId === ctx.round.roundId) continue;
+      const k = g.roundId + ':' + g.set, x = sets[k] || (sets[k] = { round: rname[g.roundId] || 'an earlier round', games: new Set(), players: new Set() });
+      x.games.add(lc((am[g.arenaId] || {}).name)); (g.playerIds || []).forEach(p => x.players.add(p));
+    }
+    for (const x of Object.values(sets)) for (const p of x.players) (past[p] = past[p] || []).push(x);
+    const detail = (grp, bank) => {
+      let fresh = 0, total = 0; const repeats = [], similar = [];
+      for (const p of grp.players) {
+        for (const n of bank.games) { total++; const k = ctx.plays.get(p + '|' + lc(n)) || 0; if (!k) fresh++; else repeats.push({ player: (pm[p] || {}).name || '#' + p, game: n, times: k }); }
+        for (const x of past[p] || []) { const ov = bank.games.filter(n => x.games.has(lc(n))).length; if (ov >= 2) similar.push({ player: (pm[p] || {}).name || '#' + p, round: x.round, same: ov }); }
+      }
+      return { fresh, total, repeats, similar };
+    };
+    const cost = (gi, bi) => {
+      const g = ctx.groups[gi], b = banks[bi]; let t = 0;
+      for (const p of g.players) {
+        for (const n of b.games) { const k = ctx.plays.get(p + '|' + lc(n)) || 0; t += k ? REPEAT * k * k : NEW_GAME; }
+        for (const x of past[p] || []) { const ov = b.games.filter(n => x.games.has(lc(n))).length; if (ov >= 2) t += SIMILAR * (ov - 1); }
+      }
+      return t;
+    };
+    const list = T.banks.rankAssignments(ctx.groups.length, banks.length, cost, 5).map(o => ({
+      cost: o.cost,
+      pairs: o.pick.map((bi, gi) => ({ group: ctx.groups[gi].key, bank: banks[bi].name, ...detail(ctx.groups[gi], banks[bi]) })),
+    }));
+    return { ctx, banks, list, shared: ctx.groups.length > banks.length };
+  }
+  // the current round's groups that already have a bank: "Group 2 -> Bank 4 · 11 of 12 new"
+  function roundSummary(D) {
+    const r = T.data.currentRound() || T.data.latestRound(); if (!r) return [];
+    const am = T.data.arenaMap(D.t), banks = Object.fromEntries((D.t.banks || []).map(b => [b.bankId, b.name]));
+    const before = new Map();
+    for (const g of D.games) { if (g.bye || g.arenaId == null || g.roundId === r.roundId) continue; const n = lc((am[g.arenaId] || {}).name); for (const p of g.playerIds || []) before.set(p + '|' + n, (before.get(p + '|' + n) || 0) + 1); }
+    const sets = {};
+    for (const g of D.games.filter(x => x.roundId === r.roundId && !x.bye && x.set !== 9999)) { const x = sets[g.set] || (sets[g.set] = { group: g.set + 1, bank: null, games: [], players: new Set() }); if (g.bankId != null) x.bank = banks[g.bankId] || 'bank'; if (g.arenaId != null) x.games.push(lc((am[g.arenaId] || {}).name)); (g.playerIds || []).forEach(p => x.players.add(p)); }
+    return Object.values(sets).filter(x => x.bank).map(x => { let fresh = 0, total = 0; for (const p of x.players) for (const n of x.games) { total++; if (!before.get(p + '|' + n)) fresh++; } return { group: x.group, bank: x.bank, fresh, total }; });
+  }
+  const assignSteps = (D, ctx, opt) => [{ tid: D.tid, page: 'matches', op: 'assignBanks', args: { tid: D.tid, roundId: ctx.round.roundId, pairs: opt.pairs.map(p => ({ group: p.group, bank: p.bank })) }, label: `Assigning banks to ${opt.pairs.length} group${opt.pairs.length === 1 ? '' : 's'}` }];
+
   // job steps: update the banks on the Banks tab, then assign each group on the Matches tab
   function steps(D, plan) {
     const out = [{ tid: D.tid, page: 'banks', op: 'bankArenas', args: { banks: plan.res.banks.map(b => ({ name: b.name, arenas: b.games.map(g => g.name) })) }, label: `Updating ${plan.res.banks.length} banks` }];
@@ -131,5 +183,5 @@ TDP.bankplan = (() => {
     return Object.keys(pastTimes).length;
   }
 
-  return { context, estimates, sources, breakdownText, extras, make, steps, qualTimes, loadPast };
+  return { assignOptions, assignSteps, roundSummary, context, estimates, sources, breakdownText, extras, make, steps, qualTimes, loadPast };
 })();

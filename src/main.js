@@ -8,6 +8,14 @@ var TDP = window.TDP || (window.TDP = {});
   await T.loadSettings();
   const tabId = Math.random().toString(36).slice(2);
 
+  // ---------- the hidden worker tab: only runs the task, shows a note, nothing else ----------
+  if (await T.jobs.init()) {
+    T.busy.workerNote();
+    let last = null;
+    setInterval(() => { if (location.pathname !== last) { last = location.pathname; T.jobs.resume(); } }, 500);
+    return;
+  }
+
   // ---------- route watching (Matchplay is a single-page app) ----------
   let lastPath = null;
   async function onRoute() {
@@ -27,9 +35,9 @@ var TDP = window.TDP || (window.TDP = {});
     if (D.isTD === false && T.settings.token) { T.panel.unmount(); return; }   // not your tournament: stay out of the way
     T.panel.mount(); T.panel.render();
     T.embed.render(); T.inpage.render();
-    autoTick().then(autoBanks);
+    autoTick().then(autoBanks).then(autoAssign);
   });
-  T.jobs.on(() => { T.panel.render(true); T.embed.render(); });
+  T.jobs.on(() => { T.panel.render(true); T.embed.render(); T.busy.render(); });
 
   // ---------- auto close round & start next (default off, per tournament) ----------
   let autoBusy = false;
@@ -42,8 +50,7 @@ var TDP = window.TDP || (window.TDP = {});
   async function autoTick() {
     const D = T.data.D, tid = D.tid, st = T.tstate[tid] || {};
     if (!st.auto || autoBusy || !D.t || !D.isTD) return;
-    if (T.routePage() !== 'matches') return state('waiting - open this tournament\'s Matches tab');
-    if (T.jobs.get() && !T.jobs.get().done && !T.jobs.get().error) return state('waiting for the running task');
+    if (T.jobs.active()) return state('waiting for the running task');
     if (D.t.status !== 'started') return state('tournament not in progress');
     const r = T.data.latestRound();
     if (!r || String(r.status) === 'completed') return state('no round in progress');
@@ -63,18 +70,30 @@ var TDP = window.TDP || (window.TDP = {});
       const last = D.t.roundCount && D.rounds.length >= D.t.roundCount;
       const go = await T.panel.showCountdown(`All games approved in ${r.name}. Closing the round${last ? '' : ' and starting the next one'} in`, Math.max(3, T.settings.autoCountdown || 10));
       if (!go || !(T.tstate[tid] || {}).auto) return state('cancelled - will check again');
-      if (T.routePage() !== 'matches') return state('left the Matches tab - not acting');
-      await T.mp.closeRound();
-      state(`closed ${r.name}`);
-      await T.data.refresh(true);
-      if (last) return state(`closed ${r.name} - that was the last round`);
-      const btn = await T.waitFor(() => T.findBtn(document, /^Start next round$/), 8000);
-      if (!btn) return state(`closed ${r.name}; no "Start next round" button (last round?)`);
-      await T.mp.startNextRound();
-      state(`started the next round after ${r.name}`);
-      await T.data.refresh(true);
+      const steps = [{ tid, page: 'matches', op: 'closeRound', label: `Closing ${r.name}` }];
+      if (!last) steps.push({ tid, page: 'matches', op: 'startNextRound', label: 'Starting the next round' });
+      await T.jobs.start(last ? `Close ${r.name}` : `Close ${r.name} & start next round`, steps);
+      state(last ? `closing ${r.name} - that was the last round` : `closing ${r.name} and starting the next round`);
     } catch (e) { state('error: ' + (e.message || e)); }
     finally { autoBusy = false; }
+  }
+
+  // ---------- Assign banks: automatic option on the Matches tab (default off) ----------
+  let assignBusy = false;
+  async function autoAssign() {
+    const D = T.data.D, tid = D.tid, st = T.tstate[tid] || {};
+    if (!st.autoAssign || assignBusy || !D.t || !D.isTD || D.t.status !== 'started' || T.jobs.active()) return;
+    const ctx = T.bankplan.context(D);
+    if (!ctx.round || !ctx.groups.length || st.assignDoneRound === ctx.round.roundId) return;
+    if (!(await lock(tid + ':assign'))) return;
+    assignBusy = true;
+    try {
+      const opts = T.bankplan.assignOptions(D);
+      if (!opts.list.length) return;
+      await T.saveT(tid, { assignDoneRound: ctx.round.roundId });   // once per round, even if the TD stops the task
+      await T.jobs.start(`Assign banks for ${ctx.round.name}`, T.bankplan.assignSteps(D, opts.ctx, opts.list[0]));
+    } catch (e) { T.panel.say('Assign banks: ' + (e.message || e), 'err'); }
+    finally { assignBusy = false; }
   }
 
   // ---------- automatic banks each round (Banks tab switch, default off) ----------

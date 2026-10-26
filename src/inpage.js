@@ -151,13 +151,27 @@ TDP.inpage = (() => {
     let bar = refresh ? refresh.closest('div') : null;
     if (bar && bar.parentElement && bar.parentElement.tagName !== 'MAIN' && bar.parentElement.contains(refresh)) bar = bar.parentElement;
     if (!bar || bar.tagName === 'MAIN' || !bar.closest('main')) bar = refresh;
+    const usesBanks = /bank/i.test(D.t.arenaAssignment || '');
+    let bankRow = '';
+    if (usesBanks && D.t.status === 'started') {
+      const ctx = T.bankplan.context(D), need = ctx.round && ctx.groups.length, sum = T.bankplan.roundSummary(D);
+      const nb = (D.t.banks || []).filter(b => b.status !== 'inactive').length;
+      bankRow = `<div class="cb gap" style="border-top:1px solid var(--line);flex-wrap:wrap;align-items:center">
+        <button class="btn sm" data-act="assign" ${need && nb && !T.jobs.active() ? '' : 'disabled'}>Assign banks</button>
+        <label class="gap"><input type="checkbox" data-act="autoAssign" ${st.autoAssign ? 'checked' : ''}> <span class="lab">Automatic</span></label>
+        <span class="small flex1">${!nb ? 'No banks yet - make them on the Banks tab.' : need ? `${ctx.groups.length} group${ctx.groups.length === 1 ? '' : 's'} in ${T.esc(ctx.round.name || 'this round')} need a bank${st.autoAssign ? ' - assigning automatically' : ''}.` : sum.length ? sum.map(x => `Group ${x.group} → ${T.esc(x.bank)} · ${x.fresh} of ${x.total} new`).join(' &nbsp;·&nbsp; ') : 'Every group has its games.'}</span>
+      </div>`;
+    }
     const html = D.t && D.t.status === 'started' ? `<div class="card" style="margin:12px 0"><div class="cb gap">
       <label class="gap"><input type="checkbox" data-act="auto" ${st.auto ? 'checked' : ''}> <span class="lab">Auto close round &amp; start next round</span></label>
       <span class="small flex1">${st.auto ? T.esc(autoState || 'watching') : 'When every game is approved (no pending or partial scores, no open tiebreakers), closes the round and starts the next after a countdown you can cancel. Never past the last round; never completes the tournament.'}</span>
-      </div></div>` : '';
+      </div>${bankRow}</div>` : '';
     block('tdp-auto', html ? bar : null, 'after', html, async e => {
-      const el = e.target; if (e.type !== 'change' || el.dataset.act !== 'auto') return;
-      await T.saveT(D.tid, { auto: el.checked }); autoState = ''; render(); T.panel.render(true);
+      const el = e.target;
+      if (e.type === 'click' && el.closest && el.closest('[data-act=assign]')) return T.bankbar.assignPreview(T.data.D);
+      if (e.type !== 'change') return;
+      if (el.dataset.act === 'auto') { await T.saveT(D.tid, { auto: el.checked }); autoState = ''; render(); T.panel.render(true); }
+      if (el.dataset.act === 'autoAssign') { await T.saveT(D.tid, { autoAssign: el.checked }); render(); }
     });
     // finals: outline groups that are tied at the advance line / in the final
     const gt = (() => { try { return T.finals.groupTies(D); } catch (e) { return []; } })();
@@ -176,7 +190,7 @@ TDP.inpage = (() => {
   function reminder(D) {
     const p = D.qual ? T.ties.pending(D) : [];
     const main = document.querySelector('main');
-    const anchor = p.length && main ? main.firstElementChild : null;
+    const anchor = p.length && main ? [...main.children].find(e => !/^tdp-/.test(e.id || '')) : null;
     block('tdp-tb-reminder', anchor, 'before', p.length ? `<div class="callout warn gap" style="margin:8px 16px">${p.length} tiebreaker${p.length === 1 ? '' : 's'} waiting for results: ${p.map(x => `<button class="btn sm" data-act="tb" data-key="${x.key}">Positions ${x.pos}–${x.pos + x.ids.length - 1} · ${T.esc(x.game || '')}</button>`).join(' ')}</div>` : '', onTieClick);
   }
   let lastPage = null;
@@ -184,7 +198,7 @@ TDP.inpage = (() => {
     const D = T.data.D;
     const page0 = T.routePage();
     if (page0 !== lastPage) { lastPage = page0; if ((page0 === 'standings' || page0 === 'resolve-ties') && D.qual) T.data.refresh(true); }
-    if (!D.isTD || !D.t) { clearMarks(); ['tdp-ties-standings', 'tdp-elig', 'tdp-ties-resolve', 'tdp-auto', 'tdp-tb-reminder', 'tdp-bankbar', 'tdp-arena-times', 'tdp-ifpa-btn'].forEach(id => { const e = document.getElementById(id); if (e) e.remove(); }); return; }
+    if (!D.isTD || !D.t) { clearMarks(); ['tdp-ties-standings', 'tdp-elig', 'tdp-ties-resolve', 'tdp-auto', 'tdp-tb-reminder', 'tdp-bankbar', 'tdp-arena-times', 'tdp-ifpa-btn', 'tdp-busy-banner'].forEach(id => { const e = document.getElementById(id); if (e) e.remove(); }); return; }
     const page = T.routePage();
     try {
       reminder(D);

@@ -167,6 +167,27 @@ table{width:100%;border-collapse:collapse}td{padding:4px 6px;border-top:1px soli
     await T.jobs.start(mode === 'refresh' ? 'Refresh banks' : mode === 'add' ? 'Add banks' : 'Generate banks', [step]);
   }
 
+  // ---------- Assign banks (Matches tab button) ----------
+  function assignPreview(D, k = 0) {
+    const o = T.bankplan.assignOptions(D);
+    if (!o.list.length) return T.panel.say(o.banks.length ? 'No group in this round needs a bank.' : 'No banks yet - make them on the Banks tab.', 'err');
+    k = k % o.list.length; cur = { mode: 'assign', k, o };
+    const opt = o.list[k];
+    const rows = opt.pairs.map(p => {
+      const lines = [];
+      if (p.similar.length) lines.push(`<div class="small err">⚠ Very like a bank already played: ${p.similar.map(x => `${T.esc(x.player)} (${x.same} of the same games in ${T.esc(x.round)})`).join(', ')}</div>`);
+      if (p.repeats.length) lines.push(`<div class="small warn">Repeats: ${p.repeats.map(x => `${T.esc(x.player)} played ${T.esc(x.game)}${x.times > 1 ? ' ×' + x.times : ''}`).join(', ')}</div>`);
+      return `<tr><td><b>Group ${p.group}</b></td><td>→ ${T.esc(p.bank)}</td><td class="small">${p.fresh} of ${p.total} new</td></tr>${lines.length ? `<tr><td></td><td colspan="2">${lines.join('')}</td></tr>` : ''}`;
+    }).join('');
+    const notes = [];
+    if (o.shared) notes.push(`${o.ctx.groups.length} groups but ${o.banks.length} banks: some banks are shared. Add banks on the Banks tab so each group gets its own.`);
+    if (opt.pairs.some(p => p.repeats.length || p.similar.length)) notes.push('Some repeats can\'t be avoided with these banks. Refresh or Add banks on the Banks tab for more variety.');
+    show(`<div class="dh">Assign banks · ${T.esc(o.ctx.round.name || 'this round')}</div><div class="db">
+      <div class="small mb">Picked so players get games they haven't played, avoiding banks close to one they already had (2+ of the same games).${o.list.length > 1 ? ` Option ${k + 1} of ${o.list.length}.` : ''}</div>
+      <table>${rows}</table>${notes.map(n => `<div class="callout warn mt">${T.esc(n)}</div>`).join('')}</div>
+      <div class="df"><button class="btn sec" data-act="close">Cancel</button>${o.list.length > 1 ? '<button class="btn sec" data-act="nextOpt">Another option</button>' : ''}<button class="btn" data-act="assignGo">Assign</button></div>`);
+  }
+
   // ---------- settings ----------
   async function openSettings(D) {
     cur = { mode: 'settings' };
@@ -207,6 +228,8 @@ table{width:100%;border-collapse:collapse}td{padding:4px 6px;border-top:1px soli
         return preview(D, cur.mode, n);
       }
       if (act === 'another') return preview(D, cur.mode, cur.n);
+      if (act === 'nextOpt') return assignPreview(D, cur.k + 1);
+      if (act === 'assignGo') { const { o, k } = cur; close(); return T.jobs.start(`Assign banks for ${o.ctx.round.name || 'this round'}`, T.bankplan.assignSteps(D, o.ctx, o.list[k])); }
       if (act === 'confirm') return confirm(D);
       if (act === 'settings') return openSettings(D);
       if (act === 'mode') {
@@ -228,5 +251,5 @@ table{width:100%;border-collapse:collapse}td{padding:4px 6px;border-top:1px soli
   // keyboard: Enter in the "how many" box
   document.addEventListener('keydown', e => { if (e.key === 'Enter' && cur && cur.mode !== 'settings' && host && e.composedPath().some(x => x.dataset && x.dataset.f === 'askN')) host.shadowRoot.querySelector('[data-act=askOk]').click(); }, true);
 
-  return { render, close };
+  return { render, close, assignPreview };
 })();

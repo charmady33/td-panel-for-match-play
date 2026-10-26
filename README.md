@@ -1,4 +1,4 @@
-# Matchplay TD Panel v0.5.0
+# Matchplay TD Panel v0.6.0
 
 A Chrome extension for tournament directors on app.matchplay.events. On any tournament you run (as organizer, or as a manager) it adds a full-height sidebar on the right and shifts Matchplay's page over. The » button collapses it to a thin strip. Most of the tools also appear directly inside Matchplay's own pages (see below), so the sidebar is optional. It's styled to look like Matchplay's own pages.
 
@@ -80,6 +80,14 @@ To update to a newer version, replace the folder and click the reload icon on th
   - **Automatic every round** switch (off by default)
   - game times come from this tournament, the qualifying, Matchplay tournament IDs you enter, and any tournament you've opened with the extension (saved automatically)
 - **Settings**: your API token, label color, and the auto-round countdown length.
+
+- **Matches tab (bank tournaments)**: **Assign banks** gives each group of the new round one of your banks - games its players haven't played, avoiding any bank that shares 2+ games with one a player already had. Preview with **Another option**, then **Assign**. **Automatic** (off by default) does it for every new round without the preview. The bar then shows "Group 2 → Bank 4 · 11 of 12 new"
+- **Overview**: **Submit to IFPA** sits under Re-open tournament, same size and style
+
+## While it's updating Matchplay
+- Changes are made in a hidden **worker tab** (a collapsed purple "TD Panel" tab group next to your tab) that closes itself when done. Nothing clicks on your page.
+- Your tournament's pages show a blue **"Updating Matchplay in the background"** banner, a progress card in the corner (Show me / Stop), and the part being changed is greyed out and locked.
+- Done: the banner turns green and the page reloads its data. Error: the banner turns red with Retry / Show me / Stop.
 
 ## How it works
 - **Reads** use Matchplay's official read-only API with your own token. Requests are kept to about 1 every 0.65 s, standings are fetched no more than every 30 s, and finished data is cached.

@@ -189,6 +189,42 @@ TDP.banks = (() => {
     return groups.map((g, i) => ({ group: g.key, bank: banks[pick[i]].key, cost: M[i][pick[i]] }));
   }
 
+  // ---------- ranked group -> bank options (Assign banks button) ----------
+  // cost(groupIndex, bankIndex) is any number (lower = better). Each bank takes at most `cap` groups.
+  // Up to 8 groups: exact search keeping the `keep` best distinct options; bigger rounds: greedy + swaps from
+  // several random starts. Returns [{ pick: [bankIndex per group], cost }] best first.
+  function rankAssignments(nGroups, nBanks, cost, keep = 5) {
+    if (!nGroups || !nBanks) return [];
+    const cap = Math.ceil(nGroups / nBanks), M = [...Array(nGroups)].map((_, i) => [...Array(nBanks)].map((_, j) => cost(i, j)));
+    const out = [], sig = p => p.join(',');
+    const push = (pick, c) => { if (out.some(o => sig(o.pick) === sig(pick))) return; out.push({ pick: [...pick], cost: c }); out.sort((a, b) => a.cost - b.cost); if (out.length > keep) out.pop(); };
+    if (nGroups <= 8 && nBanks <= 10) {
+      const load = new Array(nBanks).fill(0), cur = [], minRow = M.map(r => Math.min(...r));
+      const rest = i => { let t = 0; for (let k = i; k < nGroups; k++) t += minRow[k]; return t; };
+      (function dfs(i, sum) {
+        if (out.length >= keep && sum + rest(i) >= out[out.length - 1].cost) return;
+        if (i === nGroups) return push(cur, sum);
+        for (let j = 0; j < nBanks; j++) if (load[j] < cap) { load[j]++; cur.push(j); dfs(i + 1, sum + M[i][j]); cur.pop(); load[j]--; }
+      })(0, 0);
+      return out;
+    }
+    for (let start = 0; start < 12; start++) {
+      const load = new Array(nBanks).fill(0), pick = new Array(nGroups).fill(-1);
+      const order = [...Array(nGroups).keys()].sort(() => start ? Math.random() - 0.5 : 0);
+      for (const i of order) { let b = -1; M[i].forEach((v, j) => { if (load[j] < cap && (b < 0 || v < M[i][b])) b = j; }); pick[i] = b; load[b]++; }
+      for (let iter = 0; iter < 60; iter++) {
+        let gained = false;
+        for (let a = 0; a < nGroups; a++) {
+          for (let b = a + 1; b < nGroups; b++) { const d = M[a][pick[b]] + M[b][pick[a]] - M[a][pick[a]] - M[b][pick[b]]; if (d < 0) { [pick[a], pick[b]] = [pick[b], pick[a]]; gained = true; } }
+          for (let j = 0; j < nBanks; j++) if (load[j] < cap && M[a][j] < M[a][pick[a]]) { load[pick[a]]--; pick[a] = j; load[j]++; gained = true; }
+        }
+        if (!gained) break;
+      }
+      push(pick, pick.reduce((t, j, i) => t + M[i][j], 0));
+    }
+    return out;
+  }
+
   // ---------- play order ----------
   // Groups play a bank's games in order, so each game has an expected window [start, end) in its bank.
   // When the same machine is in more than one bank, order the games so those windows don't overlap
@@ -243,5 +279,5 @@ TDP.banks = (() => {
     });
   }
 
-  return { build, estimates, eraOf, cost, historyMaps, assignGroups, pairKey, schedule, timeline, ERA_ORDER, ERA_DEFAULT_SEC };
+  return { build, estimates, eraOf, cost, historyMaps, assignGroups, rankAssignments, pairKey, schedule, timeline, ERA_ORDER, ERA_DEFAULT_SEC };
 })();

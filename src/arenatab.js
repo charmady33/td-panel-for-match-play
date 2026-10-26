@@ -64,7 +64,10 @@ TDP.arenatab = (() => {
       if (cells[2].dataset.k !== comb) { cells[2].dataset.k = comb; cells[2].innerHTML = comb; }
     }
     // "Game times from" bar above the table
-    const wrap = table.closest('div.shadow, div.overflow-hidden, div.flex.flex-col') || table.parentElement;
+    // outside the table's own box (Matchplay pins its select-all checkbox to that box): climb to the block that
+    // sits next to the Add / Add from qualifying / Actions row, and go right before it
+    let wrap = table;
+    while (wrap.parentElement && wrap.parentElement.tagName !== 'MAIN' && !T.findBtn(wrap.parentElement, /^Add from qualifying$|^Add…$|^Add\.\.\.$/)) wrap = wrap.parentElement;
     const isFinals = D.qual && D.qual.tournamentId !== D.tid;
     const live = Object.values(T.timing.arenaTimes(D.games)).reduce((s, x) => s + x.count, 0);
     const qn = extra && extra.qual ? Object.values(extra.qual).reduce((s, x) => s + x.count, 0) : 0;

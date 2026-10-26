@@ -209,17 +209,36 @@ TDP.ifpa = (() => {
   }
 
   // ---------- button on the Overview ----------
+  // a copy of Matchplay's own "Re-open tournament" button (same classes, so same size, colour and dark mode),
+  // on its own row right under it, with the deadline in small grey text below
   function render(D) {
     const reopen = T.routePage() === 'overview' && D && D.t && D.isTD ? T.findBtn(document.querySelector('main') || document, /^Re-open tournament$/) : null;
-    if (!reopen) return T.inpage.block('tdp-ifpa-btn', null);
+    let box = document.getElementById('tdp-ifpa-btn');
+    if (!reopen) { if (box) box.remove(); return; }
     if (!done(D.t)) { if (!render.kick || Date.now() - render.kick > 10e3) { render.kick = Date.now(); T.data.refresh(true); } }   // just completed: catch up
     const F = family(D), s = state(F);
-    let sub;
-    if (!F.ready) sub = `<div class="small" style="margin-top:4px">${F.finals.some(f => !done(f.t)) ? 'Finals not completed yet' : 'Qualifying not completed yet'} - results are submitted once for the whole event.</div>`;
-    else if (s.submittedAt) sub = `<div class="small" style="margin-top:4px">Submitted ${new Date(s.submittedAt).toLocaleDateString()} ✓</div>`;
-    else { const left = F.completedAt ? Math.ceil((F.completedAt + WINDOW_DAYS * DAY - Date.now()) / DAY) : null; sub = left != null ? `<div class="small ${left <= 7 ? 'err' : ''}" style="margin-top:4px">${left > 0 ? `${left} day${left === 1 ? '' : 's'} left to submit` : 'IFPA\'s 45-day window has passed - contact IFPA'}</div>` : ''; }
-    const html = `<div style="margin-top:8px"><button class="btn" data-act="open" style="width:100%;justify-content:center;background:${s.submittedAt ? '#059669' : ''}">${s.submittedAt ? 'IFPA submission ✓' : 'Submit to IFPA'}</button>${sub}</div>`;
-    T.inpage.block('tdp-ifpa-btn', reopen, 'after', html, e => { if (e.type === 'click' && e.target.closest('[data-act=open]')) open(T.data.D); });
+    let sub = '', subCls = '';
+    if (!F.ready) sub = `${F.finals.some(f => !done(f.t)) ? 'Finals not completed yet' : 'Qualifying not completed yet'} - submitted once for the whole event`;
+    else if (s.submittedAt) sub = `Submitted ${new Date(s.submittedAt).toLocaleDateString()}`;
+    else { const left = F.completedAt ? Math.ceil((F.completedAt + WINDOW_DAYS * DAY - Date.now()) / DAY) : null; if (left != null) { sub = left > 0 ? `${left} day${left === 1 ? '' : 's'} left to submit` : "IFPA's 45-day window has passed - contact IFPA"; if (left <= 7) subCls = 'red'; } }
+    const wrap = reopen.parentElement && reopen.parentElement.tagName === 'SPAN' ? reopen.parentElement : reopen;   // Matchplay wraps the button in a span
+    if (!box || wrap.nextElementSibling !== box) {
+      if (box) box.remove();
+      box = document.createElement('div'); box.id = 'tdp-ifpa-btn'; box.style.marginTop = '8px';
+      const copy = wrap.cloneNode(true), btn = copy.tagName === 'BUTTON' ? copy : copy.querySelector('button');
+      btn.removeAttribute('disabled'); btn.type = 'button'; btn.dataset.tdpIfpa = '1';
+      btn.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); open(T.data.D); });
+      const note = document.createElement('div'); note.className = 'tdp-ifpa-note'; note.style.cssText = 'font-size:12px;text-align:center;margin-top:4px';
+      box.append(copy, note);
+      wrap.after(box);
+    }
+    const btn = box.querySelector('[data-tdp-ifpa]'), label = s.submittedAt ? 'IFPA submission ✓' : 'Submit to IFPA';
+    if (btn.textContent.trim() !== label) btn.textContent = label;
+    if (s.submittedAt) { btn.style.backgroundColor = '#059669'; btn.dataset.green = '1'; }
+    else if (btn.dataset.green) { btn.style.backgroundColor = ''; delete btn.dataset.green; }   // only undo our own colour
+    const note = box.querySelector('.tdp-ifpa-note');
+    if (note.textContent !== sub) note.textContent = sub;
+    note.style.color = subCls ? '#e11d48' : '#9ca3af';
   }
 
   // ---------- the page ----------
