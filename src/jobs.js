@@ -107,16 +107,24 @@ TDP.jobs = (() => {
     async tiebreakerArena(a) { await T.mp.setGameArena(a.names, a.arena); return `${a.arena} assigned to the tiebreaker`; },
     // a test tournament of yours - checked again right before - deleted with Matchplay's own button
     async deleteTest(a) {
+      // each tournament's outcome goes in job.del for the result card on the Organized page
+      const put = async (status, why) => { job.del = [...(job.del || []).filter(x => x.tid !== a.tid), { tid: a.tid, name: a.name, status, why: why || '' }]; await save(); return `${a.name}: ${status}${why ? ' - ' + why : ''}`; };
       const me = T.data.D.me || T.data.unwrap(await T.api.get('/users/profile', 3600e3));
       let t = null;
-      try { t = await T.data.loadTournament(a.tid, 0); } catch (e) { return `${a.name}: not found (already deleted?) - skipped`; }
-      if (!t || t.test !== true) return `${a.name}: not a test tournament - skipped`;
-      if (!me || t.organizerId !== me.userId) return `${a.name}: you're not the organizer - skipped`;
-      if (!/\bTest\b/.test(T.txt(document.querySelector('main')))) return `${a.name}: the page doesn't show it as Test - skipped`;
+      try { t = await T.data.loadTournament(a.tid, 0); }
+      catch (e) { return job.delTry === a.tid ? put('deleted') : put('skipped', 'not found (already deleted?)'); }   // (the page reloaded right after Matchplay deleted it)
+      if (!t || t.test !== true) return put('skipped', 'not a test tournament');
+      if (!me || t.organizerId !== me.userId) return put('skipped', "you're not the organizer");
+      if (!/\bTest\b/.test(T.txt(document.querySelector('main')))) return put('skipped', "the page doesn't show it as Test");
+      job.delTry = a.tid; await save();
       try { await T.mp.deleteTournament(t.name); }
-      catch (e) { return `${a.name}: ${e.message || e} - not deleted`; }
+      catch (e) { return put('failed', e.message || String(e)); }
+      // make sure it's really gone
+      let gone = false;
+      for (let k = 0; k < 6 && !gone; k++) { try { await T.api.get(`/tournaments/${a.tid}`, 0, true); await T.sleep(800); } catch (e) { gone = true; } }
+      if (!gone) return put('failed', 'Matchplay still lists it');
       await T.store.del('t:' + a.tid); await T.store.del('cache:' + a.tid);
-      return `${a.name}: deleted`;
+      return put('deleted');
     },
     async fillResults(a) {
       const t = await T.data.loadTournament(a.tid, 0);

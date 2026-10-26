@@ -40,7 +40,32 @@ TDP.deltest = (() => {
     T.inpage.block('tdp-deltest', row, 'before', `<div class="card" style="margin:0 0 12px"><div class="cb gap" style="align-items:center;flex-wrap:wrap">
       <span class="h flex1">Test tournaments</span>
       <span class="small">${n == null ? 'Checking…' : n ? `${n} test tournament${n === 1 ? '' : 's'} you organize` : 'None'}</span>
-      <button class="btn sm red" data-act="open" ${n ? '' : 'disabled'}>Delete test tournaments${n ? ` (${n})` : ''}</button></div></div>`, e => { if (e.type === 'click' && e.target.closest('[data-act=open]')) open(); });
+      <button class="btn sm red" data-act="open" ${n ? '' : 'disabled'}>Delete test tournaments${n ? ` (${n})` : ''}</button></div>${resultHtml()}</div>`, onBar);
+  }
+  // the last run's outcome, per tournament (until dismissed)
+  const lastRun = () => { const j = T.jobs.get(); return j && j.del && /^Delete \d+ test tournament/.test(j.title) && (j.done || j.error) ? j : null; };
+  const dismissed = () => { try { return Number(sessionStorage.getItem('tdp-deltest-seen')) || 0; } catch (e) { return 0; } };
+  function resultHtml() {
+    const j = lastRun(); if (!j || j.startedAt === dismissed()) return '';
+    const c = k => j.del.filter(x => x.status === k);
+    const dl = c('deleted'), sk = c('skipped'), fl = c('failed');
+    const line = x => `<div class="small" style="padding:2px 0"><b>${T.esc(x.name)}</b>: ${x.status}${x.why ? ` - ${T.esc(x.why)}` : ''}</div>`;
+    return `<div class="cb" style="border-top:1px solid var(--line)">
+      <div class="callout ${fl.length || j.error ? 'warn' : 'ok'}" style="margin-bottom:6px"><b>Deleted ${dl.length}</b>${sk.length ? ` · Skipped ${sk.length}` : ''}${fl.length ? ` · Failed ${fl.length}` : ''}${j.error ? ` · Stopped: ${T.esc(j.error)}` : ''}</div>
+      ${[...fl, ...sk, ...dl].map(line).join('')}
+      <div class="gap mt">${fl.length ? `<button class="btn sm" data-act="retry">Retry ${fl.length} failed</button>` : ''}<button class="btn sm sec" data-act="dismiss">Dismiss</button></div></div>`;
+  }
+  async function onBar(e) {
+    if (e.type !== 'click') return;
+    const a = e.target.closest('[data-act]'); if (!a) return;
+    if (a.dataset.act === 'open') return open();
+    const j = lastRun(); if (!j) return;
+    if (a.dataset.act === 'dismiss') { try { sessionStorage.setItem('tdp-deltest-seen', String(j.startedAt)); } catch (err) { /* */ } return render(); }
+    if (a.dataset.act === 'retry') {
+      const rows = j.del.filter(x => x.status === 'failed');
+      const steps = rows.map((r, i) => ({ tid: r.tid, page: 'overview', op: 'deleteTest', args: { tid: r.tid, name: r.name }, label: `Deleting ${i + 1} of ${rows.length}: ${r.name}` }));
+      try { await T.jobs.start(`Delete ${rows.length} test tournament${rows.length === 1 ? '' : 's'}`, steps, { after: { what: 'deltest' } }); } catch (err) { T.panel.say(err.message || String(err), 'err'); }
+    }
   }
 
   // ---------- the window ----------

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Matchplay TD Panel",
-  "version": "0.11.0",
+  "version": "0.11.1",
   "description": "Tournament director tools built into app.matchplay.events: finals check-in and eligibility, tiebreakers that matter, bank building and assignment, auto rounds, game timers and IFPA submission.",
   "icons": {
     "16": "icons/icon16.png",

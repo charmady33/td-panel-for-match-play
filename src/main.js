@@ -33,7 +33,7 @@ var TDP = window.TDP || (window.TDP = {});
     lastPath = location.pathname;
     if (prevTid && prevTid === T.routeTid()) { T.data.refresh(true); return; }   // another tab of the same tournament: fresh details
     const tid = T.routeTid();
-    if (!tid) { T.panel.unmount(); T.data.setTournament(null); T.deltest.render(); return; }
+    if (!tid) { T.panel.unmount(); T.data.setTournament(null); T.deltest.render(); T.jobs.resume(); return; }   // (a task can continue from any page)
     T.panel.mount(); T.panel.render();
     T.jobs.resume();   // a task in progress carries on straight away (it doesn't need the tournament data first)
     await T.data.setTournament(tid);
@@ -68,7 +68,7 @@ var TDP = window.TDP || (window.TDP = {});
     T.embed.render(); T.inpage.render();
     autoTick().then(autoBanks).then(autoAssign).then(autoFill);
   });
-  T.jobs.on(() => { T.panel.render(); T.embed.render(); T.busy.render(); T.inpage.render(); });
+  T.jobs.on(() => { T.panel.render(); T.embed.render(); T.busy.render(); T.inpage.render(); T.deltest.render(); });
   // Matchplay doesn't push changes: when the API shows something new (a score from a phone, a new round…),
   // Matchplay's page fetches again in place - unless the TD is busy with it
   T.data.onChange(() => T.sync.auto());

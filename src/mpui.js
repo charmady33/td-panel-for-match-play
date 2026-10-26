@@ -333,19 +333,33 @@ TDP.mp = (() => {
   }
 
   // ---------- Overview: More… -> Delete tournament -> Matchplay's confirm ----------
-  async function deleteTournament(name) {
+  // Matchplay's window: title "Delete tournament", "Are you sure…", red button "Delete tournament permanently"
+  // (it only allows test tournaments; otherwise it shows "Not a test tournament").
+  // dryRun: open the window, check the button is there, then Cancel (nothing deleted).
+  async function deleteTournament(name, opts = {}) {
     T.click(T.findBtn(document.querySelector('main') || document, /^More/) || fail('No More… menu on the Overview.'));
     T.click(await needBtn(/^Delete tournament$/));
     const d = await needDialog();
+    const cancel = () => { const c = T.findBtn(d, /^(Cancel|Close|OK|Okay)$/); if (c) T.click(c); };
+    if (/Not a test tournament/i.test(T.txt(d))) { cancel(); fail('Matchplay says it is not a test tournament'); }
     const input = d.querySelector('input[type=text], input:not([type])');
-    if (input) {   // "type the name / DELETE to confirm"
+    if (input) {   // (in case Matchplay ever asks to type the name / DELETE)
       const m = T.txt(d).match(/type\s+["“']?([^"”'\s]+)["”']?/i);
       T.setVal(input, T.txt(d).includes(name) ? name : m ? m[1] : 'DELETE');
     }
-    const ok = await T.waitFor(() => [...d.querySelectorAll('button')].find(b => T.visible(b) && !b.disabled && /^(delete( tournament)?|yes,? delete( it)?|confirm|remove)$/i.test(T.txt(b))), 4000);
-    if (!ok) { const c = T.findBtn(d, /^Cancel$/); if (c) T.click(c); fail("Couldn't find Matchplay's delete confirm button."); }
+    const ok = await T.waitFor(() => [...d.querySelectorAll('button')].find(b => T.visible(b) && !b.disabled && /^(delete tournament permanently|delete( tournament)?|yes,? delete( it)?|confirm)$/i.test(T.txt(b))), 4000);
+    if (!ok) { cancel(); fail("Couldn't find Matchplay's \"Delete tournament permanently\" button."); }
+    if (opts.dryRun) { cancel(); await dialogClosed(5000); return T.txt(ok); }
     T.click(ok);
-    await dialogClosed(10000);
+    // wait for Matchplay's "Tournament deleted" (or an error in the window)
+    const res = await T.waitFor(() => {
+      if ([...document.querySelectorAll('body *')].some(e => e.children.length === 0 && /^Tournament deleted$/i.test(T.txt(e)))) return 'ok';
+      if (!d.isConnected || !T.visible(d)) return 'closed';
+      const err = /error|went wrong|not allowed|cannot/i.test(T.txt(d)) && !/Are you sure/i.test(T.txt(d)); return err ? 'err' : null;
+    }, 20000, 100);
+    if (res === 'err') { const msg = T.txt(d).slice(0, 160); cancel(); fail('Matchplay: ' + msg); }
+    if (!res) { cancel(); fail('Matchplay did not finish deleting (no "Tournament deleted").'); }
+    await dialogClosed(5000);
   }
 
   // ---------- one game's arena (e.g. Matchplay's tiebreaker game, "No arena"): Assign arena, or Details -> Change arena ----------
