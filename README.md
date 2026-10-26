@@ -1,4 +1,4 @@
-# Matchplay TD Panel v0.7.3
+# Matchplay TD Panel v0.8.0
 
 A Chrome extension for tournament directors on app.matchplay.events. On any tournament you run (as organizer, or as a manager) it adds a full-height sidebar on the right and shifts Matchplay's page over. The » button collapses it to a thin strip. Most of the tools also appear directly inside Matchplay's own pages (see below), so the sidebar is optional. It's styled to look like Matchplay's own pages.
 
@@ -84,6 +84,16 @@ To update to a newer version, replace the folder and click the reload icon on th
 - **Matches tab (bank tournaments)**: **Assign banks** gives each group of the new round one of your banks - games its players haven't played, avoiding any bank that shares 2+ games with one a player already had. Preview with **Another option**, then **Assign**. **Automatic** (off by default) does it for every new round without the preview. The bar then shows "Group 2 → Bank 4 · 11 of 12 new"
 - **Overview**: **Submit to IFPA** sits under Re-open tournament, same size and style
 - **Test tournaments only** (Matches tab): **Fill random results** enters a random finishing order for every open game of the round that has its arena; **Every round** does it automatically. With auto close/start and Automatic bank assignment on, a test tournament runs itself.
+
+## New in 0.8
+- **Ties**: only ties that change the finals are flagged - a cut line (who makes A/B/C, incl. eligibility), a bye line (from each finals' bracket size) or a game-pick line (top seed in each group picks). Others are listed under "Other ties". Resolved ties never show. The **Unresolved tie** tags are on the *Finals standings (eligibility applied)* table; clicking one opens one window: why it matters, who's tied (points, IFPA rank, head-to-head) and how to resolve it (cut lines: IFPA draw + vote or random game; byes/picks: head-to-head then IFPA rank, or play a game).
+- **Eligibility** (qualifying Players tab): **Add eligibility** - a B cut, then **+ Add another cut** for C, D… (as many as Matchplay's finals cut lines). Labels say what a player can't play: "B/C Ineligible", "C Ineligible"; eligible everywhere = no label. Only A finals = nothing needed. Other labels are kept.
+- **Finals Arenas tab**: **Copy N arenas from <qualifying>** (Matchplay's own "Add from qualifying" can show "Unknown · 0 arenas").
+- **Finals check-in** shows even before any players are added.
+- **Rebuild banks every round** is on the Banks tab. With Auto close/start on: close the round → rebuild banks → start the next round unpublished → assign a bank to each group → publish. Only one automatic bank option can be on (this, or Matches → Assign banks · Automatic).
+- **Assign banks** never gives a bank to two groups while free banks are left; banks already used this round (also by hand) and groups that already have a bank are skipped.
+- **Faster**: fixed pauses replaced by "wait until Matchplay is done" checks (a 3-bank Refresh went from about 18 s to 6 s in testing). Matchplay's page is refreshed before the frozen screen lifts, and you're put back where you were scrolled.
+- Rounds are always read oldest first (Matchplay sends newest first) - this fixes auto close/start not firing. Tournament details reload when you switch tabs and when Matchplay says a round/tournament started.
 
 ## While it's updating Matchplay
 - Changes are made in your own tab at full speed, but the screen is **frozen**: a copy of what was showing stays up (slightly dimmed) with an **"Updating Matchplay…"** card, progress and **Stop**. The clicking, dialogs and page changes happen underneath, out of sight. Clicks, scrolling and keys are blocked; the side panel stays usable.

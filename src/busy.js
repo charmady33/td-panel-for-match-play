@@ -31,7 +31,7 @@ TDP.busy = (() => {
         c.replaceWith(ph); }); }
       clone.querySelectorAll('script, noscript').forEach(e => e.remove());
       const cs = getComputedStyle(body), r = body.getBoundingClientRect();
-      snap = { node: clone, htmlClass: document.documentElement.className, bodyClass: body.className, bg: solidBg(), font: cs.font, color: cs.color, left: r.left, width: r.width, x: scrollX, y: scrollY, path: location.pathname };
+      snap = { node: clone, htmlClass: document.documentElement.className, bodyClass: body.className, bg: solidBg(), font: cs.font, color: cs.color, left: r.left, width: r.width, x: scrollX, y: scrollY, mainY: (document.querySelector('main') || {}).scrollTop || 0, path: location.pathname };
     } catch (e) { snap = null; }
   }
 
@@ -69,6 +69,9 @@ TDP.busy = (() => {
       b.style.cssText = `position:absolute;left:${snap.left - snap.x}px;top:${-snap.y}px;width:${snap.width}px;min-height:100vh;background:${snap.bg};font:${snap.font};color:${snap.color}`;
       [...snap.node.childNodes].forEach(n => b.appendChild(n));   // moved, not copied, so our boxes' contents stay
       wrap.appendChild(b); pg.appendChild(wrap);
+      // Matchplay scrolls its content area (main), not the window: show the copy where you were
+      const cm = b.querySelector('main'), y = snap.mainY;
+      if (cm && y) { cm.scrollTop = y; setTimeout(() => { cm.scrollTop = y; }, 0); }
     }
     const pct = Math.max(4, Math.round(T.jobs.fraction(j) * 100));
     const html = `<div class="${dark ? 'dark' : ''}"><div class="tdpc-dim" style="background:${dark ? 'rgba(17,24,39,.35)' : 'rgba(255,255,255,.35)'}"></div><div class="tdpc-card">

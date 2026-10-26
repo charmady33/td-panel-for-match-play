@@ -1,7 +1,7 @@
 // Matchplay TD Panel - shared helpers. Every file adds to the one global namespace TDP.
 /* global chrome */
 var TDP = window.TDP || (window.TDP = {});
-TDP.VERSION = '0.7.3';
+TDP.VERSION = '0.8.0';
 
 // this browser tab's id (kept across reloads of the same tab), so a task keeps running in the tab that started it
 TDP.tabId = (() => { try { let v = sessionStorage.getItem('tdp-tab'); if (!v) { v = Math.random().toString(36).slice(2); sessionStorage.setItem('tdp-tab', v); } return v; } catch (e) { return 'tab'; } })();
@@ -59,7 +59,7 @@ TDP.letter = i => String.fromCharCode(65 + i); // 0 -> A
 // ---------- DOM helpers for driving Matchplay's own UI ----------
 TDP.visible = el => !!(el && el.offsetParent !== null && el.getClientRects().length);
 TDP.txt = el => (el && (el.innerText || el.textContent) || '').replace(/\s+/g, ' ').trim();
-TDP.waitFor = async (fn, timeout = 8000, step = 150) => {
+TDP.waitFor = async (fn, timeout = 8000, step = 50) => {
   const end = Date.now() + timeout;
   for (;;) {
     let v = null;

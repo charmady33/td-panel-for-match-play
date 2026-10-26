@@ -15,7 +15,9 @@ var TDP = window.TDP || (window.TDP = {});
   let lastPath = null;
   async function onRoute() {
     if (location.pathname === lastPath) return;
+    const prevTid = lastPath ? Number((lastPath.match(/^\/tournaments\/(\d+)/) || [])[1]) : null;
     lastPath = location.pathname;
+    if (prevTid && prevTid === T.routeTid()) { T.data.refresh(true); return; }   // another tab of the same tournament: fresh details
     const tid = T.routeTid();
     if (!tid) { T.panel.unmount(); T.data.setTournament(null); return; }
     T.panel.mount(); T.panel.render(true);
@@ -25,6 +27,16 @@ var TDP = window.TDP || (window.TDP = {});
   }
   setInterval(onRoute, 500);
   onRoute();
+
+  // Matchplay's own toasts ("Tournament started", "Round started"…): reload details straight away
+  let toastTimer = null;
+  new MutationObserver(ms => {
+    for (const m of ms) for (const n of m.addedNodes) {
+      if (n.nodeType !== 1 || (n.id || '').startsWith('tdp-')) continue;
+      const tx = n.textContent || ''; if (tx.length > 200) continue;   // toasts are short
+      if (/(Tournament|Round) (started|completed|published)|Round created/i.test(tx)) { clearTimeout(toastTimer); toastTimer = setTimeout(() => T.data.refresh(true), 800); return; }
+    }
+  }).observe(document.body, { childList: true, subtree: true });
 
   T.data.on(D => {
     if (D.isTD === false && T.settings.token) { T.panel.unmount(); return; }   // not your tournament: stay out of the way
@@ -62,11 +74,18 @@ var TDP = window.TDP || (window.TDP = {});
       D.games = D.games.filter(g => g.roundId !== r.roundId).concat(fresh);
       const ft = T.finals.groupTies(D).filter(t => !t.tbDone);
       if (ft.length) return state('tie needs breaking first: ' + ft[0].why);
-      const last = D.t.roundCount && D.rounds.length >= D.t.roundCount;
+      const total = D.t.roundCount || D.t.duration || 0, last = !!total && D.rounds.length >= total;
       const go = await T.panel.showCountdown(`All games approved in ${r.name}. Closing the round${last ? '' : ' and starting the next one'} in`, Math.max(3, T.settings.autoCountdown || 10));
       if (!go || !(T.tstate[tid] || {}).auto) return state('cancelled - will check again');
       const steps = [{ tid, page: 'matches', op: 'closeRound', label: `Closing ${r.name}` }];
-      if (!last) steps.push({ tid, page: 'matches', op: 'startNextRound', label: 'Starting the next round' });
+      const rebuild = (T.tstate[tid] || {}).autoBanks && /bank/i.test(D.t.arenaAssignment || '');
+      if (!last && rebuild) {
+        // banks rebuilt every round: new banks, then the round starts unpublished, gets its banks, then goes live
+        steps.push({ tid, page: 'banks', op: 'rebuildBanks', args: { tid }, label: 'Rebuilding banks for the next round' });
+        steps.push({ tid, page: 'matches', op: 'startNextRound', args: { publish: false }, label: 'Starting the next round (not published yet)' });
+        steps.push({ tid, page: 'matches', op: 'assignRound', args: { tid }, label: 'Assigning a bank to each group' });
+        steps.push({ tid, page: 'matches', op: 'publishRound', label: 'Publishing the round' });
+      } else if (!last) steps.push({ tid, page: 'matches', op: 'startNextRound', label: 'Starting the next round' });
       await T.jobs.start(last ? `Close ${r.name}` : `Close ${r.name} & start next round`, steps);
       state(last ? `closing ${r.name} - that was the last round` : `closing ${r.name} and starting the next round`);
     } catch (e) { state('error: ' + (e.message || e)); }
@@ -77,7 +96,7 @@ var TDP = window.TDP || (window.TDP = {});
   let assignBusy = false;
   async function autoAssign() {
     const D = T.data.D, tid = D.tid, st = T.tstate[tid] || {};
-    if (!st.autoAssign || assignBusy || !D.t || !D.isTD || D.t.status !== 'started' || T.jobs.active()) return;
+    if (!st.autoAssign || st.autoBanks || assignBusy || !D.t || !D.isTD || D.t.status !== 'started' || T.jobs.active()) return;
     const ctx = T.bankplan.context(D);
     if (!ctx.round || !ctx.groups.length || st.assignDoneRound === ctx.round.roundId) return;
     if (!(await lock(tid + ':assign'))) return;
@@ -96,7 +115,7 @@ var TDP = window.TDP || (window.TDP = {});
   async function autoFill() {
     const D = T.data.D, tid = D.tid, st = T.tstate[tid] || {};
     if (!st.autoFill || fillBusy || !D.t || D.t.test !== true || !D.isTD || D.t.status !== 'started' || T.jobs.active()) return;
-    const r = T.data.currentRound(); if (!r || st.fillDoneRound === r.roundId) return;
+    const r = T.data.currentRound(); if (!r || st.fillDoneRound === r.roundId || String(r.status) === 'pending') return;   // unpublished rounds can't take results
     const gs = D.games.filter(g => g.roundId === r.roundId && !g.bye && g.set !== 9999);
     if (!gs.length || gs.some(g => g.arenaId == null)) return;   // wait until every game has its arena / bank
     if (!gs.some(g => !T.timing.isDone(g))) return;
@@ -110,22 +129,22 @@ var TDP = window.TDP || (window.TDP = {});
   }
 
   // ---------- automatic banks each round (Banks tab switch, default off) ----------
+  // "Rebuild banks every round" (Banks tab) when the round was started by hand: new banks, then assign them
   let banksBusy = false;
   async function autoBanks() {
     const D = T.data.D, tid = D.tid, st = T.tstate[tid] || {};
-    if (!st.autoBanks || banksBusy || !D.t || !D.isTD || D.t.status !== 'started' || !/bank/i.test(D.t.arenaAssignment || '')) return;
-    const j = T.jobs.get(); if (j && !j.done && !j.error) return;
+    if (!st.autoBanks || banksBusy || !D.t || !D.isTD || D.t.status !== 'started' || !/bank/i.test(D.t.arenaAssignment || '') || T.jobs.active()) return;
     const ctx = T.bankplan.context(D);
     if (!ctx.round || !ctx.groups.length || st.banksDoneRound === ctx.round.roundId) return;
     if (!(await lock(tid + ':banks'))) return;
     banksBusy = true;
     try {
-      const n = Math.max(st.bankN || 0, ctx.groups.length), size = st.bankSize || D.t.gamesPerRound || 3;
-      const use = new Set(st.histUse || []), hist = await T.store.get('hist', {});
-      const plan = T.bankplan.make(D, { n, size, seed: ctx.round.roundId, exclude: st.bankExclude || [], extra: { hist: Object.entries(hist).filter(([id]) => use.has(id)).map(([, h]) => h.arenas) } });
       await T.saveT(tid, { banksDoneRound: ctx.round.roundId });   // once per round, even if the TD stops the task
-      await T.jobs.start(`Auto banks for ${ctx.round.name}`, T.bankplan.steps(D, plan));
-    } catch (e) { T.panel.say('Auto banks: ' + (e.message || e), 'err'); }
+      await T.jobs.start(`Rebuild banks for ${ctx.round.name}`, [
+        { tid, page: 'banks', op: 'rebuildBanks', args: { tid }, label: 'Rebuilding banks' },
+        { tid, page: 'matches', op: 'assignRound', args: { tid }, label: 'Assigning a bank to each group' },
+      ]);
+    } catch (e) { T.panel.say('Rebuild banks: ' + (e.message || e), 'err'); }
     finally { banksBusy = false; }
   }
 })();

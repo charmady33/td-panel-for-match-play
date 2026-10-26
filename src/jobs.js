@@ -40,7 +40,7 @@ TDP.jobs = (() => {
   async function start(title, steps) {
     if (job && !job.done && !job.error) throw new Error('Another task is still running.');
     T.busy.freeze();   // snapshot what's on screen before anything moves
-    job = { title, steps, i: 0, log: [], startedAt: Date.now(), owner: T.tabId, returnTo: location.pathname, scroll: [scrollX, scrollY] };
+    job = { title, steps, i: 0, log: [], startedAt: Date.now(), owner: T.tabId, returnTo: location.pathname, scroll: [scrollX, scrollY, (document.querySelector('main') || {}).scrollTop || 0] };
     await save();
     run();
   }
@@ -51,7 +51,7 @@ TDP.jobs = (() => {
   }
 
   const ops = {
-    async labels(a) { const P = counter(a.groups.length); for (const g of a.groups) { P.to(P.done, `${g.labels.join(', ') || 'no label'} · ${g.ids.length} player${g.ids.length === 1 ? '' : 's'}`); await T.mp.setLabels(g.ids, g.labels, a.color); P.tick(`${g.ids.length} player${g.ids.length === 1 ? '' : 's'} labelled`); } },
+    async labels(a) { const P = counter(a.groups.length); for (const g of a.groups) { P.to(P.done, `${g.labels.join(', ') || 'no label'} · ${g.ids.length} player${g.ids.length === 1 ? '' : 's'}`); await T.mp.setLabels(g.ids, g.labels, g.color || a.color); P.tick(`${g.ids.length} player${g.ids.length === 1 ? '' : 's'} labelled`); } },
     async addPlayers(a) { await T.mp.addFromQualifying(a.ids); },
     async deactivate(a) { await T.mp.bulk(a.ids, 'Deactivate'); },
     async activate(a) { await T.mp.bulk(a.ids, 'Activate'); },
@@ -67,9 +67,16 @@ TDP.jobs = (() => {
     async createBanks(a) { await eachBank(a.banks, (b, tick) => T.mp.createBank(b.name, b.arenas, tick), b => b.arenas.length + 2); },
     async bankArenas(a) { await eachBank(a.banks, (b, tick) => T.mp.setBankArenas(b.name, b.arenas, tick), b => 2 * b.arenas.length + 1); },
     async assignBanks(a) {
-      const P = counter(a.pairs.length);
-      for (const [i, x] of a.pairs.entries()) { P.to(i, `Group ${x.group} → ${x.bank} (${i + 1} of ${a.pairs.length})`); await T.mp.assignBank(x.group, x.bank); P.tick(`Group ${x.group} → ${x.bank} done`); }
-      await T.saveT(a.tid, { banksDoneRound: a.roundId });
+      // check Matchplay right before: a group that already has a bank/arena is skipped, not an error
+      const fresh = a.roundId ? await T.api.all(`/tournaments/${a.tid}/games?round=${a.roundId}`, 0) : [];
+      const has = new Set(fresh.filter(g => g.bankId != null || g.arenaId != null).map(g => g.set + 1));
+      const P = counter(a.pairs.length), skipped = [];
+      for (const [i, x] of a.pairs.entries()) {
+        if (has.has(x.group)) { skipped.push(`Group ${x.group}`); P.tick(`Group ${x.group} already had a bank`); continue; }
+        P.to(i, `Group ${x.group} → ${x.bank} (${i + 1} of ${a.pairs.length})`); await T.mp.assignBank(x.group, x.bank); P.tick(`Group ${x.group} → ${x.bank} done`);
+      }
+      await T.saveT(a.tid, { banksDoneRound: a.roundId, assignDoneRound: a.roundId });
+      return skipped.length ? `${skipped.join(', ')} already had a bank (skipped)` : '';
     },
     async noop() { /* just brings you back to a page */ },
     async resolveTie(a) { await T.mp.resolveTie(a.from, a.names); if (a.key) await T.ties.markApplied(a.qid, a.key); },
@@ -92,8 +99,27 @@ TDP.jobs = (() => {
       const skipped = games.length - ready.length;
       return `${ready.length} game${ready.length === 1 ? '' : 's'} filled${skipped ? `, ${skipped} skipped (no arena yet - assign banks first)` : ''}`;
     },
+    async copyArenas(a) { const P = counter(a.names.length); await T.mp.addArenas(a.names, text => P.tick(text)); },
     async closeRound() { await T.mp.closeRound(); },
-    async startNextRound() { await T.mp.startNextRound(); },
+    async startNextRound(a) { await T.mp.startNextRound({ publish: !(a && a.publish === false) }); await T.data.refresh(true); },
+    async publishRound() { await T.mp.publishRound(); },
+    // new game sets for the next round, written into the banks (Banks tab); worked out now, from the latest data
+    async rebuildBanks(a) {
+      await T.data.refresh(true);
+      const D = T.data.D, st = T.tstate[a.tid] || {};
+      const players = (D.t.players || []).filter(p => !p.tournamentPlayer || p.tournamentPlayer.status !== 'inactive').length;
+      const n = Math.max((D.t.banks || []).filter(b => b.status !== 'inactive').length, Math.ceil(players / 4), 1);
+      const plan = T.bankplan.make(D, { n, size: D.t.gamesPerRound || 3, seed: Date.now() % 1e9, exclude: st.bankExclude || [], force: st.bankForce || [], extra: await T.bankplan.extras(D) });
+      await eachBank(plan.res.banks.map(b => ({ name: b.name, arenas: b.games.map(g => g.name) })), (b, tick) => T.mp.setBankArenas(b.name, b.arenas, tick), b => 2 * b.arenas.length + 1);
+      return `${plan.res.banks.length} banks rebuilt`;
+    },
+    // the newest round's waiting groups get banks (same choice as the Assign banks button's best option)
+    async assignRound(a) {
+      await T.data.refresh(true);
+      const o = T.bankplan.assignOptions(T.data.D);
+      if (!o.list.length) return o.ctx.groups.length ? 'no free banks to assign' : 'every group already has a bank';
+      return ops.assignBanks({ tid: a.tid, roundId: o.ctx.round.roundId, pairs: o.list[0].pairs.map(p => ({ group: p.group, bank: p.bank })) });
+    },
   };
 
   async function eachBank(banks, fn, units) {
@@ -122,7 +148,9 @@ TDP.jobs = (() => {
           else { job.log.push(`Opening ${s.page} of tournament ${s.tid}…`); await save(); location.assign(`/tournaments/${s.tid}/${s.page === 'overview' ? '' : s.page}`); return; }
           if (T.routePage() !== s.page) { location.assign(`/tournaments/${s.tid}/${s.page}`); return; }
         }
-        await T.sleep(1200);
+        // page ready: Matchplay has drawn the tab's content
+        await T.waitFor(() => { const m = document.querySelector('main'); return m && T.txt(m).length > 80; }, 8000);
+        await T.sleep(250);
         job.log.push(s.label || s.op); await save();
         job.sub = null;
         const res = await ops[s.op](s.args || {});
@@ -136,8 +164,17 @@ TDP.jobs = (() => {
           if (m && T.routeTid() === +m[1]) { try { await T.mp.goTab(+m[1], m[2] || 'overview'); } catch (e) { /* fall through */ } }
           if (location.pathname !== job.returnTo) { await save(); location.assign(job.returnTo); return; }
         }
-        await T.sleep(400);
-        if (job.scroll) scrollTo(job.scroll[0], job.scroll[1]);
+        // show what changed: Matchplay's own Refresh button where there is one, else reload this page once
+        const changedHere = job.steps.some(st => st.tid === T.routeTid() && (st.page === T.routePage() || (st.page === 'overview' && T.routePage() === 'overview')));
+        if (changedHere && !job.reloaded) {
+          const rb = T.findBtn(document.querySelector('main') || document, /^Refresh$/);
+          job.reloaded = true; await save();
+          if (rb) { T.click(rb); await T.sleep(800); }
+          else { location.reload(); return; }
+        }
+        await T.waitFor(() => { const m = document.querySelector('main'); return m && T.txt(m).length > 80; }, 8000);
+        await T.sleep(250);
+        if (job.scroll) { scrollTo(job.scroll[0], job.scroll[1]); const m = document.querySelector('main'); if (m && job.scroll[2]) m.scrollTop = job.scroll[2]; }
         job.done = true; job.doneAt = Date.now(); job.log.push('Done.'); await save();
         T.data.refresh(true);
       }

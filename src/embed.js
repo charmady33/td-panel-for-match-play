@@ -26,7 +26,12 @@ tr.back td{background:var(--head)}`;
   // put our block right after Matchplay's player table card
   function anchor() {
     const tables = [...document.querySelectorAll('main table')].filter(t => t.querySelector('a[href*="/players/"]'));
-    const t = tables[tables.length - 1]; if (!t) return null;
+    const t = tables[tables.length - 1];
+    if (!t) {   // no players yet: no table - go under the "MP Ratings / IFPA rankings" links (or the toolbar)
+      const link = T.findBtn(document.querySelector('main') || document, /IFPA rankings$/) || T.findBtn(document.querySelector('main') || document, /^Add players$/);
+      if (!link) return null;
+      return link.parentElement;   // the row of links; check-in goes right below it
+    }
     let card = t; while (card.parentElement && card.parentElement.tagName !== 'MAIN' && !/rounded|shadow/.test(card.className || '')) card = card.parentElement;
     return card;
   }

@@ -78,13 +78,25 @@ TDP.arenatab = (() => {
       ${isFinals ? `<span class="badge b-indigo" title="Included automatically: this finals is linked to its qualifying">Qualifying · ${qn} games</span>` : ''}
       ${st.pastTimes ? `<span class="badge b-indigo">Matchplay IDs · ${Object.values(st.pastTimes).reduce((s, x) => s + x.count, 0)} games</span>` : ''}
       ${hn ? `<span class="badge b-gray" title="Ticked in Bank Builder ⚙ Settings">Past events · ${hn}</span>` : ''}
+      ${missingFromQual(D).length ? `<button class="btn sm" data-act="copyQual" title="${T.esc(missingFromQual(D).join(', '))}">Copy ${missingFromQual(D).length} arena${missingFromQual(D).length === 1 ? '' : 's'} from ${T.esc(D.qual.name || 'qualifying')}</button>` : ''}
       <span class="gap" style="margin-left:auto"><input type="text" data-f="ids" placeholder="Other Matchplay IDs, e.g. 201234, 205678" value="${T.esc(st.bankPast || '')}" style="width:260px"><button class="btn sm sec" data-act="load">Load</button></span>
     </div></div>`;
     T.inpage.block('tdp-arena-times', wrap, 'before', html, onBar);
   }
 
+  // a finals: the qualifying's active arenas this tournament doesn't have yet (Matchplay's own "Add from qualifying" can miss them)
+  function missingFromQual(D) {
+    if (!D.qual || D.qual.tournamentId === D.tid) return [];
+    const have = new Set((D.t.arenas || []).map(a => lc(a.name)));
+    return (D.qual.arenas || []).filter(a => !a.tournamentArena || a.tournamentArena.status !== 'inactive').map(a => a.name).filter(n => n && !have.has(lc(n)));
+  }
   async function onBar(e) {
     if (e.type !== 'click') return;
+    if (e.target.closest('[data-act=copyQual]')) {
+      const D = T.data.D, names = missingFromQual(D);
+      if (names.length) await T.jobs.start(`Copy ${names.length} arenas from qualifying`, [{ tid: D.tid, page: 'arenas', op: 'copyArenas', args: { names }, label: `Adding ${names.length} arenas` }]);
+      return;
+    }
     const a = e.target.closest('[data-act=load]'); if (!a) return;
     const D = T.data.D, ids = (a.getRootNode().querySelector('[data-f=ids]').value.match(/\d+/g) || []).map(Number).filter(id => id !== D.tid);
     a.disabled = true; a.textContent = 'Loading…';

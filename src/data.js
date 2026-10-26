@@ -38,7 +38,8 @@ TDP.data = (() => {
   }
 
   async function loadGames() {
-    D.rounds = arr(unwrap(await api.get(`/tournaments/${D.tid}/rounds`, 15000)));
+    // Matchplay lists rounds newest first: keep them oldest first everywhere (Round 1, 2, 3…)
+    D.rounds = arr(unwrap(await api.get(`/tournaments/${D.tid}/rounds`, 15000))).sort((a, b) => ((a.index != null ? a.index : a.roundId) - (b.index != null ? b.index : b.roundId)));
     const keep = new Map(D.games.map(g => [g.gameId, g]));
     for (const r of D.rounds) {
       const done = String(r.status) === 'completed';
@@ -75,7 +76,7 @@ TDP.data = (() => {
       if (!T.settings.token) throw new Error('NO_TOKEN');
       const now = Date.now();
       if (!D.me) D.me = unwrap(await api.get('/users/profile', 3600e3));
-      const fullDue = force || now - lastFull > 60e3 || !D.t;
+      const fullDue = force || now - lastFull > (T.routePage() === 'matches' ? 15e3 : 60e3) || !D.t;   // Matches tab: keep round/status fresh
       if (fullDue) {
         D.t = await loadTournament(D.tid, force ? 0 : 55e3);
         await loadFamily(force ? 0 : 55e3);
@@ -121,7 +122,7 @@ TDP.data = (() => {
   // ---------- derived ----------
   function arenaMap(t) { const m = {}; for (const a of (t && t.arenas) || []) m[a.arenaId] = a; return m; }
   const playerMap = t => { const m = {}; for (const p of (t && t.players) || []) m[p.playerId] = p; return m; };
-  const currentRound = () => { const s = D.rounds.filter(r => String(r.status) !== 'completed'); return s[s.length - 1] || null; };
+  const currentRound = () => { const s = D.rounds.filter(r => String(r.status) !== 'completed'); return s[s.length - 1] || null; };   // newest round still open
   const latestRound = () => D.rounds[D.rounds.length - 1] || null;
   function counts() {
     const r = currentRound(); const gs = r ? D.games.filter(g => g.roundId === r.roundId && !g.bye) : [];

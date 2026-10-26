@@ -32,12 +32,19 @@ TDP.bankbar = (() => {
       <span class="small" title="From &quot;Matches each round&quot; on Matchplay's Overview">${size} game${size === 1 ? '' : 's'} per bank (from Matchplay)</span>
       ${has ? `<button class="btn" data-act="refresh">Refresh banks</button><button class="btn sec" data-act="add">Add banks</button>` : `<button class="btn" data-act="generate">Generate banks</button>`}
       <button class="btn sec" data-act="settings" title="Games and time sources">⚙ Settings</button>
+      <label class="gap" title="Each new round: new banks (different from earlier rounds), then each group gets one. With auto close/start on, the round starts unpublished, gets its banks, then is published."><input type="checkbox" data-f="autoBanks" ${(st(D).autoBanks ? 'checked' : '')}> <span class="lab">Rebuild banks every round</span></label>
       <span class="small flex1" style="text-align:right">${has ? `${has} bank${has === 1 ? '' : 's'} in Matchplay` : 'No banks yet'}</span>
     </div></div>`;
     T.inpage.block('tdp-bankbar', a.el, a.where, html, onBar);
   }
   async function onBar(e) {
     const D = T.data.D; if (!D || !D.t) return;
+    if (e.type === 'change' && e.target.dataset && e.target.dataset.f === 'autoBanks') {
+      const on = e.target.checked, was = st(D).autoAssign;
+      await T.saveT(D.tid, on ? { autoBanks: true, autoAssign: false } : { autoBanks: false });   // only one automatic bank option
+      if (on && was) T.panel.say('Turned off "Assign banks · Automatic" on the Matches tab - Rebuild banks every round assigns them now.', 'ok');
+      return;
+    }
     if (e.type !== 'click') return;
     const a = e.target.closest('[data-act]'); if (!a) return;
     const act = a.dataset.act;
@@ -170,7 +177,7 @@ table{width:100%;border-collapse:collapse}td{padding:4px 6px;border-top:1px soli
   // ---------- Assign banks (Matches tab button) ----------
   function assignPreview(D, k = 0) {
     const o = T.bankplan.assignOptions(D);
-    if (!o.list.length) return T.panel.say(o.banks.length ? 'No group in this round needs a bank.' : 'No banks yet - make them on the Banks tab.', 'err');
+    if (!o.list.length) return T.panel.say(!o.ctx.groups.length ? 'No group in this round needs a bank.' : o.allBanks ? 'Every bank is already in use this round - add banks on the Banks tab.' : 'No banks yet - make them on the Banks tab.', 'err');
     k = k % o.list.length; cur = { mode: 'assign', k, o };
     const opt = o.list[k];
     const rows = opt.pairs.map(p => {
@@ -180,7 +187,8 @@ table{width:100%;border-collapse:collapse}td{padding:4px 6px;border-top:1px soli
       return `<tr><td><b>Group ${p.group}</b></td><td>→ ${T.esc(p.bank)}</td><td class="small">${p.fresh} of ${p.total} new</td></tr>${lines.length ? `<tr><td></td><td colspan="2">${lines.join('')}</td></tr>` : ''}`;
     }).join('');
     const notes = [];
-    if (o.shared) notes.push(`${o.ctx.groups.length} groups but ${o.banks.length} banks: some banks are shared. Add banks on the Banks tab so each group gets its own.`);
+    if (o.usedBanks) notes.push(`${o.usedBanks} bank${o.usedBanks === 1 ? ' is' : 's are'} already in use this round and left out.`);
+    if (o.shared) notes.push(`${o.ctx.groups.length} groups but ${o.banks.length} free bank${o.banks.length === 1 ? '' : 's'}: ${o.ctx.groups.length - o.banks.length} bank${o.ctx.groups.length - o.banks.length === 1 ? '' : 's'} will be shared. Add banks on the Banks tab so each group gets its own.`);
     if (opt.pairs.some(p => p.repeats.length || p.similar.length)) notes.push('Some repeats can\'t be avoided with these banks. Refresh or Add banks on the Banks tab for more variety.');
     show(`<div class="dh">Assign banks · ${T.esc(o.ctx.round.name || 'this round')}</div><div class="db">
       <div class="small mb">Picked so players get games they haven't played, avoiding banks close to one they already had (2+ of the same games).${o.list.length > 1 ? ` Option ${k + 1} of ${o.list.length}.` : ''}</div>

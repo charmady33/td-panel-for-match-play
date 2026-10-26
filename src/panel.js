@@ -199,13 +199,13 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--pri);vertical-ali
       <div class="small mb">Read from Matchplay's own IFPA Rankings list on the qualifying Players tab${st.ranksAt ? ` · last loaded ${new Date(st.ranksAt).toLocaleString()}` : ''}.</div>
       <button class="btn sm sec" data-act="loadRanks">Load IFPA ranks</button></div></div>`;
     h += tiesCard();
-    // eligibility labels
+    // eligibility labels: same cuts and window as the qualifying Players tab
     const needCut = divs.filter(x => x.i > 0);
     if (needCut.length) {
+      const cuts = needCut.filter(x => x.cutoff).map(x => `${x.letter}: rank ${x.cutoff} or better can't play`);
       h += `<div class="card"><div class="ch"><span class="h">Eligibility labels (qualifying)</span></div><div class="cb">
-        <div class="small mb">Players ranked at or better than a division's cutoff can't play in it. Labels are only added, never removed.</div>
-        ${needCut.map(x => `<div class="grid2 mb"><div><div class="lab">${x.letter} rank cutoff</div><input type="number" min="1" placeholder="e.g. 1000" data-div="${x.letter}" data-field="cutoff" value="${x.cutoff || ''}"></div><div><div class="lab">${x.letter} label</div><input type="text" data-div="${x.letter}" data-field="label" value="${T.esc(x.label)}"></div></div>`).join('')}
-        ${ui.labelPreview ? labelPreviewHtml() : `<button class="btn sm" data-act="previewLabels" ${nRanked ? '' : 'disabled title="Load IFPA ranks first"'}>Preview labels</button>`}
+        <div class="small mb">${cuts.length ? T.esc(cuts.join(' · ')) : 'No cuts set yet.'} Labels say what a player can't play ("B/C Ineligible"); eligible for everything = no label.</div>
+        <button class="btn sm" data-act="eligOpen">${cuts.length ? 'Edit eligibility' : 'Add eligibility'}</button>
       </div></div>`;
     }
     for (const x of divs) h += divisionCard(x, d);
@@ -264,34 +264,14 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--pri);vertical-ali
     const d = D(), st = T.tstate[d.tid] || {}, use = new Set(st.histUse || []);
     return { qual: ui.qualTimes || null, hist: Object.entries(ui.hist || {}).filter(([id]) => use.has(id)).map(([, h]) => h.arenas) };
   }
+  // bank tools now live on Matchplay's own Banks tab (Bank Builder bar)
   function tBanks() {
-    const d = D(); if (!d.t) return '<div class="small">Loading…</div>';
-    if (!ui.hist) { ui.hist = {}; T.store.get('hist', {}).then(h => { ui.hist = h; render(true); }); }
-    const o = bankOpts(), st = T.tstate[d.tid] || {};
-    const bankMode = /bank/i.test(d.t.arenaAssignment || ''), existing = (d.t.banks || []).filter(b => b.status !== 'inactive');
-    const ctx = T.bankplan.context(d);
-    let h = '';
-    if (!bankMode) h += `<div class="callout warn">This tournament isn't using banks. In Matchplay: Overview → <b>Arena assignment</b> → Show additional options → <b>Arena banks (manual)</b>.</div>`;
-    h += `<div class="card"><div class="ch"><span class="h">${ctx.round ? `${T.esc(ctx.round.name)} · ${ctx.groups.length} group${ctx.groups.length === 1 ? '' : 's'} need banks` : 'No groups waiting for banks'}</span>${existing.length ? `<span class="badge b-gray">${existing.length} banks in Matchplay</span>` : ''}</div><div class="cb">
-      <label class="gap"><input type="checkbox" data-set="autoBanks" ${st.autoBanks ? 'checked' : ''}> <span class="lab">Automatic every round</span></label>
-      <div class="small mb">When a round starts and its groups have no games yet, makes new banks (different from earlier rounds), updates the banks in Matchplay and assigns each group the bank with the most games its players haven't played. Needs Arena assignment set to Arena banks (manual).${st.banksDoneRound ? ` Last done for round #${st.banksDoneRound}.` : ''}</div>
-      <div class="grid2"><div><div class="lab">Banks</div><input type="number" min="1" max="30" data-bank="n" value="${o.n}"></div><div><div class="lab">Games per bank</div><input type="number" min="1" max="10" data-bank="size" value="${o.size}"></div></div>
-      <div class="gap mt"><button class="btn" data-act="genBanks">Generate${ctx.round ? ' for ' + T.esc(ctx.round.name) : ''}</button>${ui.bank ? '<button class="btn sec" data-act="anotherBanks">Try another</button>' : ''}</div>
+    const d = D(), st = T.tstate[d.tid] || {};
+    const bankMode = /bank/i.test((d.t && d.t.arenaAssignment) || ''), n = ((d.t && d.t.banks) || []).filter(b => b.status !== 'inactive').length;
+    return `<div class="card"><div class="ch"><span class="h">Banks</span><span class="badge b-gray">${n} in Matchplay</span></div><div class="cb">
+      ${bankMode ? `<div class="small mb">Bank tools are on Matchplay's <b>Banks</b> tab, in the <b>Bank Builder</b> bar: Generate / Refresh / Add banks, <b>Rebuild banks every round</b> (${st.autoBanks ? 'on' : 'off'}) and ⚙ Settings. Assigning banks to groups is on the <b>Matches</b> tab.</div>
+      <a class="btn sm" href="/tournaments/${d.tid}/banks">Open the Banks tab</a>` : `<div class="callout warn">This tournament doesn't use banks. In Matchplay: Overview → <b>Arena assignment</b> → Arena banks (manual).</div>`}
     </div></div>`;
-    if (ui.bank) h += bankResultHtml(bankMode);
-    h += `<div class="card"><div class="ch"><span class="h">Game times</span></div><div class="cb">
-      <div class="small mb">This tournament's own times are always used (3+ finished games). Other sources fill the gaps, matched by exact arena name.</div>
-      ${d.qual && d.qual.tournamentId !== d.tid ? `<label class="gap mb"><input type="checkbox" data-act="useQual" ${ui.qualTimes ? 'checked' : ''}> <span class="lab">Qualifying (${T.esc(d.qual.name)})</span></label>` : ''}
-      <div class="lab">Matchplay tournament IDs</div>
-      <div class="gap"><input type="text" class="flex1" style="width:auto" data-bank="past" placeholder="e.g. 279001, 279554" value="${T.esc(o.past)}"><button class="btn sm sec" data-act="loadPast">${ui.pastLoading ? 'Loading…' : 'Load'}</button></div>
-      <div class="small">${Object.keys(st.pastTimes || {}).length ? `${Object.keys(st.pastTimes).length} arenas loaded from those IDs.` : 'None loaded.'}</div>
-      <div class="lab mt">Tournaments run with this extension</div>
-      ${Object.entries(ui.hist || {}).filter(([id]) => +id !== d.tid).sort((a, b) => b[1].at - a[1].at).slice(0, 15).map(([id, x]) => `<label class="gap"><input type="checkbox" data-hist="${id}" ${(st.histUse || []).includes(id) ? 'checked' : ''}> <span class="flex1 ell">${T.esc(x.name)}</span><span class="small">${Object.keys(x.arenas).length} arenas</span></label>`).join('') || '<div class="small">None yet - times are saved automatically from every tournament you open with the panel.</div>'}
-    </div></div>`;
-    const est = T.bankplan.estimates(d, st, bankExtra()), ex = new Set(o.exclude);
-    h += `<div class="card"><div class="ch"><span class="h">Arenas</span><span class="badge b-gray">${est.length - est.filter(e => ex.has(e.arenaId)).length}/${est.length} used</span></div>
-      <table><tr><th></th><th>Arena</th><th>Era</th><th class="num">Est.</th><th>From</th></tr>${est.sort((a, b) => b.sec - a.sec).map(e => `<tr><td><input type="checkbox" data-incl="${e.arenaId}" ${ex.has(e.arenaId) ? '' : 'checked'}></td><td class="ell" style="max-width:130px">${T.esc(e.name)}</td><td><span class="era era-${e.era}">${e.era}</span></td><td class="num">${T.fmtDur(e.sec * 1000)}</td><td class="small" title="${T.esc(e.src)}">${e.src === 'era estimate' ? 'era' : 'times'}</td></tr>`).join('')}</table></div>`;
-    return h;
   }
   function bankResultHtml(bankMode) {
     const plan = ui.bank, res = plan.res, totals = res.banks.map(b => b.total), spread = Math.max(...totals) - Math.min(...totals);
@@ -366,6 +346,7 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--pri);vertical-ali
         case 'jobRetry': await T.jobs.retry(); break;
         case 'jobClose': await T.jobs.cancel(); render(true); break;
         case 'loadRanks': await T.jobs.start('Load IFPA ranks', [{ tid: d.qual.tournamentId, page: 'players', op: 'readRanks', args: { tid: d.qual.tournamentId }, label: 'Reading Matchplay IFPA Rankings' }]); break;
+        case 'eligOpen': T.elig.open(d); break;
         case 'previewLabels': ui.labelPreview = buildLabelPlan(); render(true); break;
         case 'cancelLabels': ui.labelPreview = null; render(true); break;
         case 'applyLabels': {

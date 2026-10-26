@@ -11,19 +11,18 @@ TDP.mp = (() => {
   }
   // Matchplay's dialogs render their content a moment after the box appears: wait for text
   async function needDialog(timeout = 6000) { return (await T.waitFor(() => { const d = T.dialog(); return d && T.txt(d) ? d : null; }, timeout)) || fail('Matchplay dialog did not open.'); }
-  async function dialogClosed(timeout = 8000) { await T.waitFor(() => !T.dialog(), timeout); await T.sleep(400); }
+  async function dialogClosed(timeout = 8000) { await T.waitFor(() => !T.dialog(), timeout, 50); await T.sleep(150); }
   async function menu(trigger, item, root) {
     T.click(await needBtn(trigger, root));
-    await T.sleep(350);
-    T.click(await needBtn(item));
-    await T.sleep(500);
+    T.click(await needBtn(item));   // waits for the menu item to appear
+    await T.sleep(150);
   }
   // click a Matchplay tab link (keeps the SPA, so dialogs that need the tournament loaded work)
   async function goTab(tid, page) {
     const href = `/tournaments/${tid}${page && page !== 'overview' ? '/' + page : ''}`;
     if (location.pathname === href) return;
     const a = [...document.querySelectorAll(`a[href$="${href}"]`)].find(T.visible);
-    if (a) { a.click(); await T.waitFor(() => location.pathname === href, 6000); await T.sleep(900); }
+    if (a) { a.click(); await T.waitFor(() => location.pathname === href, 6000, 50); await T.sleep(400); }
     else { location.assign(href); await T.sleep(10000); }
   }
 
@@ -36,7 +35,7 @@ TDP.mp = (() => {
   async function waitPlayers() { return (await T.waitFor(() => playerRows().length && playerRows(), 10000)) || fail('Players list did not load.'); }
   // Matchplay re-renders the table when the selection changes, so look the rows up again after every click
   async function clearSelection() {
-    for (let k = 0; k < 200; k++) { const r = playerRows().find(x => x.cb && x.cb.checked); if (!r) return; r.cb.click(); await T.sleep(120); }
+    for (let k = 0; k < 200; k++) { const r = playerRows().find(x => x.cb && x.cb.checked); if (!r) return; r.cb.click(); await T.waitFor(() => !r.cb.isConnected || !r.cb.checked, 1500, 30); await T.sleep(40); }
   }
   async function selectPlayers(ids) {
     await waitPlayers(); await clearSelection();
@@ -44,11 +43,11 @@ TDP.mp = (() => {
     for (let k = 0; k < ids.length * 4 + 10; k++) {
       const r = playerRows().find(x => want.has(x.id) && x.cb && !x.cb.checked);
       if (!r) break;
-      r.cb.click(); await T.sleep(150);
+      r.cb.click(); await T.waitFor(() => !r.cb.isConnected || r.cb.checked, 1500, 30); await T.sleep(40);
     }
     const n = playerRows().filter(x => want.has(x.id) && x.cb && x.cb.checked).length;
     if (n !== want.size) fail(`Only selected ${n} of ${want.size} players in the list.`);
-    await T.sleep(300);
+    await T.sleep(100);
   }
   // Set label REPLACES a player's labels, so callers pass the full list (existing + new)
   async function setLabels(ids, labels, color) {
@@ -72,14 +71,14 @@ TDP.mp = (() => {
   async function bulk(ids, action /* 'Activate' | 'Deactivate' */) {
     await selectPlayers(ids);
     T.click((await T.waitFor(() => bulkBtn(action), 5000)) || fail(`No bulk "${action}" button.`));
-    await T.sleep(1500);
+    await T.waitFor(() => !bulkBtn(action), 4000, 50); await T.sleep(200);   // the bar goes once Matchplay has done it
     await clearSelection();
   }
   async function setActive(id, active) {
     await waitPlayers();
     const r = playerRows().find(x => x.id === Number(id)) || fail('Player not in this tournament.');
     const b = [...r.tr.querySelectorAll('button')].find(x => T.txt(x) === (active ? 'Activate' : 'Deactivate'));
-    if (b) { b.click(); await T.sleep(1200); }
+    if (b) { b.click(); await T.waitFor(() => !b.isConnected || T.txt(b) !== (active ? 'Activate' : 'Deactivate'), 4000, 50); await T.sleep(150); }
   }
   // Matchplay's own IFPA Rankings table (Players tab -> "IFPA rankings"): name -> rank
   async function readIfpaRanks() {
@@ -87,7 +86,7 @@ TDP.mp = (() => {
     T.click(await needBtn('IFPA rankings'));
     await needDialog();
     const d = await T.waitFor(() => { const x = T.dialog(); return x && x.querySelectorAll('tr td').length ? x : null; }, 10000) || fail('IFPA Rankings list did not load.');
-    await T.sleep(500);
+    { let n = -1, since = Date.now(); await T.waitFor(() => { const k = T.dialog().querySelectorAll('tr').length; if (k !== n) { n = k; since = Date.now(); } return Date.now() - since > 300; }, 4000, 50); }   // until the list stops growing
     const out = {};
     for (const tr of T.dialog().querySelectorAll('tr')) {
       const td = [...tr.querySelectorAll('td')].map(T.txt);
@@ -105,7 +104,7 @@ TDP.mp = (() => {
     const other = [...d.querySelectorAll('label, li, div')].find(e => /^Other player amount$/i.test(T.txt(e)));
     if (other) other.click();
     T.click(await needBtn('Select players', d));
-    await T.sleep(800);
+    await T.sleep(200);
     d = await needDialog();
     const boxes = await T.waitFor(() => { const b = [...d.querySelectorAll('input[type=checkbox]')]; return b.length ? b : null; }, 8000) || fail('Qualifying player list did not load.');
     const want = new Set(ids.map(Number)); let hit = 0;
@@ -117,7 +116,7 @@ TDP.mp = (() => {
       if (b.checked !== on) { b.click(); await T.sleep(20); }
     }
     if (hit !== want.size) { T.click(T.findBtn(d, 'Cancel')); fail(`Only ${hit} of ${want.size} players could be selected (already added?).`); }
-    await T.sleep(300);
+    await T.sleep(100);
     T.click(await needBtn(/^Add \d+ players?$/, d));
     await dialogClosed(10000);
   }
@@ -133,22 +132,35 @@ TDP.mp = (() => {
       const cur = list(); if (!cur[i]) break;
       if (cur[i].name === namesInOrder[i]) continue;
       const from = cur.find(r => r.name === namesInOrder[i]); if (!from) continue;
-      from.el.click(); await T.sleep(350);
-      list()[i].el.click(); await T.sleep(450);
+      from.el.click(); await T.sleep(200);
+      list()[i].el.click(); await T.waitFor(() => (list()[i] || {}).name === namesInOrder[i], 1500, 40); await T.sleep(60);
     }
     T.click(await needBtn('Save changes'));
-    await T.sleep(1500);
+    await T.waitFor(() => !T.findBtn(document, 'Save changes'), 5000, 50); await T.sleep(200);
   }
 
   // ---------- rounds (Matches tab) ----------
-  async function closeRound() { T.click(await needBtn(/Close round$/)); await T.sleep(2000); }
-  async function startNextRound() {
+  async function closeRound() { T.click(await needBtn(/Close round$/)); await T.waitFor(() => !T.findBtn(document, /Close round$/), 8000, 50); await T.sleep(300); }
+  // publish: false = start it unpublished ("Publish round immediately" unticked), to set banks first
+  async function startNextRound(opts = {}) {
     const b = T.findBtn(document, /^Start next round$/); if (!b) return false;
     T.click(b);
     const d = await needDialog();
+    if (opts.publish === false) {
+      const cb = [...d.querySelectorAll('input[type=checkbox]')].find(c => /Publish round immediately/i.test(T.cbLabel(c)));
+      if (!cb) { T.click(T.findBtn(d, 'Cancel')); fail('No "Publish round immediately" option in the Start round window.'); }
+      if (cb.checked) { cb.click(); await T.waitFor(() => !cb.checked, 1500); }
+    }
     T.click(await needBtn('Start round', d));
     await dialogClosed(15000);
     return true;
+  }
+  // an unpublished ("Pending") round: its green Publish button
+  async function publishRound() {
+    const b = await T.waitFor(() => T.findBtn(document.querySelector('main') || document, /^Publish$/), 8000) || fail('No "Publish" button (is the round already published?).');
+    T.click(b);
+    await T.waitFor(() => !T.findBtn(document.querySelector('main') || document, /^Publish$/), 10000);
+    await T.sleep(300);
   }
 
   // ---------- banks (Banks tab) ----------
@@ -157,20 +169,21 @@ TDP.mp = (() => {
 
   // the "Add arenas" dialog: wait until the list stops growing, find each game fresh right before ticking it
   // (the filter box finds any it can't see), check the button counts them all, then add
-  async function pickArenas(d, names, bankName, tick) {
+  async function pickArenas(d, names, bankName, tick, where) {
+    where = where || `Bank "${bankName}"`;
     const boxes = () => [...d.querySelectorAll('input[type=checkbox]')];
     let last = -1, since = Date.now();
-    await T.waitFor(() => { const n = boxes().length; if (n !== last) { last = n; since = Date.now(); } return n > 0 && Date.now() - since > 700; }, 12000, 100);
-    if (!boxes().length) { T.click(T.findBtn(d, 'Close')); fail(`Bank "${bankName}": the Add arenas list did not load.`); }
+    await T.waitFor(() => { const n = boxes().length; if (n !== last) { last = n; since = Date.now(); } return n > 0 && Date.now() - since > 300; }, 12000, 50);
+    if (!boxes().length) { T.click(T.findBtn(d, 'Close')); fail(`${where}: the Add arenas list did not load.`); }
     const filter = [...d.querySelectorAll('input')].find(i => i.type !== 'checkbox' && /filter|search/i.test(i.placeholder || ''));
     const find = nm => boxes().find(b => T.cbFirst(b) === nm);
     for (const nm of names) {
       let b = find(nm);
       if (!b && filter) { T.setVal(filter, nm); b = await T.waitFor(() => find(nm), 4000); }
-      if (!b) { T.click(T.findBtn(d, 'Close')); fail(`Bank "${bankName}": couldn't find ${nm} in the Add arenas list.`); }
+      if (!b) { T.click(T.findBtn(d, 'Close')); fail(`${where}: couldn't find ${nm} in the Add arenas list.`); }
       if (!b.checked) { b.click(); await T.sleep(80); }
       if (!b.isConnected || !b.checked) { const again = await T.waitFor(() => find(nm), 2000); if (again && !again.checked) { again.click(); await T.sleep(80); } }
-      if (filter && filter.value) { T.setVal(filter, ''); await T.sleep(350); }
+      if (filter && filter.value) { T.setVal(filter, ''); await T.waitFor(() => boxes().length > 1, 2000, 40); await T.sleep(80); }
       tick(`adding ${nm}`);
     }
     const btn = await T.waitFor(() => T.findBtn(d, /^Add \d+ arenas?$/), 4000);
@@ -178,7 +191,7 @@ TDP.mp = (() => {
     if (k !== names.length) {
       const ticked = names.filter(nm => { const b = find(nm); return b && b.checked; });
       T.click(T.findBtn(d, 'Close'));
-      fail(`Bank "${bankName}": ${k} of ${names.length} games got ticked${ticked.length < names.length ? ` (couldn't tick ${names.filter(n => !ticked.includes(n)).join(', ')})` : ''}.`);
+      fail(`${where}: ${k} of ${names.length} games got ticked${ticked.length < names.length ? ` (couldn't tick ${names.filter(n => !ticked.includes(n)).join(', ')})` : ''}.`);
     }
     T.click(btn);
     await dialogClosed();
@@ -204,9 +217,10 @@ TDP.mp = (() => {
 
   // ---------- banks: play order = the bank's arena order (Re-order: click a game, then "Move to arena N") ----------
   async function reorderBank(name, arenaNames) {
-    await T.sleep(600);
     let card = await T.waitFor(() => bankCard(name), 8000) || fail(`Bank "${name}" not found.`);
-    const listed = () => [...bankCard(name).querySelectorAll('li')].map(T.txt).filter(t => t && !/^Add arenas/.test(t));
+    const listed = () => { const c = bankCard(name); return c ? [...c.querySelectorAll('li')].map(T.txt).filter(t => t && !/^Add arenas/.test(t)) : []; };
+    await T.waitFor(() => arenaNames.every(n => listed().includes(n)), 4000, 50);   // the bank shows all its games
+    card = bankCard(name) || card;
     if (listed().join('|') === arenaNames.join('|')) return;
     let box = card; for (let k = 0; k < 4 && box && !T.findBtn(box, /^Re-order$/); k++) box = box.parentElement;
     T.click((box && T.findBtn(box, /^Re-order$/)) || fail(`No Re-order button on "${name}".`));
@@ -218,9 +232,9 @@ TDP.mp = (() => {
       const cur = order();
       if (cur[i] === arenaNames[i]) continue;
       const src = rows().find(b => T.txt(b).replace(/^A\d+\s*/, '') === arenaNames[i]) || fail(`"${arenaNames[i]}" is not in bank "${name}".`);
-      src.click(); await T.sleep(200);
-      const tgt = await T.waitFor(() => rows().find(b => new RegExp('Move to arena ' + (i + 1) + '$').test(T.txt(b))), 3000) || fail('Re-order: no target slot.');
-      tgt.click(); await T.sleep(200);
+      src.click();
+      const tgt = await T.waitFor(() => rows().find(b => new RegExp('Move to arena ' + (i + 1) + '$').test(T.txt(b))), 3000, 40) || fail('Re-order: no target slot.');
+      tgt.click(); await T.waitFor(() => order()[i] === arenaNames[i], 1500, 40);
     }
     if (order().join('|') !== arenaNames.join('|')) { T.click(T.findBtn(d, 'Cancel')); fail(`Bank "${name}": couldn't set the play order.`); }
     T.click(await needBtn('Save', d));
@@ -239,8 +253,9 @@ TDP.mp = (() => {
       card = bankCard(name);
       const li = [...card.querySelectorAll('li')].find(x => x.querySelector('button') && !/^Add arenas/.test(T.txt(x)) && !want.has(T.txt(x)));
       if (!li) break;
-      const gone = T.txt(li);
-      li.querySelector('button').click(); await T.sleep(900);
+      const gone = T.txt(li), before = [...card.querySelectorAll('li')].length;
+      li.querySelector('button').click();
+      await T.waitFor(() => { const c = bankCard(name); return c && [...c.querySelectorAll('li')].length < before; }, 4000, 50); await T.sleep(100);
       tick(`removing ${gone}`);
     }
     card = bankCard(name);
@@ -253,6 +268,14 @@ TDP.mp = (() => {
     }
     await reorderBank(name, arenaNames);   // play order = the order given
     tick(`${name} play order`);
+  }
+
+  // ---------- Arenas tab: add existing arenas to this tournament (Add… -> Existing arenas) ----------
+  async function addArenas(names, tick = noTick) {
+    T.click(await needBtn(/^Add(…|\.\.\.)$/));
+    const d = await needDialog();
+    const tab = T.findBtn(d, /^Existing arenas$/); if (tab) T.click(tab);
+    await pickArenas(d, names, '', tick, 'This tournament');
   }
 
   // ---------- Matches tab: enter one game's finishing order (test tournaments: random results) ----------
@@ -278,7 +301,7 @@ TDP.mp = (() => {
     const nameEl = n => [...d.querySelectorAll('div, span, td')].find(e => e.children.length === 0 && T.txt(e) === n && T.visible(e));
     for (const n of order.slice(0, Math.max(1, order.length - 1))) {
       const el = await T.waitFor(() => nameEl(n), 3000) || (T.click(T.findBtn(d, 'Cancel')), fail(`${n} isn't in the results window for ${arena}.`));
-      T.click(el); await T.sleep(180);
+      T.click(el); await T.sleep(100);
     }
     T.click(await needBtn('Save', d));
     await dialogClosed();
@@ -290,7 +313,7 @@ TDP.mp = (() => {
     const box = head.closest('table') || head.parentElement;
     let scope = box; while (scope && ![...scope.querySelectorAll('button')].some(b => T.txt(b) === 'Actions')) scope = scope.parentElement;
     const btn = scope && [...scope.querySelectorAll('button')].find(b => T.txt(b) === 'Actions') || fail(`Group ${groupNo} has no Actions menu (round finished?).`);
-    T.click(btn); await T.sleep(400);
+    T.click(btn);
     T.click(await needBtn('Assign bank'));
     const d = await needDialog();
     const boxes = await T.waitFor(() => { const b = [...d.querySelectorAll('input[type=checkbox]')]; return b.length ? b : null; }, 8000) || fail('Bank list did not load.');
@@ -324,5 +347,5 @@ TDP.mp = (() => {
     await dialogClosed();
   }
 
-  return { goTab, menu, playerRows, selectPlayers, setLabels, bulk, setActive, readIfpaRanks, addFromQualifying, setSeeds, closeRound, startNextRound, createBank, setBankArenas, reorderBank, assignBank, enterResults, resolveTie, needBtn, needDialog, dialogClosed };
+  return { goTab, menu, playerRows, selectPlayers, setLabels, bulk, setActive, readIfpaRanks, addFromQualifying, setSeeds, closeRound, startNextRound, publishRound, createBank, setBankArenas, reorderBank, assignBank, enterResults, addArenas, resolveTie, needBtn, needDialog, dialogClosed };
 })();

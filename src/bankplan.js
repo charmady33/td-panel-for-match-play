@@ -101,9 +101,16 @@ TDP.bankplan = (() => {
   // A bank sharing 2+ games with a bank (group's games in a round) the player already had: very bad.
   const NEW_GAME = -10, REPEAT = 40, SIMILAR = 3000;
   function assignOptions(D) {
-    const ctx = context(D), am = T.data.arenaMap(D.t), pm = T.data.playerMap(D.t);
-    const banks = (D.t.banks || []).filter(b => b.status !== 'inactive').map(b => ({ name: b.name, games: (b.arenaIds || []).map(id => (am[id] || {}).name).filter(Boolean) }));
-    if (!ctx.round || !ctx.groups.length || !banks.length) return { ctx, banks, list: [] };
+    const ctx0 = context(D), am = T.data.arenaMap(D.t), pm = T.data.playerMap(D.t);
+    // only groups still waiting (no bank, no arena); banks already used this round (by hand or not) are left out
+    const rg = ctx0.round ? D.games.filter(g => g.roundId === ctx0.round.roundId && !g.bye && g.set !== 9999) : [];
+    const waiting = new Set(rg.filter(g => g.bankId == null && g.arenaId == null).map(g => g.set + 1));
+    const done = new Set(rg.filter(g => g.bankId != null || g.arenaId != null).map(g => g.set + 1));
+    const usedBanks = new Set(rg.map(g => g.bankId).filter(b => b != null));
+    const ctx = { ...ctx0, groups: ctx0.groups.filter(g => waiting.has(g.key) && !done.has(g.key)) };
+    const all = (D.t.banks || []).filter(b => b.status !== 'inactive');
+    const banks = all.filter(b => !usedBanks.has(b.bankId)).map(b => ({ name: b.name, games: (b.arenaIds || []).map(id => (am[id] || {}).name).filter(Boolean) }));
+    if (!ctx.round || !ctx.groups.length || !banks.length) return { ctx, banks, list: [], usedBanks: usedBanks.size, allBanks: all.length };
     // each player's earlier "banks": the games their group played in each earlier round
     const past = {};   // playerId -> [{ round, games:Set }]
     const rname = {}; (D.rounds || []).forEach((r, i) => { rname[r.roundId] = r.name || `Round ${i + 1}`; });
@@ -134,7 +141,7 @@ TDP.bankplan = (() => {
       cost: o.cost,
       pairs: o.pick.map((bi, gi) => ({ group: ctx.groups[gi].key, bank: banks[bi].name, ...detail(ctx.groups[gi], banks[bi]) })),
     }));
-    return { ctx, banks, list, shared: ctx.groups.length > banks.length };
+    return { ctx, banks, list, shared: ctx.groups.length > banks.length, usedBanks: usedBanks.size, allBanks: all.length };
   }
   // the current round's groups that already have a bank: "Group 2 -> Bank 4 · 11 of 12 new"
   function roundSummary(D) {

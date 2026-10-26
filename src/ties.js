@@ -79,7 +79,7 @@ TDP.ties = (() => {
       const n = g.length, step = n <= 10 ? 0.1 : 0.01, dp = n <= 10 ? 1 : 2;
       const ids = g.map(s => s.playerId).sort((a, b) => a - b).join(',');
       const rec = Object.values(tb).find(x => x.status === 'done' && x.ids && [...x.ids].sort((a, b) => a - b).join(',') === ids);
-      const how = rec ? (rec.kind === 'seeding' ? 'Seeding tie: head-to-head, then IFPA rank' : `Tiebreaker on ${rec.game}${rec.method === 'ifpa' ? ' (IFPA draw + vote)' : ' (random game)'}`) : 'Resolved in Matchplay (manual order)';
+      const how = rec ? (rec.kind === 'seeding' || rec.method === 'h2h' ? 'Head-to-head, then IFPA rank' : `Tiebreaker on ${rec.game}${rec.method === 'ifpa' ? ' (IFPA draw + vote)' : ' (random game)'}`) : 'Resolved in Matchplay (manual order)';
       g.forEach((s, i) => map.set(s.playerId, { pts: (Number(s.points) + (n - 1 - i) * step).toFixed(dp), title: `${how} · ${T.ord(i + 1)} of ${n} tied on ${Number(s.points)}` }));
     }
     return map;
@@ -104,7 +104,7 @@ TDP.ties = (() => {
   function openByKey(D, key) { const t = T.finals.qualifyingTies(D, T.finals.plan(D)).find(x => keyOf(x) === key); const rec = store(D)[key]; if (t || rec) open(D, t || recToTie(D, rec), key); }
   const recToTie = (D, rec) => ({ pos: rec.pos, kind: rec.kind, spots: rec.spots, why: rec.why, players: rec.ids.map(id => ({ playerId: id, p: { name: name(D, id) } })) });
   function open(D, tie, key) {
-    key = key || keyOf(tie); cur = { key, tie };
+    key = key || keyOf(tie); cur = { key, tie, pickGame: false };
     if (!host) {
       host = document.createElement('div'); host.id = 'tdp-tb';
       host.attachShadow({ mode: 'open' });
@@ -127,46 +127,57 @@ TDP.ties = (() => {
       <div class="df"><a class="btn sec" href="/tournaments/${qidOf(D)}/resolve-ties">Resolve ties page</a><button class="btn" data-act="close">Okay</button></div></div></div></div>`;
   }
 
+  const KIND = { cutline: 'Cut line', boundary: 'Cut line (eligibility)', bye: 'Bye', pick: 'Game picks', seeding: 'Seeding' };
   function draw() {
     if (!host || !cur || !cur.tie) return;
     const D = T.data.D, t = cur.tie, rec = store(D)[cur.key] || {}, ids = t.players.map(r => r.playerId);
-    const seeding = t.kind === 'seeding' || (t.spots || ids.length) >= ids.length;
+    const bubble = t.kind === 'cutline' || t.kind === 'boundary';
     let body = '', foot = '';
-    const head = `<div class="dh">Tie · positions ${t.pos}–${t.pos + ids.length - 1}<span class="badge ${seeding ? 'b-amber' : 'b-rose'}">${seeding ? 'Seeding' : `${t.spots} of ${ids.length} advance`}</span></div>`;
-    const why = `<div class="small mb">${T.esc(t.why || '')}</div>`;
+    const head = `<div class="dh">Tie · positions ${t.pos}–${t.pos + ids.length - 1}<span class="badge ${bubble ? 'b-rose' : 'b-amber'}">${KIND[t.kind] || 'Tie'}</span></div>`;
+    const why = `<div class="callout mb"><b>Why it matters:</b> ${(t.reasons || [t.why]).map(T.esc).join('<br>')}</div>`;
+    const hRows = h2h(D, ids);
+    const who = `<table class="mb"><tr><th>Player</th><th class="num">Points</th><th class="num">IFPA rank</th><th class="num">H2H W–L</th></tr>${hRows.map(r => { const st = D.standings.find(x => x.playerId === r.id) || {}; return `<tr><td>${T.esc(name(D, r.id))}</td><td class="num">${st.points != null ? Number(st.points) : '–'}</td><td class="num">${r.rank || '–'}</td><td class="num">${r.w}–${r.l}</td></tr>`; }).join('')}</table>`;
     if (rec.status === 'done') {
-      body = `<div class="callout ok">Applied to Matchplay${rec.game ? ` · tiebreaker on <b>${T.esc(rec.game)}</b>` : ''}.</div><ol>${(rec.final || []).map(id => `<li>${T.esc(name(D, id))}</li>`).join('')}</ol>`;
+      body = `${why}<div class="callout ok">Applied to Matchplay${rec.game ? ` · tiebreaker on <b>${T.esc(rec.game)}</b>` : rec.method === 'h2h' ? ' · head-to-head, then IFPA rank' : ''}.</div><ol>${(rec.final || []).map(id => `<li>${T.esc(name(D, id))}</li>`).join('')}</ol>`;
       foot = `<button class="btn sec" data-act="forget">Clear record</button><button class="btn" data-act="close">Close</button>`;
-    } else if (seeding) {
-      // IFPA18 §IV.1: not on the bubble -> head-to-head among the tied players, then initial IFPA rank
-      const rows = h2h(D, ids);
-      body = `<div class="small mb">IFPA: everyone here advances, so no game. Order = head-to-head win % among these players in qualifying, then IFPA rank.</div>
-        <table><tr><th>New order</th><th>Player</th><th class="num">H2H W–L</th><th class="num">Win %</th><th class="num">IFPA</th></tr>${rows.map((r, i) => `<tr><td>${T.ord(t.pos + i)}</td><td>${T.esc(name(D, r.id))}</td><td class="num">${r.w}–${r.l}</td><td class="num">${r.pct == null ? '–' : Math.round(r.pct * 100) + '%'}</td><td class="num">${r.rank || '–'}</td></tr>`).join('')}</table>`;
-      cur.final = rows.map(r => r.id);
-      foot = `<button class="btn sec" data-act="close">Cancel</button><button class="btn" data-act="apply">Apply to Matchplay</button>`;
-    } else if (!rec.status) {
-      body = `<div class="small mb">Bubble tie: a tiebreaker game decides who advances. Choose how to pick the game.</div>
-        <div class="pick"><button class="btn sec" data-act="mIfpa"><b>IFPA draw + vote</b>&nbsp;- draw one Old (EM), Mid (SS) and New (DMD) game; players vote by secret ballot</button>
-        <button class="btn sec" data-act="mRandom"><b>Just random</b>&nbsp;- one random qualifying game</button></div>`;
+    } else if (!rec.status && !cur.pickGame) {
+      // How to resolve: why it matters, who's tied, and the options for this kind of tie
+      const opts = bubble ? [
+        ['mIfpa', 'IFPA draw + vote', 'Recommended. Draws one Old (EM), Mid (SS) and New (DMD/LCD) game; the tied players vote by secret ballot; you click the winning game, then enter the finish.'],
+        ['mRandom', 'Random game', 'One random game from the qualifying, played now; you enter the finish.'],
+      ] : [
+        ['mH2h', 'Head-to-head, then IFPA rank', 'Recommended (IFPA way for seeding). No game: order by head-to-head win % among these players in qualifying, then IFPA rank.'],
+        ['mPlay', 'Play a tiebreaker game', 'Decide it on a game instead (IFPA draw + vote, or random).'],
+      ];
+      body = `${why}<div class="lab">Tied</div>${who}<div class="lab">How to resolve</div><div class="pick">${opts.map(([act, title, text]) => `<button class="btn sec" data-act="${act}"><b>${title}</b>&nbsp;- ${text}</button>`).join('')}</div>`;
       foot = `<button class="btn sec" data-act="close">Cancel</button>`;
+    } else if (!rec.status && cur.pickGame) {
+      body = `${why}<div class="lab">Pick the tiebreaker game</div><div class="pick"><button class="btn sec" data-act="mIfpa"><b>IFPA draw + vote</b>&nbsp;- one Old (EM), Mid (SS) and New (DMD/LCD) game; players vote</button>
+        <button class="btn sec" data-act="mRandom"><b>Random game</b>&nbsp;- one random qualifying game</button></div>`;
+      foot = `<button class="btn sec" data-act="back">Back</button><button class="btn sec" data-act="close">Cancel</button>`;
+    } else if (rec.status === 'h2h' || rec.kind === 'seeding' && rec.status === 'applying') {
+      body = `${why}<div class="small mb">Head-to-head win % among these players in qualifying, then IFPA rank. No game.</div>
+        <table><tr><th>New order</th><th>Player</th><th class="num">H2H W–L</th><th class="num">Win %</th><th class="num">IFPA</th></tr>${hRows.map((r, i) => `<tr><td>${T.ord(t.pos + i)}</td><td>${T.esc(name(D, r.id))}</td><td class="num">${r.w}–${r.l}</td><td class="num">${r.pct == null ? '–' : Math.round(r.pct * 100) + '%'}</td><td class="num">${r.rank || '–'}</td></tr>`).join('')}</table>`;
+      cur.final = hRows.map(r => r.id);
+      foot = `<button class="btn sec" data-act="restart">Back</button><button class="btn" data-act="apply">Apply to Matchplay</button>`;
     } else if (rec.status === 'vote') {
-      body = `<div class="small mb">Drawn games. Players vote by secret ballot; click the game with the most votes. If the vote is tied (after a re-vote), use Random pick.</div>
+      body = `${why}<div class="small mb">Drawn games. Players vote by secret ballot; click the game with the most votes. If the vote is tied (after a re-vote), use Random pick.</div>
         <div class="pick">${rec.drawn.map((g, i) => `<button class="btn sec" data-act="choose" data-i="${i}"><span class="era era-${g.era}">${g.label}</span>&nbsp;${T.esc(g.name)}</button>`).join('')}</div>
         <div class="gap"><button class="btn sm sec" data-act="randPick">Random pick (vote tied)</button><button class="btn sm sec" data-act="mIfpa">Redraw</button></div>`;
       foot = `<button class="btn sec" data-act="restart">Start over</button><button class="btn sec" data-act="close">Close</button>`;
     } else if (rec.status === 'playing') {
       const order = rec.order || [], finish = rec.finish || [];
       const games = []; for (let i = 0; i < order.length; i += 4) games.push(order.slice(i, i + 4));
-      body = `<div class="callout">Tiebreaker on <span class="game">${T.esc(rec.game)}</span>${rec.method === 'ifpa' ? ' (IFPA draw + vote)' : ' (random game)'}</div>
+      body = `${why}<div class="callout">Tiebreaker on <span class="game">${T.esc(rec.game)}</span>${rec.method === 'ifpa' ? ' (IFPA draw + vote)' : ' (random game)'}</div>
         <div class="lab">Player order (random)</div>${games.map((g, gi) => `<div class="small">${games.length > 1 ? `Game ${gi + 1}: ` : ''}${g.map((id, i) => `P${i + 1} ${T.esc(name(D, id))}`).join(' · ')}</div>`).join('')}
         ${games.length > 1 ? '<div class="small">More tied players than one game holds: games are played in random order and scores compared as one game.</div>' : ''}
         <div class="lab mt">Finishing order - click players from 1st down</div>
         <div class="chips">${order.filter(id => !finish.includes(id)).map(id => `<button class="btn sm" data-act="fin" data-p="${id}">${T.esc(name(D, id))}</button>`).join('') || '<span class="small">All placed.</span>'}</div>
-        ${ids.map((_, i) => `<div class="slot"><b>${T.ord(i + 1)}</b>${finish[i] ? T.esc(name(D, finish[i])) + (i < t.spots ? ' <span class="badge b-green">advances</span>' : '') : '<span class="small">–</span>'}</div>`).join('')}
-        ${finish.length === ids.length ? (() => { cur.final = finalOrder(D, t, finish); return `<div class="lab mt">Matchplay order</div><div class="small mb">Advancers seeded by head-to-head (IFPA: the tiebreaker only decides who advances), then the rest by tiebreaker finish.</div><ol>${cur.final.map(id => `<li>${T.esc(name(D, id))}</li>`).join('')}</ol>`; })() : ''}`;
+        ${ids.map((_, i) => `<div class="slot"><b>${T.ord(i + 1)}</b>${finish[i] ? T.esc(name(D, finish[i])) + (i < t.spots ? ` <span class="badge b-green">${bubble ? 'advances' : t.kind === 'bye' ? 'bye' : 'picks'}</span>` : '') : '<span class="small">–</span>'}</div>`).join('')}
+        ${finish.length === ids.length ? (() => { cur.final = bubble ? finalOrder(D, t, finish) : finish; return `<div class="lab mt">Matchplay order</div><div class="small mb">${bubble ? 'Advancers seeded by head-to-head (IFPA: the tiebreaker only decides who advances), then the rest by tiebreaker finish.' : 'In tiebreaker finishing order.'}</div><ol>${cur.final.map(id => `<li>${T.esc(name(D, id))}</li>`).join('')}</ol>`; })() : ''}`;
       foot = `<button class="btn sec" data-act="restart">Start over</button>${finish.length ? '<button class="btn sec" data-act="undo">Undo</button>' : ''}<button class="btn sec" data-act="close">Close (results saved)</button><button class="btn" data-act="apply" ${finish.length === ids.length ? '' : 'disabled'}>Apply to Matchplay</button>`;
     }
-    host.shadowRoot.innerHTML = `<style>${CSS()}</style><div class="wrap${document.documentElement.classList.contains('dark') ? ' dark' : ''}"><div class="ov" data-act="bg"><div class="dlg">${head}<div class="db">${why}${body}</div><div class="df">${foot}</div></div></div></div>`;
+    host.shadowRoot.innerHTML = `<style>${CSS()}</style><div class="wrap${document.documentElement.classList.contains('dark') ? ' dark' : ''}"><div class="ov" data-act="bg"><div class="dlg">${head}<div class="db">${body}</div><div class="df">${foot}</div></div></div></div>`;
   }
 
   async function onClick(e) {
@@ -177,17 +188,21 @@ TDP.ties = (() => {
     if (!cur || !cur.tie) return;
     const t = cur.tie, ids = t.players.map(r => r.playerId), base = { pos: t.pos, ids, kind: t.kind, spots: t.spots, why: t.why };
     try {
+      if (act === 'mH2h') await save(D, cur.key, { ...base, status: 'h2h', method: 'h2h' });
+      if (act === 'mPlay') { cur.pickGame = true; return draw(); }
+      if (act === 'back') { cur.pickGame = false; return draw(); }
       if (act === 'mIfpa') await save(D, cur.key, { ...base, status: 'vote', method: 'ifpa', drawn: drawIfpa(D) });
       if (act === 'mRandom') await save(D, cur.key, { ...base, status: 'playing', method: 'random', game: drawRandom(D), order: shuffle(ids), finish: [] });
       if (act === 'choose') { const rec = store(D)[cur.key]; await save(D, cur.key, { status: 'playing', game: rec.drawn[+a.dataset.i].name, order: shuffle(ids), finish: [] }); }
       if (act === 'randPick') { const rec = store(D)[cur.key]; const g = rec.drawn[Math.floor(Math.random() * rec.drawn.length)]; await save(D, cur.key, { status: 'playing', game: g.name, order: shuffle(ids), finish: [], randomPick: true }); }
       if (act === 'fin') { const rec = store(D)[cur.key]; await save(D, cur.key, { finish: [...(rec.finish || []), +a.dataset.p] }); }
       if (act === 'undo') { const rec = store(D)[cur.key]; await save(D, cur.key, { finish: (rec.finish || []).slice(0, -1) }); }
-      if (act === 'restart') await save(D, cur.key, null);
+      if (act === 'restart') { cur.pickGame = false; await save(D, cur.key, null); }
       if (act === 'forget') { await save(D, cur.key, null); return close(); }
       if (act === 'apply') {
         const final = cur.final || ids, qid = qidOf(D), names = final.map(id => name(D, id));
-        await save(D, cur.key, { ...base, final, status: (store(D)[cur.key] || {}).status === 'playing' ? 'playing' : 'applying', kind: t.kind });
+        const was = (store(D)[cur.key] || {}).status;
+        await save(D, cur.key, { ...base, final, status: was === 'playing' ? 'playing' : was === 'h2h' ? 'h2h' : 'applying', kind: t.kind });
         await T.jobs.start(`Break tie at ${T.ord(t.pos)}`, [{ tid: qid, page: 'resolve-ties', op: 'resolveTie', args: { from: t.pos, names, key: cur.key, qid }, label: `Resolving positions ${t.pos}–${t.pos + ids.length - 1} in Matchplay` }]);
         return close();
       }

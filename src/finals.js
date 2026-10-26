@@ -26,9 +26,14 @@ TDP.finals = (() => {
   const ranksOf = D => ((T.tstate[D.qual && D.qual.tournamentId] || {}).ranks) || {};   // playerId -> IFPA rank
   const labelsOf = p => (p && p.tournamentPlayer && p.tournamentPlayer.labels) || [];
 
-  // ineligible for division d: carries that division's label, or ranked at/better than its cutoff
+  // eligibility labels: "B Ineligible", "B/C Ineligible", "C/D Ineligible"… -> the division letters a player can't play
+  const ELIG_RE = /^([A-Z](?:\s*\/\s*[A-Z])*)\s+Ineligible$/i;
+  const lettersOf = p => { const out = new Set(); labelsOf(p).forEach(l => { const m = String(l).trim().match(ELIG_RE); if (m) m[1].split('/').forEach(x => out.add(x.trim().toUpperCase())); }); return out; };
+  const eligLabel = letters => letters.length ? `${letters.join('/')} Ineligible` : null;
+  // ineligible for division d: an eligibility label naming it (or its old custom label), or ranked at/better than its cutoff
   function ineligible(p, d, ranks) {
     if (!d || d.i === 0 || !p) return false;
+    if (lettersOf(p).has(d.letter)) return true;
     if (d.label && labelsOf(p).some(l => l.toLowerCase() === d.label.toLowerCase())) return true;
     const r = ranks[p.playerId];
     return !!(d.cutoff && r && r <= d.cutoff);
@@ -67,42 +72,75 @@ TDP.finals = (() => {
   }
 
   // ---------- ties that need breaking ----------
+  // Only ties that change the finals: a CUT line (who makes A/B/C, incl. the eligibility line Matchplay doesn't
+  // flag), a BYE line (who skips round 1) or a PICK line (top seed in each group picks the games). Lines come from
+  // each finals tournament's own settings. Resolved ties (Matchplay's manual tiebreakers) never show.
+  function lines(d) {
+    const ft = d.finals && d.finals.t, size = d.size || (d.picks || []).length;
+    if (!ft || !size) return [];
+    const out = [], B = Math.min(ft.bracketSize || size, size) || size;
+    if (ft.type === 'group_bracket') {
+      let L = 4; while (L * 2 <= B) L *= 2;
+      const byes = B === L ? 0 : 2 * L - B;
+      if (byes > 0) {
+        out.push({ k: byes, kind: 'bye', text: `decides who gets a bye (seeds 1–${byes} skip round 1)` });
+        out.push({ k: L / 4, kind: 'pick', text: `decides who picks games (seeds 1–${L / 4} pick in their first round)` });
+        const g1 = (B - byes) / 4;
+        if (g1 >= 1) out.push({ k: byes + g1, kind: 'pick', text: `decides who picks games in round 1 (seeds ${byes + 1}–${byes + g1} pick)` });
+      } else if (B / 4 >= 1) out.push({ k: B / 4, kind: 'pick', text: `decides who picks games (seeds 1–${B / 4} pick)` });
+    } else if (ft.type === 'bracket' || ft.type === 'double_bracket') {
+      let P = 1; while (P < B) P *= 2;
+      if (P - B > 0) out.push({ k: P - B, kind: 'bye', text: `decides who gets a bye (seeds 1–${P - B} skip round 1)` });
+    } else if (ft.seeding && ft.seeding !== 'random' && Math.floor(size / 4) >= 1) {
+      out.push({ k: Math.floor(size / 4), kind: 'pick', text: `decides who picks games (seeds 1–${Math.floor(size / 4)} pick)` });
+    }
+    return out.filter(l => l.k > 0 && l.k < size);
+  }
+
   function qualifyingTies(D, divs) {
-    const out = [], ranks = ranksOf(D), rows = order(D);
+    const out = [], other = [], ranks = ranksOf(D), rows = order(D);
     const byPos = {}; rows.forEach(r => (byPos[r.position] = byPos[r.position] || []).push(r));
     const group = pos => byPos[pos] || [];
-    const seen = new Set();
-    // spots = how many of the tied players get the place being decided (bubble); seeding ties: everyone advances
-    const add = (kind, pos, players, d, why, spots) => { const k = kind + pos + (d ? d.letter : ''); if (seen.has(k)) return; seen.add(k); out.push({ kind, pos, players, div: d, why, span: group(pos).length, spots: spots == null ? players.length : spots }); };
-    // 1. Matchplay's own cut-line bubbles
-    // which cut line a tie straddles (cumulative sizes: A = top 8, B = next 8 → 16...)
+    const real = g => g.length > 1 && !g.some(r => r.manualTiebreakerGroup != null);   // 2+ players still tied
+    const found = new Map();   // pos -> tie (one card per tied group, reasons added up)
+    const add = (kind, pos, d, why, spots) => {
+      const g = group(pos); if (!real(g)) return;
+      const t = found.get(pos);
+      if (t) { if (!t.reasons.includes(why)) t.reasons.push(why); if (kind === 'cutline' || kind === 'boundary') { t.kind = kind; t.spots = spots; } return; }
+      found.set(pos, { kind, pos, players: g, div: d, reasons: [why], span: g.length, spots: spots == null ? g.length : spots });
+    };
+    // 1. Matchplay's own cut lines
     const cuts = [...(D.qual.playoffsCutoffs || [])].sort((x, y) => (x.index || 0) - (y.index || 0));
-    const cutName = (pos, n) => { const c = cuts.find(c => pos <= c.cumulative && pos + n - 1 > c.cumulative); return c ? c : null; };
-    for (const r of rows) if (r.onCutoffBubble || r.onCutoffBubble2) {
-      const g = group(r.position), c = cutName(r.position, g.length);
-      const L = c ? (String(c.text || '').trim().charAt(0).toUpperCase() || 'A') : 'a';
-      const spots = c ? c.cumulative - r.position + 1 : null;
-      add('cutline', r.position, g, null, c ? `Decides who makes ${L} finals: ${g.length} players tied at ${T.ord(r.position)} for ${spots} spot${spots === 1 ? '' : 's'} above the ${L} cut line (top ${c.cumulative})` : 'Tie across a finals cut line', spots);
+    const cutAt = (pos, n) => cuts.find(c => pos <= c.cumulative && pos + n - 1 > c.cumulative) || null;
+    for (const r of rows) {
+      const g = group(r.position); if (!real(g)) continue;
+      const c = cutAt(r.position, g.length); if (!c) continue;
+      const L = String(c.text || '').trim().charAt(0).toUpperCase() || 'A', spots = c.cumulative - r.position + 1;
+      add('cutline', r.position, null, `decides who makes ${L} finals: ${g.length} tied at ${T.ord(r.position)} for ${spots} spot${spots === 1 ? '' : 's'} (top ${c.cumulative})`, spots);
     }
     for (const d of divs) {
       if (!d.picks || !d.picks.length) continue;
       const last = d.picks[d.picks.length - 1];
-      // 2. boundary of the division (includes the B/C-eligibility line Matchplay doesn't flag)
+      // 2. the division's last spot when ineligible players are skipped (Matchplay doesn't flag this)
       const nextElig = rows.find(r => (r.position || 0) >= (last.position || 0) && !d.picks.includes(r) && !ineligible(r.p, d, ranks) && !divs.some(o => o.i < d.i && o.picks.includes(r)));
-      if (d.picks.length >= d.size && nextElig && nextElig.position === last.position)
-        add('boundary', last.position, group(last.position).filter(r => !ineligible(r.p, d, ranks)), d, d.i ? `Decides the last ${d.letter} finals spot: these ${d.letter}-eligible players are tied (Matchplay doesn't flag this because ineligible players are skipped)` : `Decides the last ${d.letter} finals spot`, d.picks.filter(r => r.position === last.position).length);
-      // 3. seeding ties inside the division (groups, byes, bank-pick order)
-      const posCount = {}; d.picks.forEach(r => (posCount[r.position] = (posCount[r.position] || 0) + 1));
-      for (const [pos, n] of Object.entries(posCount)) if (n > 1) add('seeding', +pos, d.picks.filter(r => String(r.position) === pos), d, `${d.letter} finals seeding: decides who gets the higher seed - group placement, byes and bank-pick order`);
+      const cutHere = found.get(last.position) && found.get(last.position).kind === 'cutline';   // same line Matchplay already flags
+      if (d.picks.length >= d.size && nextElig && nextElig.position === last.position && !(cutHere && d.i === 0))
+        add('boundary', last.position, d, `decides the last ${d.letter} finals spot (eligible players tied; Matchplay doesn't flag this because ineligible players are skipped)`, d.picks.filter(r => r.position === last.position).length);
+      // 3. bye and pick lines inside the division (seed k | k+1)
+      for (const l of lines(d)) {
+        const a = d.picks[l.k - 1], b = d.picks[l.k];
+        if (a && b && a.position === b.position) {
+          const first = d.picks.findIndex(r => r.position === a.position);
+          add(l.kind, a.position, d, `${d.letter} finals: ${l.text}`, l.k - first);
+        }
+      }
     }
-    // one card per real problem: a cut-line tie already covers the same boundary/seeding tie at that position
-    const cut = new Map(out.filter(t => t.kind === 'cutline').map(t => [t.pos, t]));
-    const bound = new Set(out.filter(t => t.kind === 'boundary').map(t => t.pos));
-    return out.filter(t => {
-      if (t.kind === 'boundary' && cut.has(t.pos) && cut.get(t.pos).players.length === t.players.length) return false;
-      if (t.kind === 'seeding' && (cut.has(t.pos) || bound.has(t.pos))) return false;
-      return true;
-    }).sort((a, b) => (a.pos || 0) - (b.pos || 0));
+    // every other tie: listed, but not highlighted
+    for (const [pos, g] of Object.entries(byPos)) if (real(g) && !found.has(+pos)) other.push({ pos: +pos, players: g });
+    const list = [...found.values()].sort((a, b) => a.pos - b.pos);
+    list.forEach(t => { t.why = t.reasons.join('; '); });
+    list.other = other.sort((a, b) => a.pos - b.pos);
+    return list;
   }
 
   // finals in progress: ties inside each group of the current round
@@ -136,5 +174,5 @@ TDP.finals = (() => {
     return out;
   }
 
-  return { divisions, plan, ineligible, ranksOf, labelsOf, qualifyingTies, groupTies, order };
+  return { ELIG_RE, lettersOf, eligLabel, divisions, plan, ineligible, ranksOf, labelsOf, qualifyingTies, lines, groupTies, order };
 })();
