@@ -85,7 +85,7 @@ TDP.data = (() => {
       await loadGames();
       // standings of the qualifying tournament: at most every 15 s (we use 30 s)
       if (D.qual && (force || now - lastStand > 30e3)) {
-        D.standings = arr(unwrap(await api.get(`/tournaments/${D.qual.tournamentId}/standings`, force ? 15e3 : 29e3)));
+        D.standings = arr(unwrap(await api.get(`/tournaments/${D.qual.tournamentId}/standings`, force ? 0 : 29e3)));   // force = fresh (tie just resolved)
         lastStand = now;
       }
       D.error = null;

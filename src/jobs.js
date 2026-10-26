@@ -36,6 +36,7 @@ TDP.jobs = (() => {
     async bankArenas(a) { for (const b of a.banks) await T.mp.setBankArenas(b.name, b.arenas); },
     async assignBanks(a) { for (const x of a.pairs) await T.mp.assignBank(x.group, x.bank); await T.saveT(a.tid, { banksDoneRound: a.roundId }); },
     async noop() { /* just brings you back to a page */ },
+    async resolveTie(a) { await T.mp.resolveTie(a.from, a.names); if (a.key) await T.ties.markApplied(a.qid, a.key); },
   };
 
   async function run() {

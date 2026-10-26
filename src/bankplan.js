@@ -54,7 +54,7 @@ TDP.bankplan = (() => {
     const ctx = context(D), st = T.tstate[D.tid] || {};
     const { avoid, usage } = T.banks.historyMaps(ctx.history);
     const est = estimates(D, st, opts.extra);
-    const res = T.banks.build(est, opts.n, opts.size, { seed: opts.seed, exclude: opts.exclude, avoid, usage });
+    const res = T.banks.build(est, opts.n, opts.size, { seed: opts.seed, exclude: opts.exclude, force: opts.force || st.bankForce || [], avoid, usage });
     // bank names: reuse Matchplay's existing banks in order, create more if needed
     const existing = (D.t.banks || []).filter(b => b.status !== 'inactive').map(b => b.name);
     res.banks.forEach((b, i) => { b.name = existing[i] || `Bank ${existing.length + (i - existing.length) + 1}`; });
@@ -78,5 +78,31 @@ TDP.bankplan = (() => {
     return out;
   }
 
-  return { context, estimates, make, steps };
+  // times from the qualifying (when building banks for a finals), keyed by lowercase arena name; cached 5 min
+  let qualCache = { id: null, at: 0, times: null };
+  async function qualTimes(D) {
+    const q = D.qual; if (!q || q.tournamentId === D.tid) return null;
+    if (qualCache.id === q.tournamentId && Date.now() - qualCache.at < 300e3) return qualCache.times;
+    const am = T.data.arenaMap(q), games = await T.api.all(`/tournaments/${q.tournamentId}/games`, 300e3), out = {};
+    for (const [aid, v] of Object.entries(T.timing.arenaTimes(games))) { const k = lc((am[aid] || {}).name); if (k) out[k] = { count: v.count, avg: v.avg }; }
+    qualCache = { id: q.tournamentId, at: Date.now(), times: out };
+    return out;
+  }
+  // past Matchplay tournaments by ID (same venue): per-arena times saved on this tournament
+  async function loadPast(D, ids) {
+    const merged = {};
+    for (const id of ids) {
+      const t = await T.data.loadTournament(id, 3600e3), am = T.data.arenaMap(t);
+      const games = await T.api.all(`/tournaments/${id}/games`, 3600e3);
+      for (const [aid, v] of Object.entries(T.timing.arenaTimes(games))) {
+        const k = lc((am[aid] || {}).name); if (!k) continue;
+        const m = merged[k] || (merged[k] = { count: 0, sum: 0 }); m.count += v.count; m.sum += v.avg * v.count;
+      }
+    }
+    const pastTimes = {}; for (const [k, m] of Object.entries(merged)) pastTimes[k] = { count: m.count, avg: m.sum / m.count };
+    await T.saveT(D.tid, { pastTimes, bankPast: ids.join(', ') });
+    return Object.keys(pastTimes).length;
+  }
+
+  return { context, estimates, make, steps, qualTimes, loadPast };
 })();

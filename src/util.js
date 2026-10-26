@@ -1,7 +1,7 @@
 // Matchplay TD Panel - shared helpers. Every file adds to the one global namespace TDP.
 /* global chrome */
 var TDP = window.TDP || (window.TDP = {});
-TDP.VERSION = '0.3.1';
+TDP.VERSION = '0.4.0';
 
 TDP.sleep = ms => new Promise(r => setTimeout(r, ms));
 TDP.log = (...a) => console.log('%c[TD Panel]', 'color:#4f46e5;font-weight:600', ...a);
@@ -73,7 +73,14 @@ TDP.findBtn = (root, match) => {
   const re = match instanceof RegExp ? match : new RegExp('^\\s*' + match.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*$', 'i');
   return [...(root || document).querySelectorAll('button, a, [role=menuitem]')].filter(TDP.visible).find(b => re.test(TDP.txt(b))) || null;
 };
-TDP.click = el => { if (!el) return false; el.scrollIntoView({ block: 'center' }); el.click(); return true; };
+// a real mouse press: some Matchplay menus (group "Actions") only open on pointer/mouse down+up, not a bare .click()
+TDP.click = el => {
+  if (!el) return false;
+  el.scrollIntoView({ block: 'center' });
+  const r = el.getBoundingClientRect(), o = { bubbles: true, cancelable: true, composed: true, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, button: 0 };
+  for (const t of ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click']) el.dispatchEvent(new (t.startsWith('pointer') && window.PointerEvent ? PointerEvent : MouseEvent)(t, o));
+  return true;
+};
 // set an input's value so Vue/React notice
 TDP.setVal = (input, value) => {
   const proto = input.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : input.tagName === 'SELECT' ? HTMLSelectElement.prototype : HTMLInputElement.prototype;

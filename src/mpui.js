@@ -219,5 +219,28 @@ TDP.mp = (() => {
     await dialogClosed();
   }
 
-  return { goTab, menu, playerRows, selectPlayers, setLabels, bulk, setActive, readIfpaRanks, addFromQualifying, setSeeds, closeRound, startNextRound, createBank, setBankArenas, assignBank, needBtn, needDialog, dialogClosed };
+  // ---------- Resolve ties page: open the "Positions from-to" tie, put players in this order, Save ----------
+  async function resolveTie(from, namesInOrder) {
+    const isHead = e => e.children.length === 0 && new RegExp('^Positions\\s+' + from + '\\s*[-–]\\s*\\d+$').test(T.txt(e));
+    const h = await T.waitFor(() => [...document.querySelectorAll('main *')].find(e => isHead(e) && T.visible(e)), 10000) || fail(`Tie at position ${from} not found under Unresolved ties.`);
+    let card = h; while (card.parentElement && !T.findBtn(card, /^Resolve$/)) card = card.parentElement;
+    T.click(T.findBtn(card, /^Resolve$/) || fail('No Resolve button for that tie.'));
+    const d = await needDialog();
+    const rows = () => [...d.querySelectorAll('button')].filter(b => /^#\d+\s/.test(T.txt(b)));
+    const nm = b => T.txt(b).replace(/^#\d+\s+/, '');
+    await T.waitFor(() => rows().length, 5000) || fail('Resolve window did not list the players.');
+    for (let i = 0; i < namesInOrder.length; i++) {
+      const cur = rows(); if (!cur[i]) break;
+      if (nm(cur[i]) === namesInOrder[i]) continue;
+      const src = cur.find(b => nm(b) === namesInOrder[i]) || fail(`${namesInOrder[i]} is not in this tie.`);
+      src.click(); await T.sleep(400);
+      rows()[i].click(); await T.sleep(500);   // the picked player drops out of the list, so slot i is still index i
+    }
+    const got = rows().map(nm);
+    if (got.join('|') !== namesInOrder.join('|')) fail('Could not put the players in order (got: ' + got.join(', ') + ').');
+    T.click(await needBtn('Save', d));
+    await dialogClosed();
+  }
+
+  return { goTab, menu, playerRows, selectPlayers, setLabels, bulk, setActive, readIfpaRanks, addFromQualifying, setSeeds, closeRound, startNextRound, createBank, setBankArenas, assignBank, resolveTie, needBtn, needDialog, dialogClosed };
 })();

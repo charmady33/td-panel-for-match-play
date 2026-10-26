@@ -34,15 +34,20 @@ TDP.inpage = (() => {
   }
   const tieCard = (ties, D, link) => ties.length ? `<div class="card" style="margin:16px 0"><div class="ch"><span class="h">Ties to break before finals</span><span class="badge b-rose">${ties.length} unresolved</span>${link ? `<a class="btn sm" href="/tournaments/${D.tid}/resolve-ties">Resolve ties</a>` : ''}</div><div class="cb">${ties.map(t => {
     const c = colorOf(t, D);
-    return `<div class="tie" style="background:${c[0]};color:${c[1]};border-left:4px solid ${c[2]}"><b>Positions ${t.pos}–${t.pos + (t.span || t.players.length) - 1}:</b> ${T.esc(t.players.map(r => r.p ? r.p.name : r.playerId).join(', '))}<div>${T.esc(t.why)}</div></div>`;
+    const key = T.ties.keyOf(t), rec = ((T.tstate[D.qual.tournamentId] || {}).tb || {})[key] || {};
+    const btn = rec.status === 'playing' ? `<button class="btn sm" data-act="tb" data-key="${key}">Enter results · ${T.esc(rec.game || '')}</button>` : `<button class="btn sm sec" data-act="tb" data-key="${key}">Break tie</button>`;
+    return `<div class="tie gap" style="background:${c[0]};color:${c[1]};border-left:4px solid ${c[2]}"><div class="flex1"><b>Positions ${t.pos}–${t.pos + (t.span || t.players.length) - 1}:</b> ${T.esc(t.players.map(r => r.p ? r.p.name : r.playerId).join(', '))}<div>${T.esc(t.why)}</div></div>${btn}</div>`;
   }).join('')}</div></div>` : '';
+  // clicks inside our shadow blocks: open the tiebreaker window
+  const onTieClick = e => { const a = e.target.closest('[data-act="tb"]'); if (a && e.type === 'click') T.ties.openByKey(T.data.D, a.dataset.key); };
 
   // ---------- Standings tab: Matchplay's standings on the left, finals standings (eligibility applied) on the right ----------
   function eligTable(D) {
     const divs = T.finals.plan(D), ranks = T.finals.ranksOf(D), rows = T.finals.order(D);
     const tiedIds = new Set(qualTies(D).flatMap(t => t.players.map(r => r.playerId)));
     const placed = new Set(divs.flatMap(x => x.picks.map(r => r.playerId)));
-    const line = (r, seed, note) => `<tr${tiedIds.has(r.playerId) ? ' style="background:#fef3c7"' : ''}><td class="small num">${seed}</td><td>${T.esc(r.p.name)}${note ? ` <span class="small">${note}</span>` : ''}${tiedIds.has(r.playerId) ? ' <span class="badge b-amber" style="padding:0 6px">tie</span>' : ''}</td><td class="num small">${T.ord(r.position)}</td><td class="num small">${Math.round(Number(r.points) * 100) / 100}</td></tr>`;
+    const dec = T.ties.decimals(D);
+    const line = (r, seed, note) => `<tr${tiedIds.has(r.playerId) ? ' style="background:#fef3c7"' : ''}><td class="small num">${seed}</td><td>${T.esc(r.p.name)}${note ? ` <span class="small">${note}</span>` : ''}${tiedIds.has(r.playerId) ? ' <span class="badge b-amber" style="padding:0 6px">tie</span>' : ''}</td><td class="num small">${T.ord(r.position)}</td><td class="num small"${dec.get(r.playerId) ? ` title="${T.esc(dec.get(r.playerId).title)}"` : ''}>${dec.get(r.playerId) ? dec.get(r.playerId).pts : Math.round(Number(r.points) * 100) / 100}</td></tr>`;
     let h = `<div class="card"><div class="ch"><span class="h">Finals standings (eligibility applied)</span></div><table><tr><th>Seed</th><th>Player</th><th class="num">MP pos</th><th class="num">Pts</th></tr>`;
     for (const x of divs) {
       const c = T.panel.cutColor(x.color);
@@ -60,7 +65,7 @@ TDP.inpage = (() => {
     const table = document.querySelector('main table');
     const ties = qualTies(D);
     const col = table ? table.closest('div.flex.flex-col') || table.parentElement.parentElement.parentElement : null;
-    block('tdp-ties-standings', col, 'before', tieCard(ties, D, true));
+    block('tdp-ties-standings', col, 'before', tieCard(ties, D, true), onTieClick);
     if (col && D.qual && D.tid === D.qual.tournamentId && (D.qual.playoffsCutoffs || []).length && D.standings.length) {
       col.style.flexDirection = 'row'; col.style.alignItems = 'flex-start'; col.style.gap = '16px';
       const mine = col.firstElementChild; mine.style.flex = '1 1 0'; mine.style.minWidth = '0';
@@ -69,19 +74,32 @@ TDP.inpage = (() => {
     } else block('tdp-elig', null);
     if (!table) return;
     const byPlayer = new Map(); ties.forEach(t => t.players.forEach(r => { if (!byPlayer.has(r.playerId)) byPlayer.set(r.playerId, t); }));
+    const dec = T.ties.decimals(D), tb = (T.tstate[D.qual.tournamentId] || {}).tb || {};
     for (const tr of table.querySelectorAll('tr')) {
       const a = tr.querySelector('a[href*="/players/"]'); if (!a) continue;
       const id = Number((a.getAttribute('href').match(/\/players\/(\d+)/) || [])[1]);
+      // resolved ties: replace "34 pts." with 34.3 / 34.2 ... (winner highest)
+      const ptsCell = [...tr.children].find(td => /pts\.?$/.test(T.txt(td)) || td.dataset.tdpPts);
+      if (ptsCell) {
+        const dv = dec.get(id);
+        if (dv) { if (!ptsCell.dataset.tdpPts) ptsCell.dataset.tdpPts = T.txt(ptsCell); const want = `${dv.pts} pts.`; if (T.txt(ptsCell) !== want) ptsCell.textContent = want; ptsCell.title = dv.title; }
+        else if (ptsCell.dataset.tdpPts) { ptsCell.textContent = ptsCell.dataset.tdpPts; delete ptsCell.dataset.tdpPts; ptsCell.title = ''; }
+      }
       const t = byPlayer.get(id);
       if (!t) { if (tr.hasAttribute(MARK)) { tr.style.background = ''; tr.style.boxShadow = ''; tr.removeAttribute(MARK); tr.querySelectorAll('[data-tdp=note]').forEach(n => n.remove()); } continue; }
       const c = colorOf(t, D);
       tr.setAttribute(MARK, 'row'); tr.style.background = c[0]; tr.style.boxShadow = `inset 4px 0 0 ${c[2]}`;
-      if (!tr.querySelector('[data-tdp=note]')) {
-        const n = document.createElement('span'); n.dataset.tdp = 'note'; n.title = t.why;
-        n.textContent = t.kind === 'seeding' ? 'Seeding tie' : 'Unresolved tie';
-        n.style.cssText = `margin-left:8px;font-size:11px;font-weight:600;padding:1px 8px;border-radius:9999px;background:#fff;color:${c[1]};border:1px solid ${c[2]};white-space:nowrap`;
+      const key = T.ties.keyOf(t), rec = tb[key] || {};
+      const label = rec.status === 'playing' ? `Tiebreaker in progress: ${rec.game}` : t.kind === 'seeding' ? 'Seeding tie' : 'Unresolved tie';
+      let n = tr.querySelector('[data-tdp=note]');
+      if (!n) {
+        n = document.createElement('span'); n.dataset.tdp = 'note';
+        n.style.cssText = `margin-left:8px;font-size:11px;font-weight:600;padding:1px 8px;border-radius:9999px;background:#fff;color:${c[1]};border:1px solid ${c[2]};white-space:nowrap;cursor:pointer`;
+        n.addEventListener('click', ev => { ev.preventDefault(); ev.stopPropagation(); T.ties.openByKey(T.data.D, n.dataset.key); });
         a.insertAdjacentElement('afterend', n);
       }
+      n.dataset.key = key; n.title = t.why + ' - click to break this tie';
+      if (n.textContent !== label) n.textContent = label;
     }
   }
 
@@ -110,18 +128,19 @@ TDP.inpage = (() => {
       shown.push({ t, c0 });
       const c = colorOf(t, D);
       card.setAttribute(MARK, 'card'); card.style.boxShadow = `0 0 0 3px ${c[2]}`;
-      const html = `<b>Important for finals.</b> ${T.esc(t.why)}`;
+      const rec = ((T.tstate[D.qual.tournamentId] || {}).tb || {})[T.ties.keyOf(t)] || {};
+      const html = `<b>Important for finals.</b> ${T.esc(t.why)} <button data-tdp-key="${T.ties.keyOf(t)}" style="margin-left:6px;font:inherit;font-weight:600;color:#4338ca;background:#fff;border:1px solid #a5b4fc;border-radius:6px;padding:1px 8px;cursor:pointer">${rec.status === 'playing' ? 'Enter results' : 'Break tie'}</button>`;
       let n = old;
-      if (!n) { n = document.createElement('div'); n.dataset.tdp = 'note'; card.appendChild(n); }
+      if (!n) { n = document.createElement('div'); n.dataset.tdp = 'note'; card.appendChild(n); n.addEventListener('click', ev => { const b = ev.target.closest('[data-tdp-key]'); if (b) { ev.preventDefault(); ev.stopPropagation(); T.ties.openByKey(T.data.D, b.dataset.tdpKey); } }); }
       n.style.cssText = `margin:8px 12px 12px;padding:6px 8px;border-radius:6px;font-size:12px;background:${c[0]};color:${c[1]};border-left:4px solid ${c[2]}`;
       if (n.innerHTML !== html) n.innerHTML = html;
     }
     // a tie we know about with no unresolved card = just resolved in Matchplay: refresh our standings
     if (ties.length > shown.length && Date.now() - staleKick > 15000) { staleKick = Date.now(); T.data.refresh(true); }
-    const list = shown.map(({ t, c0 }) => { const c = colorOf(t, D); return `<div class="tie" style="background:${c[0]};color:${c[1]};border-left:4px solid ${c[2]}"><b>Positions ${c0.from}–${c0.to}:</b> ${T.esc(t.why)}</div>`; }).join('');
+    const list = shown.map(({ t, c0 }) => { const c = colorOf(t, D); return `<div class="tie gap" style="background:${c[0]};color:${c[1]};border-left:4px solid ${c[2]}"><div class="flex1"><b>Positions ${c0.from}–${c0.to}:</b> ${T.esc(t.why)}</div><button class="btn sm sec" data-act="tb" data-key="${T.ties.keyOf(t)}">Break tie</button></div>`; }).join('');
     block('tdp-ties-resolve', anchorEl, 'before', shown.length
       ? `<div class="card" style="margin:12px 0"><div class="ch"><span class="h">${shown.length} unresolved tie${shown.length === 1 ? '' : 's'} matter for finals</span></div><div class="cb">${list}<div class="small">Each is outlined below. Other unresolved ties don't change who makes the finals or their seeds.</div></div></div>`
-      : '<div class="callout ok" style="margin:12px 0">No unresolved ties affect the finals.</div>');
+      : '<div class="callout ok" style="margin:12px 0">No unresolved ties affect the finals.</div>', onTieClick);
   }
 
   // ---------- Matches tab ----------
@@ -153,16 +172,36 @@ TDP.inpage = (() => {
     }
   }
 
+  // reminder on every page of the tournament while a tiebreaker waits for results
+  function reminder(D) {
+    const p = D.qual ? T.ties.pending(D) : [];
+    const main = document.querySelector('main');
+    const anchor = p.length && main ? main.firstElementChild : null;
+    block('tdp-tb-reminder', anchor, 'before', p.length ? `<div class="callout warn gap" style="margin:8px 16px">${p.length} tiebreaker${p.length === 1 ? '' : 's'} waiting for results: ${p.map(x => `<button class="btn sm" data-act="tb" data-key="${x.key}">Positions ${x.pos}–${x.pos + x.ids.length - 1} · ${T.esc(x.game || '')}</button>`).join(' ')}</div>` : '', onTieClick);
+  }
+  let lastPage = null;
   function render() {
     const D = T.data.D;
-    if (!D.isTD || !D.t) { clearMarks(); ['tdp-ties-standings', 'tdp-elig', 'tdp-ties-resolve', 'tdp-auto'].forEach(id => { const e = document.getElementById(id); if (e) e.remove(); }); return; }
+    const page0 = T.routePage();
+    if (page0 !== lastPage) { lastPage = page0; if ((page0 === 'standings' || page0 === 'resolve-ties') && D.qual) T.data.refresh(true); }
+    if (!D.isTD || !D.t) { clearMarks(); ['tdp-ties-standings', 'tdp-elig', 'tdp-ties-resolve', 'tdp-auto', 'tdp-tb-reminder', 'tdp-bankbar'].forEach(id => { const e = document.getElementById(id); if (e) e.remove(); }); return; }
     const page = T.routePage();
     try {
+      reminder(D);
       if (page === 'standings') standings(D); else { block('tdp-ties-standings', null); block('tdp-elig', null); }
       if (page === 'resolve-ties') resolveTies(D); else block('tdp-ties-resolve', null);
       if (page === 'matches') matches(D); else block('tdp-auto', null);
+      if (T.bankbar) T.bankbar.render(D);
     } catch (e) { T.warn('inpage', e); }
   }
   setInterval(render, 1500);   // Matchplay re-renders its pages; put our bits back
-  return { render, setAutoState: s => { autoState = s; render(); } };
+  // Matchplay's "Manual" button in the standings Ties column: show our resolved-tie window instead of its info box
+  document.addEventListener('click', e => {
+    const b = e.target.closest && e.target.closest('main table button');
+    if (!b || T.txt(b) !== 'Manual' || T.routePage() !== 'standings' || !T.data.D.isTD) return;
+    const a = b.closest('tr') && b.closest('tr').querySelector('a[href*="/players/"]'); if (!a) return;
+    e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
+    T.ties.openResolved(T.data.D, Number(a.getAttribute('href').match(/\/players\/(\d+)/)[1]));
+  }, true);
+  return { render, block, setAutoState: s => { autoState = s; render(); } };
 })();

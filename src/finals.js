@@ -72,7 +72,8 @@ TDP.finals = (() => {
     const byPos = {}; rows.forEach(r => (byPos[r.position] = byPos[r.position] || []).push(r));
     const group = pos => byPos[pos] || [];
     const seen = new Set();
-    const add = (kind, pos, players, d, why) => { const k = kind + pos + (d ? d.letter : ''); if (seen.has(k)) return; seen.add(k); out.push({ kind, pos, players, div: d, why, span: group(pos).length }); };
+    // spots = how many of the tied players get the place being decided (bubble); seeding ties: everyone advances
+    const add = (kind, pos, players, d, why, spots) => { const k = kind + pos + (d ? d.letter : ''); if (seen.has(k)) return; seen.add(k); out.push({ kind, pos, players, div: d, why, span: group(pos).length, spots: spots == null ? players.length : spots }); };
     // 1. Matchplay's own cut-line bubbles
     // which cut line a tie straddles (cumulative sizes: A = top 8, B = next 8 → 16...)
     const cuts = [...(D.qual.playoffsCutoffs || [])].sort((x, y) => (x.index || 0) - (y.index || 0));
@@ -81,7 +82,7 @@ TDP.finals = (() => {
       const g = group(r.position), c = cutName(r.position, g.length);
       const L = c ? (String(c.text || '').trim().charAt(0).toUpperCase() || 'A') : 'a';
       const spots = c ? c.cumulative - r.position + 1 : null;
-      add('cutline', r.position, g, null, c ? `Decides who makes ${L} finals: ${g.length} players tied at ${T.ord(r.position)} for ${spots} spot${spots === 1 ? '' : 's'} above the ${L} cut line (top ${c.cumulative})` : 'Tie across a finals cut line');
+      add('cutline', r.position, g, null, c ? `Decides who makes ${L} finals: ${g.length} players tied at ${T.ord(r.position)} for ${spots} spot${spots === 1 ? '' : 's'} above the ${L} cut line (top ${c.cumulative})` : 'Tie across a finals cut line', spots);
     }
     for (const d of divs) {
       if (!d.picks || !d.picks.length) continue;
@@ -89,7 +90,7 @@ TDP.finals = (() => {
       // 2. boundary of the division (includes the B/C-eligibility line Matchplay doesn't flag)
       const nextElig = rows.find(r => (r.position || 0) >= (last.position || 0) && !d.picks.includes(r) && !ineligible(r.p, d, ranks) && !divs.some(o => o.i < d.i && o.picks.includes(r)));
       if (d.picks.length >= d.size && nextElig && nextElig.position === last.position)
-        add('boundary', last.position, group(last.position).filter(r => !ineligible(r.p, d, ranks)), d, d.i ? `Decides the last ${d.letter} finals spot: these ${d.letter}-eligible players are tied (Matchplay doesn't flag this because ineligible players are skipped)` : `Decides the last ${d.letter} finals spot`);
+        add('boundary', last.position, group(last.position).filter(r => !ineligible(r.p, d, ranks)), d, d.i ? `Decides the last ${d.letter} finals spot: these ${d.letter}-eligible players are tied (Matchplay doesn't flag this because ineligible players are skipped)` : `Decides the last ${d.letter} finals spot`, d.picks.filter(r => r.position === last.position).length);
       // 3. seeding ties inside the division (groups, byes, bank-pick order)
       const posCount = {}; d.picks.forEach(r => (posCount[r.position] = (posCount[r.position] || 0) + 1));
       for (const [pos, n] of Object.entries(posCount)) if (n > 1) add('seeding', +pos, d.picks.filter(r => String(r.position) === pos), d, `${d.letter} finals seeding: decides who gets the higher seed - group placement, byes and bank-pick order`);

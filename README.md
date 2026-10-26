@@ -1,4 +1,4 @@
-# Matchplay TD Panel v0.3.1
+# Matchplay TD Panel v0.4.0
 
 A Chrome extension for tournament directors on app.matchplay.events. On any tournament you run (as organizer, or as a manager) it adds a full-height sidebar on the right and shifts Matchplay's page over. The » button collapses it to a thin strip. Most of the tools also appear directly inside Matchplay's own pages (see below), so the sidebar is optional. It's styled to look like Matchplay's own pages.
 
@@ -28,11 +28,18 @@ To update to a newer version, replace the folder and click the reload icon on th
   - you can preview the labels before applying them
   - each division shows its planned players and 3 backups, with a "Fix seeds" button
 - **Inside Matchplay's pages**:
-  - **USA flag** at the top left of every Matchplay page
+  - **USA flag** replaces Matchplay's pride flag next to the Match Play logo
   - **Standings tab (qualifying)**:
     - a "Ties to break before finals" box lists each unresolved tie that matters, and why
     - tied players are highlighted in Matchplay's table
     - Matchplay's standings stay on the left, with **Finals standings (eligibility applied)** next to them on the right
+    - resolved ties show decimal points (a 5-way tie on 32 → 32.4 … 32.0, winner highest), here and in the Finals standings table; hover for details
+    - **Break tie / tags / Matchplay's "Manual" buttons** open the tiebreaker window (IFPA18 §IV.1):
+      - seeding-only ties: head-to-head win %, then IFPA rank, no game played
+      - bubble ties: "IFPA draw + vote" (one Old EM / Mid SS / New DMD game; click the voted game or Random pick) or "Just random"
+      - random player order; click the finishing order; advancers are then seeded by head-to-head; Apply fills in Matchplay's Resolve ties
+      - progress is saved: leave and come back with "Enter results" (a reminder bar shows on every tournament page), or Start over
+      - an already resolved tie shows its recorded order
   - **Resolve ties page**: important ties are outlined, with the reason shown on each card
   - **Matches tab**:
     - the **Auto close round & start next round** checkbox and its status
@@ -41,6 +48,12 @@ To update to a newer version, replace the folder and click the reload icon on th
     - the qualifiers in seed order, plus 3 backups
     - ticking a player adds them as **Active**; unticking deactivates them
     - seeds are kept in qualifying order, with backups lowest
+- **Banks tab (in Matchplay)**: a Bank builder bar
+  - Banks (you enter it) and Games per bank (defaults to Matches each round)
+  - no banks yet: **Generate banks** → preview → Confirm creates them (asks how many if the box is empty)
+  - banks exist: **Refresh banks** replaces their games (names kept); **Add banks** asks how many, then creates Bank N+1…
+  - **Another arrangement** never repeats one already shown or created, and keeps bank times balanced
+  - **⚙ Settings**: each game Use / Never / Always; game times from this tournament, the qualifying, Matchplay IDs, and past events run with the extension
 - **Timers**:
   - how long each round took, from the first game's start until every game is done
   - average, min and max game time per arena
