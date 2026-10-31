@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "TD Panel for Match Play",
-  "version": "0.18.3",
+  "version": "0.19.0",
   "description": "Tournament director tools built into Match Play (app.matchplay.events): finals check-in and eligibility, tiebreakers, bank building, auto rounds, game timers and IFPA submission.",
   "icons": {
     "16": "icons/icon16.png",

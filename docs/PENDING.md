@@ -40,6 +40,8 @@ Reference: Clark's artifact "Pinball Tournament Bank Builder" — its
   tournament; typing Matchplay IDs stays under "Other IDs"; replaces the old "Past events run with the extension" list.
 
 ## Open question to watch
+
+## Open question to watch
 - Delete test tournaments: one real run hung (helper frame never started a step; recorder showed no menu opened for
   25 s, then the tab fallback also didn't move). A later run worked (all old test tournaments deleted). 0.11.2 added
   step limits, heartbeat, a 60 s watchdog and a Details log on "Update stopped" — if it happens again, read Details.
@@ -56,3 +58,4 @@ Reference: Clark's artifact "Pinball Tournament Bank Builder" — its
 - 63 shipped in 0.18.1.
 - 64 shipped in 0.18.2.
 - 65 shipped in 0.18.3.
+- 66-67 shipped in 0.19.0.

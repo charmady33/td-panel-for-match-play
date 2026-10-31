@@ -32,14 +32,14 @@ TDP.bankbar = (() => {
     const html = locked(D) ? `<div class="card" style="margin:0 0 12px"><div class="cb gap" style="flex-wrap:wrap;align-items:center">
       <span class="h" style="margin-right:4px">Bank Builder</span>
       <span class="badge b-gray">${fin ? 'Finals' : 'Qualifying'} started: banks are locked</span>
-      <span class="small flex1" style="text-align:right">${has} bank${has === 1 ? '' : 's'} · ${size} game${size === 1 ? '' : 's'} each · a game that goes down is replaced in its banks automatically</span>
-    </div>${backHtml(D)}</div>` : `<div class="card" style="margin:0 0 12px"><div class="cb gap" style="flex-wrap:wrap;align-items:center">
+      <span class="small flex1" style="text-align:right">${has} bank${has === 1 ? '' : 's'} · ${size} game${size === 1 ? '' : 's'} each · a game that goes down gets a replacement you can check first</span>
+    </div>${clashHtml(D)}${backHtml(D)}</div>` : `<div class="card" style="margin:0 0 12px"><div class="cb gap" style="flex-wrap:wrap;align-items:center">
       <span class="h" style="margin-right:4px">Bank Builder</span>
       <span class="small" title="From &quot;Matches each round&quot; on Matchplay's Overview">${size} game${size === 1 ? '' : 's'} per bank (from Matchplay)</span>
       ${has ? `<button class="btn" data-act="refresh">Refresh banks</button><button class="btn sec" data-act="add">Add banks</button>` : `<button class="btn" data-act="generate">Generate banks</button>`}
       <button class="btn sec" data-act="settings" title="Games and time sources">⚙ Settings</button>
       <span class="small flex1" style="text-align:right">${has ? `${has} bank${has === 1 ? '' : 's'} in Matchplay` : 'No banks yet'} · set once, locked when ${fin ? 'the finals start' : 'the event starts'}</span>
-    </div></div>`;
+    </div>${clashHtml(D)}</div>`;
     T.inpage.block('tdp-bankbar', a.el, a.where, html, onBar);
   }
   async function onBar(e) {
@@ -47,6 +47,11 @@ TDP.bankbar = (() => {
     if (e.type !== 'click') return;
     const a = e.target.closest('[data-act]'); if (!a) return;
     const act = a.dataset.act;
+    if (act === 'clashfix') {
+      try { await T.jobs.start('Fix banks sharing a machine', [{ tid: D.tid, page: 'banks', op: 'bankFix', args: { tid: D.tid }, label: 'Re-ordering / replacing the clashing game' }]); }
+      catch (err) { T.panel.say(err.message || String(err), 'err'); }
+      return;
+    }
     if (act === 'putback') {
       try { await T.jobs.start(`Put ${a.dataset.name} back in its banks`, [{ tid: D.tid, page: 'banks', op: 'downRestore', args: { tid: D.tid, downId: +a.dataset.id }, label: `Putting ${a.dataset.name} back` }]); }
       catch (err) { T.panel.say(err.message || String(err), 'err'); }
@@ -57,6 +62,14 @@ TDP.bankbar = (() => {
     if (act === 'generate') return ask(D, 'create', 'How many banks?');
     if (act === 'refresh') return preview(D, 'refresh', active(D).length);
     if (act === 'add') return ask(D, 'add', 'How many banks to add?');
+  }
+
+  // two active banks with the same machine at the same game number (e.g. after editing banks by hand) -> ⚠ + Fix
+  function clashHtml(D) {
+    const am = T.data.arenaMap(D.t), bs = active(D), seen = [];
+    for (let i = 0; i < bs.length; i++) for (let j = i + 1; j < bs.length; j++) (bs[i].arenaIds || []).forEach((id, pos) => { if ((bs[j].arenaIds || [])[pos] === id) seen.push(`${(am[id] || {}).name || 'A game'} is game ${pos + 1} in ${bs[i].name} and ${bs[j].name}`); });
+    if (!seen.length) return '';
+    return `<div class="cb gap" style="border-top:1px solid var(--line);align-items:center;background:#fffbeb"><span class="flex1 small" style="color:#92400e">⚠ ${seen.map(T.esc).join(' · ')} - two groups would wait on the same machine.</span><button class="btn sm" data-act="clashfix" ${T.jobs.active() ? 'disabled' : ''}>Fix</button></div>`;
   }
 
   // down games that were replaced: when the machine works again, a button puts it back (never on its own)

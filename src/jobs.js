@@ -109,6 +109,14 @@ TDP.jobs = (() => {
       await T.saveT(a.tid, { banksDoneRound: a.roundId, assignDoneRound: a.roundId });
       return skipped.length ? `${skipped.join(', ')} already had a bank (skipped)` : '';
     },
+    // two banks with the same machine at the same game number: re-order / replace (Banks tab ⚠ → Fix)
+    async bankFix(a) {
+      await T.data.refresh(true);
+      const D = T.data.D, st = T.tstate[a.tid] || {}, extra = await T.bankplan.extras(D);
+      const plan = T.smart.clashPlan(D, T.bankplan.estimates(D, st, extra), T.bankplan.estimates(D, st, extra, true)).filter(c => !c.none);
+      await eachBank(plan.map(c => ({ name: c.bank, arenas: c.arenas })), (b, tick) => T.mp.setBankArenas(b.name, b.arenas, tick), b => 2 * b.arenas.length + 1);
+      return plan.length ? plan.map(c => `${c.bank}: ${c.what}`).join(' · ') : 'no clashes left';
+    },
     async playerOrder(a) { await T.mp.setPlayerOrder(a.group, a.names); return `Group ${a.group}: ${a.names.join(', ')}`; },
     async noop() { /* just brings you back to a page */ },
     async resolveTie(a) { await T.mp.resolveTie(a.from, a.names); if (a.key) await T.ties.markApplied(a.qid, a.key); },
@@ -241,7 +249,7 @@ TDP.jobs = (() => {
     async downFix(a) {
       await T.data.refresh(true);
       const D = T.data.D, st = T.tstate[a.tid] || {}, extra = await T.bankplan.extras(D);
-      const changes = T.smart.downPlan(D, T.bankplan.estimates(D, st, extra), T.bankplan.estimates(D, st, extra, true));
+      const changes = a.changes || T.smart.downPlan(D, T.bankplan.estimates(D, st, extra), T.bankplan.estimates(D, st, extra, true));   // (picked in the preview window)
       const ok = changes.filter(c => !c.none);
       await eachBank(ok.map(c => ({ name: c.bank, arenas: c.arenas })), (b, tick) => T.mp.setBankArenas(b.name, b.arenas, tick), b => 2 * b.arenas.length + 1);
       const swaps = [...(st.downSwaps || []).filter(s => !ok.some(c => c.bank === s.bank && c.downId === s.downId)), ...ok.map(c => ({ bank: c.bank, downId: c.downId, down: c.down, replId: c.replId, repl: c.repl, at: Date.now() }))].slice(-40);

@@ -63,12 +63,17 @@ TDP.timing = (() => {
     if (t == null) return null;
     if (isTiebreak(g)) return t;
     const others = roundGames.filter(x => x !== g && !x.bye && x.roundId === g.roundId);
+    const gDone = doneish(g);
     for (const p of others) {
       const sameGroupEarlier = p.set === g.set && (p.index || 0) < (g.index || 0);
-      const sameArenaEarlier = g.arenaId != null && p.arenaId === g.arenaId &&
-        ((p.index || 0) < (g.index || 0) || ((p.index || 0) === (g.index || 0) && p.gameId < g.gameId));
+      // a shared machine: a finished game went first (two banks can have it at the same game number); with neither
+      // finished, the game number (then game id) decides
+      const shared = g.arenaId != null && p.arenaId === g.arenaId;
+      const pDone = doneish(p);
+      const sameArenaEarlier = shared && (gDone && !pDone ? false : pDone && !gDone ? true : gDone && pDone ? (gEnd(p) || 0) < (gEnd(g) || 0)
+        : ((p.index || 0) < (g.index || 0) || ((p.index || 0) === (g.index || 0) && p.gameId < g.gameId)));
       if (!sameGroupEarlier && !sameArenaEarlier) continue;
-      if (!doneish(p)) return null;      // group or arena still busy: this game hasn't really started
+      if (!pDone) { if (gDone) continue; return null; }   // busy group / machine: not started yet (unless it's already finished)
       const e = gEnd(p); if (e != null && e > t) t = e;
     }
     return t;

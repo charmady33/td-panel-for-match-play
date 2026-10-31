@@ -247,34 +247,74 @@ TDP.smart = (() => {
 
   // ---------- a machine goes down: replace it in the banks that hold it (only those banks) ----------
   const isDown = a => !!(a && a.tournamentArena && a.tournamentArena.status === 'inactive');
-  function downPlan(D, est, estAll) {
+  // ---------- best fit for one bank slot (same rules as building banks) ----------
+  //  1 never a game already in this bank · 2 the machine isn't busy in another bank then (same game number = hard,
+  //  time overlap; re-ordering this bank is tried) · 3 the bank's total stays close to the other banks' · 4 the era
+  //  this bank is missing · 5 games in no bank / the fewest banks
+  function bankCtx(D, estAll) {
     const st = T.tstate[D.tid] || {}, never = new Set(st.bankExclude || []);
     const am = T.data.arenaMap(D.t), banks = (D.t.banks || []).filter(b => b.status !== 'inactive');
     const secOf = id => { const x = estAll.find(a => a.arenaId === id); return x ? x : { arenaId: id, name: (am[id] || {}).name || '', era: T.banks.eraOf(am[id]), sec: 13 * 60 }; };
     const cur = banks.map(b => ({ name: b.name, ids: [...(b.arenaIds || [])] }));
-    const count = id => cur.filter(b => b.ids.includes(id)).length;
-    const changes = [];
-    for (const b of cur) {
+    return { am, never, secOf, cur, count: id => cur.filter(b => b.ids.includes(id)).length };
+  }
+  const eraK = e => (e === 'LCD' ? 'DMD' : e);
+  // every candidate for slot `pos` of bank `b`, best first: {c, cost, order (arena ids), clash}
+  function fitSlot(X, b, pos, est) {
+    const others = X.cur.filter(o => o !== b), otherW = others.map(o => o.ids.map(X.secOf));
+    const tot = ids => ids.reduce((t, id) => t + X.secOf(id).sec, 0);
+    const avg = others.length ? others.reduce((t, o) => t + tot(o.ids), 0) / others.length : tot(b.ids);
+    const rest = b.ids.filter((_, i) => i !== pos), restEras = new Set(rest.map(id => eraK(X.secOf(id).era)));
+    const cands = est.filter(a => !X.never.has(a.arenaId) && !isDown(X.am[a.arenaId]) && !b.ids.includes(a.arenaId));
+    const out = [];
+    for (const c of cands) {
+      const games = b.ids.map((x, i) => (i === pos ? c : X.secOf(x)));
+      const trial = [{ games: games.map(g => ({ ...g })) }];
+      const overlap = T.banks.schedule(trial, otherW);   // may re-order this bank so the machine isn't busy then
+      const order = trial[0].games.map(g => g.arenaId);
+      const cost = overlap * 10 + Math.abs(tot(rest) + c.sec - avg) + (restEras.has(eraK(c.era)) ? 300 : 0) + 400 * X.count(c.arenaId);
+      let clash = '';
+      if (overlap >= 1e6) { const o = others.find(o => o.ids.indexOf(c.arenaId) === order.indexOf(c.arenaId)); clash = `same game number in ${o ? o.name : 'another bank'}`; }
+      else if (overlap > 0) { const o = others.find(o => o.ids.includes(c.arenaId)); clash = `busy at that time in ${o ? o.name : 'another bank'}`; }
+      out.push({ c, cost, order, clash, reordered: order.join() !== games.map(g => g.arenaId).join() });
+    }
+    return out.sort((x, y) => x.cost - y.cost);
+  }
+  // a machine went down: each bank holding it -> best fit (with the ranked list, for the TD to pick another)
+  function downPlan(D, est, estAll) {
+    const X = bankCtx(D, estAll), changes = [];
+    for (const b of X.cur) {
       for (let pos = 0; pos < b.ids.length; pos++) {
-        const id = b.ids[pos]; if (!isDown(am[id])) continue;
-        const down = secOf(id);
-        const cands = est.filter(a => !never.has(a.arenaId) && !isDown(am[a.arenaId]) && !b.ids.includes(a.arenaId));
-        if (!cands.length) { changes.push({ bank: b.name, down: down.name, none: true }); continue; }
-        const others = cur.filter(o => o !== b).map(o => o.ids.map(secOf));
-        let best = null;
-        for (const c of cands) {
-          const games = b.ids.map((x, i) => (i === pos ? c : secOf(x)));
-          const trial = [{ games: games.map(g => ({ ...g })) }];
-          const overlap = T.banks.schedule(trial, others);   // may reorder this bank so the machine isn't busy then
-          const cost = overlap * 10 + Math.abs(c.sec - down.sec) + (c.era === down.era ? 0 : 300) + 400 * count(c.arenaId);
-          if (!best || cost < best.cost) best = { c, cost, order: trial[0].games.map(g => g.arenaId) };
-        }
+        const id = b.ids[pos]; if (!isDown(X.am[id])) continue;
+        const down = X.secOf(id), list = fitSlot(X, b, pos, est);
+        if (!list.length) { changes.push({ bank: b.name, down: down.name, downId: id, none: true }); continue; }
+        const best = list[0], before = [...b.ids];
         b.ids = best.order;
-        changes.push({ bank: b.name, down: down.name, downId: id, repl: best.c.name, replId: best.c.arenaId, arenas: best.order.map(x => secOf(x).name) });
+        changes.push({ bank: b.name, down: down.name, downId: id, pos, before, repl: best.c.name, replId: best.c.arenaId, arenas: best.order.map(x => X.secOf(x).name), reordered: best.reordered,
+          options: list.slice(0, 25).map(o => ({ id: o.c.arenaId, name: o.c.name, era: o.c.era, sec: Math.round(o.c.sec), clash: o.clash, arenas: o.order.map(x => X.secOf(x).name), reordered: o.reordered })) });
         pos = -1;   // the order may have changed: look the bank over again
       }
     }
     return changes;
+  }
+  // two active banks with the same machine at the same game number -> fix: re-order the later bank if that's enough,
+  // else replace that game with the best fit
+  function clashPlan(D, est, estAll) {
+    const X = bankCtx(D, estAll), out = [];
+    for (let bi = 1; bi < X.cur.length; bi++) {
+      const b = X.cur[bi];
+      const hit = b.ids.map((id, pos) => ({ id, pos, other: X.cur.slice(0, bi).find(o => o.ids[pos] === id) })).filter(x => x.other);
+      if (!hit.length) continue;
+      const others = X.cur.filter(o => o !== b).map(o => o.ids.map(X.secOf));
+      const trial = [{ games: b.ids.map(X.secOf).map(g => ({ ...g })) }];
+      const left = T.banks.schedule(trial, others);
+      if (left < 1e6) { const order = trial[0].games.map(g => g.arenaId); out.push({ bank: b.name, what: `re-order (${hit.map(h => X.secOf(h.id).name).join(', ')} moved)`, arenas: order.map(x => X.secOf(x).name), clash: hit.map(h => `${X.secOf(h.id).name} is game ${h.pos + 1} in ${h.other.name} too`) }); b.ids = order; continue; }
+      const h = hit[0], list = fitSlot(X, b, h.pos, est).filter(o => !o.clash);
+      if (!list.length) { out.push({ bank: b.name, none: true, clash: [`${X.secOf(h.id).name} is game ${h.pos + 1} in ${h.other.name} too`] }); continue; }
+      out.push({ bank: b.name, what: `${X.secOf(h.id).name} → ${list[0].c.name}`, arenas: list[0].order.map(x => X.secOf(x).name), clash: [`${X.secOf(h.id).name} is game ${h.pos + 1} in ${h.other.name} too`] });
+      b.ids = list[0].order;
+    }
+    return out;
   }
   // games of the open round still waiting on a down machine -> the replacement from their bank (or any free game)
   function downGames(D, roundGames, changes, alts) {
@@ -313,10 +353,52 @@ TDP.smart = (() => {
     try {
       await T.saveT(D.tid, { downSig: sig, downAt: Date.now() });
       const tid = D.tid;
+      let bgWin = false; try { bgWin = sessionStorage.getItem('tdp-bg') === '1'; } catch (e) { /* */ }
+      if (!bgWin && !document.hidden) return downPreview(D);   // the TD is here: show what will change first
       await T.jobs.start('A machine is down: fixing its banks', [{ tid, page: 'banks', op: 'downFix', args: { tid }, label: 'Replacing the down game in its banks' }]);
     } catch (e) { T.warn('downCheck', e); }
     finally { downBusy = false; }
   }
 
-  return { VALUE, plan, input, make, roundToFill, fillSteps, decorate, downPlan, downGames, downCheck, isDown };
+  // ---------- the window: "Laser Ball is going down" - what changes, best fit picked, TD can pick another ----------
+  let pvHost = null, pv = null;
+  async function downPreview(D) {
+    const st = T.tstate[D.tid] || {}, extra = await T.bankplan.extras(D);
+    const changes = downPlan(D, T.bankplan.estimates(D, st, extra), T.bankplan.estimates(D, st, extra, true));
+    if (!changes.length) return;
+    const r = T.data.currentRound(), roundGames = r ? D.games.filter(g => g.roundId === r.roundId) : [];
+    pv = { tid: D.tid, changes, pick: {}, roundGames };
+    if (!pvHost) { pvHost = document.createElement('div'); pvHost.id = 'tdp-downpv'; pvHost.attachShadow({ mode: 'open' }); pvHost.shadowRoot.addEventListener('click', pvClick); pvHost.shadowRoot.addEventListener('change', pvChange); document.documentElement.appendChild(pvHost); }
+    pvDraw();
+  }
+  const pvChoice = (ch, k) => { const id = pv.pick[k]; return (id && ch.options.find(o => String(o.id) === String(id))) || ch.options[0]; };
+  function pvDraw() {
+    const D = T.data.D, by = {}; pv.changes.forEach(c => { (by[c.down] = by[c.down] || []).push(c); });
+    const rows = pv.changes.map((ch, k) => {
+      if (ch.none) return `<tr><td><b>${T.esc(ch.bank)}</b></td><td colspan="2" class="small">No free game fits - this bank keeps ${T.esc(ch.down)}.</td></tr>`;
+      const o = pvChoice(ch, k);
+      return `<tr><td><b>${T.esc(ch.bank)}</b><div class="small">game ${ch.pos + 1}</div></td><td><select data-k="${k}" style="width:100%">${ch.options.map((x, i) => `<option value="${x.id}"${String(x.id) === String(o.id) ? ' selected' : ''}>${i === 0 ? '★ ' : ''}${T.esc(x.name)} (${x.era}, ~${Math.round(x.sec / 60)} min)${x.clash ? ' ⚠ ' + T.esc(x.clash) : ''}</option>`).join('')}</select>
+        <div class="small" style="margin-top:3px">${o.clash ? `<span style="color:#b45309">⚠ ${T.esc(o.clash)}</span> · ` : ''}Play order: ${o.arenas.map(T.esc).join(' → ')}${o.reordered ? ' <i>(order changed)</i>' : ''}</div></td></tr>`;
+    }).join('');
+    const moving = downGames(D, pv.roundGames, pv.changes.filter(c => !c.none).map((c, k) => { const o = pvChoice(c, pv.changes.indexOf(c)); return { ...c, repl: o.name, replId: o.id }; }));
+    pvHost.shadowRoot.innerHTML = `<style>${T.panel.CSS}:host{all:initial}.ov{position:fixed;inset:0;background:rgba(17,24,39,.5);z-index:2147483000;display:flex;align-items:flex-start;justify-content:center;padding:7vh 16px;overflow:auto}.dlg{background:var(--card);border-radius:8px;box-shadow:0 20px 40px rgba(0,0,0,.25);width:640px;max-width:100%;font-family:ui-sans-serif,system-ui,sans-serif;font-size:14px;color:var(--text)}.dh{padding:16px 20px 8px;font-size:18px;font-weight:500}.db{padding:4px 20px 16px}.df{background:var(--head);padding:12px 20px;display:flex;justify-content:flex-end;gap:8px;border-radius:0 0 8px 8px}td{vertical-align:top;padding:6px 4px;border-top:1px solid var(--line)}</style>
+      <div class="wrap${document.documentElement.classList.contains('dark') ? ' dark' : ''}"><div class="ov"><div class="dlg"><div class="dh">${Object.keys(by).map(T.esc).join(', ')} ${Object.keys(by).length === 1 ? 'is' : 'are'} going down</div><div class="db">
+      <div class="small mb">${Object.entries(by).map(([d, cs]) => `${T.esc(d)} is in ${cs.map(c => `${T.esc(c.bank)} (game ${c.pos + 1})`).join(' and ')}`).join('. ')}. ★ = best fit (not busy in another bank then, keeps bank times even, the era the bank is missing, games in the fewest banks). Pick another if you like.</div>
+      <table>${rows}</table>
+      ${moving.length ? `<div class="small mt">Also moves ${moving.length} game${moving.length === 1 ? '' : 's'} of the current round still waiting on it: ${moving.map(m => `Group ${m.group} → ${T.esc(m.name)}`).join(', ')}.</div>` : ''}
+      </div><div class="df"><button class="btn sec" data-act="leave">Leave banks as they are</button><button class="btn" data-act="apply">Apply</button></div></div></div></div>`;
+  }
+  function pvChange(e) { const k = e.target.dataset && e.target.dataset.k; if (k == null || !pv) return; pv.pick[k] = e.target.value; pvDraw(); }
+  async function pvClick(e) {
+    const a = e.target.closest('[data-act]'); if (!a || !pv) return;
+    const close = () => { if (pvHost) pvHost.remove(); pvHost = null; };
+    if (a.dataset.act === 'leave') { close(); T.panel.say('Banks left as they are - the Banks tab shows a ⚠ until it\'s fixed.'); pv = null; return; }
+    if (a.dataset.act !== 'apply') return;
+    const changes = pv.changes.filter(c => !c.none).map(c => { const o = pvChoice(c, pv.changes.indexOf(c)); return { bank: c.bank, down: c.down, downId: c.downId, repl: o.name, replId: o.id, arenas: o.arenas }; });
+    const tid = pv.tid; close(); pv = null;
+    try { await T.jobs.start('A machine is down: fixing its banks', [{ tid, page: 'banks', op: 'downFix', args: { tid, changes }, label: 'Replacing the down game in its banks' }]); }
+    catch (err) { T.panel.say(err.message || String(err), 'err'); }
+  }
+
+  return { VALUE, plan, input, make, roundToFill, fillSteps, decorate, downPlan, clashPlan, downGames, downCheck, isDown };
 })();

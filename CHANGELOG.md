@@ -2,6 +2,12 @@
 
 All notable changes, newest first. Versions follow [semantic versioning](https://semver.org/): new features bump the middle number, fixes the last.
 
+## 0.19.0 - 2026-10-31
+- **A machine in a bank goes down** (Deactivate on the Arenas tab): a window shows what will change - which banks have it (and at which game), the best-fit replacement for each (★, already picked), and lets the TD pick another game (clashes marked ⚠), with the new play order and the waiting games that move. Apply / Leave banks as they are. Deactivated from a phone with no tab open: best fit is applied automatically, as before.
+- **Best fit** for a bank slot follows the bank-building rules: never a game already in the bank · the machine isn't busy in another bank then (same game number or overlapping time; re-ordering the bank is tried first) · the bank's total time stays close to the others · the era the bank is missing · games in no bank / the fewest banks.
+- **Banks tab ⚠** when two banks have the same machine at the same game number (e.g. after editing banks by hand), with **Fix** (re-orders that bank if that's enough, else replaces the game with the best fit).
+- Fixed: a finished game on a machine that another bank also had at the same game number showed "waiting". On a shared machine, a finished game now counts as having gone first, and a game with results never shows "waiting".
+
 ## 0.18.3 - 2026-10-31
 - **Assign Bank/Order**: a **Clear order** button empties all the order boxes so a wrong order can be typed again (nothing changes in Matchplay until Save).
 

@@ -55,7 +55,8 @@ TDP.timers = (() => {
       for (const [i, g] of Object.entries(col)) {
         const th = ths[+i]; if (!th) continue;
         const s = T.timing.realStart(g, rg), done = T.timing.doneish(g), e = done ? T.timing.gEnd(g) : null;
-        put(th, 'tdp-gt', '', { start: s || '', end: e || '', done: done ? 1 : '' });
+        const dur = Number(g.duration) > 0 && Number(g.duration) < 86400 ? Number(g.duration) * 1000 : 0;
+        put(th, 'tdp-gt', '', { start: s || '', end: e || '', done: done ? 1 : '', dur: dur || '' });
       }
       // the group: estimate (kept from round start) + time so far
       const ordered = games.slice().sort((a, b) => (a.index || 0) - (b.index || 0));
@@ -70,7 +71,7 @@ TDP.timers = (() => {
     const now = Date.now();
     for (const el of document.querySelectorAll('[data-tdp="timer"].tdp-gt')) {
       const s = +el.dataset.start, e = +el.dataset.end;
-      const html = !s ? '<span style="color:#9ca3af">waiting</span>' : e ? `<span style="color:#6b7280">✓ ${fmt(e - s)}</span>` : `<span style="color:#4f46e5">⏱ ${fmt(now - s)}</span>`;
+      const html = !s && el.dataset.done ? `<span style="color:#6b7280">✓${+el.dataset.dur ? ' ' + fmt(+el.dataset.dur) : ''}</span>` : !s ? '<span style="color:#9ca3af">waiting</span>' : e ? `<span style="color:#6b7280">✓ ${fmt(e - s)}</span>` : `<span style="color:#4f46e5">⏱ ${fmt(now - s)}</span>`;
       if (el.dataset.h !== html) { el.dataset.h = html; el.innerHTML = html; }
     }
     for (const el of document.querySelectorAll('[data-tdp="timer"].tdp-ge')) {

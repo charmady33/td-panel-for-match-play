@@ -25,4 +25,22 @@ TDP.timing = { isDone: g => g.status === 'completed' };
 const mv = TDP.smart.downGames(D, games, ch);
 console.log('move:', JSON.stringify(mv));
 ok(mv.length === 1 && mv[0].gameId === 11 && mv[0].name === b1.repl, 'only the waiting Aztec game moves, to Bank 1\'s replacement');
+// ranked choices for the TD: best first, no clash on the best
+ok(b1.options && b1.options.length > 1 && !b1.options[0].clash, 'Bank 1 has ranked options, best without a clash');
+console.log('Bank 1 options:', b1.options.slice(0, 4).map(o => `${o.name}${o.clash ? ' ⚠' + o.clash : ''}`).join(' | '));
+// clash: Bank 2 has Cinema at game 1 like Bank 1 -> re-order Bank 2 (keeps its games)
+arenas[0].tournamentArena.status = 'active';
+D.t.banks = [{ bankId: 1, name: 'Bank 1', arenaIds: [2, 3, 1] }, { bankId: 2, name: 'Bank 2', arenaIds: [2, 4, 5] }, { bankId: 3, name: 'Bank 3', arenaIds: [6, 7, 8] }];
+const cp = TDP.smart.clashPlan(D, est, est);
+console.log('clash fix:', JSON.stringify(cp.map(c => [c.bank, c.what, c.arenas.join('>')])));
+ok(cp.length === 1 && cp[0].bank === 'Bank 2' && cp[0].arenas[0] !== 'Cinema' && cp[0].arenas.includes('Cinema'), 'Bank 2 re-ordered, Cinema kept');
+// timing: a shared machine at the same game number - the finished game went first
+const T0 = Date.parse('2026-10-31T20:00:00Z'), iso = ms => new Date(ms).toISOString();
+TDP.timing = undefined; eval(fs.readFileSync(path.join(__dirname, '../src/timing.js'), 'utf8'));
+const g1 = { gameId: 1, roundId: 5, set: 0, index: 0, arenaId: 9, status: 'started', startedAt: iso(T0), duration: null };
+const g4 = { gameId: 4, roundId: 5, set: 3, index: 0, arenaId: 9, status: 'completed', startedAt: iso(T0), duration: 600 };
+const rg = [g1, g4];
+console.log('finished game start:', TDP.timing.realStart(g4, rg) ? 'set' : 'WAITING', '| other group starts after it:', (TDP.timing.realStart(g1, rg) - T0) / 1000, 's');
+ok(TDP.timing.realStart(g4, rg) === T0, 'Group 4 (finished) started at the round start');
+ok(TDP.timing.realStart(g1, rg) === T0 + 600000, 'Group 1 starts when Group 4 freed the machine');
 console.log(fails ? `${fails} FAILED` : 'all passed'); process.exit(fails ? 1 : 0);
