@@ -1,5 +1,5 @@
 <!doctype html>
-<html><head><meta charset="utf-8"><title>Matchplay TD Panel</title>
+<html><head><meta charset="utf-8"><title>TD Panel for Match Play</title>
 <style>
 :root{--text:#111827;--muted:#4b5563;--line:#e5e7eb;--pri:#4f46e5;--bg:#fff}
 @media (prefers-color-scheme:dark){:root{--text:#f3f4f6;--muted:#9ca3af;--line:#374151;--pri:#6366f1;--bg:#1f2937}}
@@ -19,12 +19,14 @@ h2{font-size:13px;font-weight:600;margin:12px 0 6px;color:var(--muted);text-tran
 .ev{padding:8px 10px}.ev.sub{border-top:1px solid var(--line);padding-left:22px;background:rgba(127,127,127,.06)}
 .top{display:flex;gap:6px;align-items:center;flex-wrap:wrap}.nm{font-weight:600;color:inherit;text-decoration:none;flex:1;min-width:0}.nm:hover{text-decoration:underline}
 .lk{font-size:12px;margin-top:3px}.lk a{color:var(--pri);text-decoration:none}.lk a:hover{text-decoration:underline}
+.upd{margin:10px 0 0;padding:8px 10px;border-radius:8px;background:#fef3c7;color:#78350f;font-size:13px}.upd a{color:#92400e;font-weight:600}
 .b{font-size:11px;font-weight:500;border-radius:9999px;padding:1px 7px;white-space:nowrap}.b.g{background:#d1fae5;color:#065f46}.b.p{background:#e0e7ff;color:#3730a3}.b.c{background:#dbeafe;color:#1e40af}.b.a{background:#ede9fe;color:#5b21b6}
 #msg{min-height:16px;margin-top:6px}
 </style></head>
 <body><div class="w">
-  <h1>Matchplay TD Panel</h1>
+  <h1>TD Panel for Match Play</h1>
   <div class="s" id="ver"></div>
+  <div id="upd" class="upd" hidden></div>
   <h2>Your tournaments</h2>
   <div id="events"></div>
   <hr>

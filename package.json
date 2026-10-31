@@ -1,0 +1,18 @@
+{
+  "name": "td-panel-for-match-play",
+  "version": "0.12.0",
+  "private": true,
+  "description": "Chrome extension: tournament director tools for app.matchplay.events",
+  "scripts": {
+    "test:unit": "node test/dup_unit.js && node test/sched_unit.js && node test/gt.js && node test/ifpa_unit.js && node test/shared_unit.js",
+    "build": "node scripts/build.js"
+  },
+  "devDependencies": {
+    "playwright": "^1.48.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/charmady33/td-panel-for-match-play.git"
+  },
+  "license": "MIT"
+}

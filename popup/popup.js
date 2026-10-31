@@ -5,6 +5,13 @@
   const APP = 'https://app.matchplay.events', API = 'https://api.matchplay.events/api';
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   $('ver').textContent = 'Version ' + chrome.runtime.getManifest().version;
+  // a newer version on GitHub (checked by the background part)
+  const { update } = await chrome.storage.local.get('update');
+  if (update && update.version) {
+    $('upd').hidden = false;
+    $('upd').innerHTML = `<b>Update available: ${esc(update.version)}</b><br><a href="${esc(update.zip)}" target="_blank" rel="noopener">Download</a> · <a href="${esc(update.page)}" target="_blank" rel="noopener">What's new</a> · <a href="https://github.com/charmady33/td-panel-for-match-play#updating" target="_blank" rel="noopener">How to update</a>`;
+  }
+  chrome.runtime.sendMessage({ type: 'tdp-check-update' }).catch(() => {});
   const { settings = {} } = await chrome.storage.local.get('settings');
   $('tok').value = settings.token || '';
   $('save').addEventListener('click', async () => {

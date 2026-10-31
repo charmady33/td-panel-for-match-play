@@ -1,0 +1,33 @@
+const { chromium } = require('playwright');
+(async () => {
+  const ext = require('path').join(__dirname, '..');
+  const ctx = await chromium.launchPersistentContext('' + require('path').join(__dirname, 'out') + '/prof' + Date.now(), { headless: true, channel: 'chromium', args: [`--disable-extensions-except=${ext}`, `--load-extension=${ext}`] });
+  let [sw] = ctx.serviceWorkers(); if (!sw) sw = await ctx.waitForEvent('serviceworker', { timeout: 10000 });
+  console.log('service worker:', sw.url());
+  const id = sw.url().split('/')[2];
+  console.log('alarms:', await sw.evaluate(() => new Promise(r => chrome.alarms.getAll(a => r(a.map(x => x.name + ' ' + x.periodInMinutes))))));
+  const F = require('./fixtures');
+  F.qual.status = 'completed'; F.finalsA.status = 'started'; F.finalsB.status = 'planned';
+  await ctx.route('https://api.matchplay.events/**', route => { const u = new URL(route.request().url()), p = u.pathname, json = d => route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(d) });
+    if (p === '/api/users/profile') return json({ data: F.me }); let m;
+    if (p === '/api/tournaments') return json({ data: u.searchParams.get('status') === 'started' ? [F.finalsA] : [F.finalsB], meta: { last_page: 1 } });
+    if ((m = p.match(/^\/api\/tournaments\/(\d+)$/))) return json({ data: { 280051: F.qual, 280073: F.finalsA, 280074: F.finalsB }[m[1]] });
+    if (p.match(/\/rounds$/)) return json({ data: [{ roundId: 9, name: 'Semifinals', index: 0, status: 'started' }] });
+    return json({ data: [] }); });
+  await sw.evaluate(() => chrome.storage.local.set({ settings: { token: 't' }, 't:280073': { autoAssign: true } }));
+  const p = await ctx.newPage(); const errs = []; p.on('pageerror', e => errs.push(e.message));
+  await p.goto(`chrome-extension://${id}/popup/popup.html`); await p.waitForTimeout(800);
+  console.log('popup:', (await p.innerText('body')).replace(/\n+/g, ' | ').slice(0, 400));
+  await p.screenshot({ path: '' + require('path').join(__dirname, 'out') + '/shots/popup.png' });
+  console.log('errors', errs);
+  // background watcher: A Finals in progress, Automatic assign on, no tab open, a group without a bank
+  await ctx.route('https://app.matchplay.events/**', r => r.fulfill({ status: 200, contentType: 'text/html', body: '<html><body><main>bg test</main></body></html>' }));
+  const sw2 = sw;
+  await ctx.route('https://api.matchplay.events/api/tournaments/280073/games**', r => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: [{ gameId: 1, roundId: 9, set: 0, status: 'started', arenaId: null, bankId: null, playerIds: [1, 2] }], meta: { last_page: 1 } }) }));
+  const before = ctx.pages().length;
+  await sw2.evaluate(() => tick()).catch(e => console.log('tick err', e.message));
+  await new Promise(r => setTimeout(r, 2500));
+  console.log('runs:', JSON.stringify(await sw2.evaluate(() => chrome.storage.local.get('bg:runs'))), '| pages before/after:', before, ctx.pages().length, ctx.pages().map(x => x.url()).filter(u => /tdp-bg/.test(u)));
+  console.log('badge:', await sw2.evaluate(() => chrome.action.getBadgeText({})));
+  await ctx.close();
+})().catch(e => { console.log('FAIL', e.message); process.exit(1); });

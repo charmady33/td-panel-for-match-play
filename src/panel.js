@@ -92,6 +92,18 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--pri);vertical-ali
 .toast.err{background:#9f1239}.toast.ok{background:#065f46}.toast .x{background:none;border:0;color:inherit;opacity:.7;cursor:pointer;font-size:16px}</style><div class="wrap"></div>`;
     root.addEventListener('click', onClick);
     root.addEventListener('keydown', e => e.stopPropagation(), true);   // don't trigger Matchplay shortcuts
+    setTimeout(updateNote, 3000);
+  }
+  // a newer version is out (bg.js checks GitHub): say so once per version, on a tournament page
+  let updShown = false;
+  async function updateNote() {
+    if (updShown || T.isFrame) return; updShown = true;
+    const u = await T.store.get('update', null);
+    if (!u || !u.version) return;
+    let seen = ''; try { seen = localStorage.getItem('tdp-upd-seen') || ''; } catch (e) { /* */ }
+    if (seen === u.version) return;
+    try { localStorage.setItem('tdp-upd-seen', u.version); } catch (e) { /* */ }
+    toasts.push({ text: `TD Panel ${u.version} is available.`, link: u.page, linkText: "What's new & download", until: Date.now() + 20000 }); render(); startTicker();
   }
   function unmount() { if (host) { host.remove(); host = root = null; } chip(null); tokenPrompt(false); }
   const isDark = () => document.documentElement.classList.contains('dark') || document.body.classList.contains('dark');
@@ -119,7 +131,7 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--pri);vertical-ali
     const main = document.querySelector('main');
     const anchor = show && main ? [...main.children].find(e => !/^tdp-/.test(e.id || '')) : null;
     T.inpage.block('tdp-token', anchor, 'before', anchor ? `<div class="card" style="margin:8px 16px"><div class="cb gap" style="align-items:center;flex-wrap:wrap">
-      <b>Matchplay TD Panel</b><span class="small flex1">Paste your Matchplay API token to switch on the TD tools. <a class="link" href="https://app.matchplay.events/account/tokens" target="_blank" rel="noopener">Create an API token ↗</a> - name it anything (e.g. TD Panel), copy it, paste it here. It's kept only in this browser; change it later with the extension's toolbar button.</span>
+      <b>TD Panel for Match Play</b><span class="small flex1">Paste your Matchplay API token to switch on the TD tools. <a class="link" href="https://app.matchplay.events/account/tokens" target="_blank" rel="noopener">Create an API token ↗</a> - name it anything (e.g. TD Panel), copy it, paste it here. It's kept only in this browser; change it later with the extension's toolbar button.</span>
       <input type="password" data-f="tok" placeholder="API token" style="width:240px"><button class="btn sm" data-act="saveToken">Save</button></div></div>` : '', onTokenEvent);
   }
   async function onTokenEvent(e) {
@@ -140,6 +152,7 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--pri);vertical-ali
     const w = root.querySelector('.wrap'); w.classList.toggle('dark', isDark());
     const html = toasts.map((t, i) => t.count
       ? `<div class="toast"><span class="flex1">${T.esc(t.text)} <b>${Math.max(0, Math.ceil((t.until - Date.now()) / 1000))}s</b></span><button class="btn sm sec" data-act="toastCancel" data-i="${i}">Cancel</button></div>`
+      : t.link ? `<div class="toast"><span class="flex1">${T.esc(t.text)} <a href="${T.esc(t.link)}" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline">${T.esc(t.linkText || 'Open')}</a></span><button class="x" data-act="toastClose" data-i="${i}" title="Dismiss">×</button></div>`
       : `<div class="toast ${t.kind || ''}"><span class="flex1">${T.esc(t.text)}${/API token/.test(t.text) ? ' <a href="https://app.matchplay.events/account/tokens" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline">Create an API token ↗</a>' : ''}</span><button class="x" data-act="toastClose" data-i="${i}" title="Dismiss">×</button></div>`).join('');
     if (w.dataset.h !== html) { w.dataset.h = html; w.innerHTML = html; }
   }

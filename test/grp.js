@@ -1,0 +1,33 @@
+const { chromium } = require('playwright');
+const fs = require('fs'), path = require('path');
+const F = require('./fixtures');
+const order = JSON.parse(fs.readFileSync(require('path').join(__dirname, '../manifest.json'))).content_scripts.find(c => c.js.includes('src/main.js')).js;
+const bundle = order.map(f => fs.readFileSync(path.join(__dirname, '..', f), 'utf8')).join('\n');
+(async () => {
+  const browser = await chromium.launch(); const page = await browser.newPage({ viewport: { width: 1300, height: 900 } });
+  const errors = []; page.on('pageerror', e => errors.push(e.message));
+  const q = F.qual; q.arenaAssignment = 'manual_banks'; q.status = 'started';
+  q.banks = [0, 1, 2].map(b => ({ bankId: 900 + b, name: 'Bank ' + (b + 1), status: 'active', arenaIds: [q.arenas[b * 2].arenaId, q.arenas[b * 2 + 1].arenaId] }));
+  F.rounds.forEach(r => { r.status = 'completed'; }); F.rounds.push({ roundId: 3, name: 'Round 3', index: 2, status: 'started' });
+  let gid = 500; const games = [];
+  for (let set = 0; set < 2; set++) for (let idx = 0; idx < 2; idx++) games.push({ gameId: gid++, roundId: 3, arenaId: set === 0 ? q.arenas[idx].arenaId : null, bankId: set === 0 ? 900 : null, set, index: idx, status: 'started', bye: false, playerIds: [600000 + set * 4, 600001 + set * 4, 600002 + set * 4, 600003 + set * 4], suggestions: [] });
+  await page.route('https://api.matchplay.events/**', route => { const u = new URL(route.request().url()), p = u.pathname, json = d => route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(d) });
+    if (p === '/api/users/profile') return json({ data: F.me }); let m;
+    if ((m = p.match(/^\/api\/tournaments\/(\d+)$/))) return json({ data: { 280051: q, 280073: F.finalsA, 280074: F.finalsB }[m[1]] });
+    if (p.match(/\/standings$/)) return json(F.standings); if (p.match(/\/rounds$/)) return json({ data: F.rounds }); if (p.match(/\/games$/)) return json({ data: u.searchParams.get('round') === '3' ? games : [], meta: { last_page: 1 } }); return json({ data: [] }); });
+  const grp = n => `<div class="card" style="background:#fff;margin:12px 0"><div style="display:flex;justify-content:space-between"><span></span><button class="act">Actions</button></div><table><thead><tr><th>Group ${n}${n === 1 ? ' - Bank 1' : ''}</th><th>Tot.</th></tr></thead><tbody><tr><td>a</td><td>0</td></tr></tbody></table></div>`;
+  const HTML = `<!doctype html><html><head><meta charset=utf-8></head><body><main style="padding:24px 40px"><a href="/tournaments/280051/edit">Edit</a><h1>test</h1><div>Group match play</div><div><button>Display round…</button><button>Refresh</button><button>Start next round</button></div>${grp(1)}${grp(2)}</main>
+  <script>document.querySelectorAll('.act').forEach(b => b.onclick = () => { const m = document.createElement('div'); m.setAttribute('role', 'menu'); m.innerHTML = '<div role=menuitem><button>Assign bank</button></div>'; m.querySelector('button').onclick = () => { m.remove(); const d = document.createElement('div'); d.setAttribute('role', 'dialog'); d.id = 'mpdlg'; d.innerHTML = 'Assign bank dialog <label><input type=checkbox>Bank 1</label><button>Update arenas</button>'; document.body.appendChild(d); }; document.body.appendChild(m); });</script></body></html>`;
+  await page.route('https://app.matchplay.events/**', route => route.fulfill({ status: 200, contentType: 'text/html', body: HTML }));
+  await page.goto('https://app.matchplay.events/tournaments/280051/matches');
+  await page.evaluate(() => localStorage.setItem('tdp:settings', JSON.stringify({ token: 't' })));
+  await page.addScriptTag({ content: bundle }); console.log('loaded'); await page.waitForTimeout(6000); console.log('waited');
+  console.log('buttons:', await page.evaluate(() => [...document.querySelectorAll('[data-tdp=abtn]')].map(b => b.closest('th').innerText)));
+  console.log('direct:', await page.evaluate(async () => { try { await TDP.mp.openAssign(2); return 'ok'; } catch (e) { return 'ERR ' + e.message; } }));
+  await page.evaluate(() => { document.getElementById('mpdlg') && document.getElementById('mpdlg').remove(); document.querySelectorAll('[data-tdp=abtn]')[1].click(); }); await page.waitForTimeout(800);
+  console.log('toast:', await page.evaluate(() => { const h = document.getElementById('tdp-host'); return h ? h.shadowRoot.innerText : ''; }));
+  console.log('dialog opened:', await page.evaluate(() => !!document.getElementById('mpdlg')));
+  console.log('status line:', await page.evaluate(() => (document.getElementById('tdp-auto') ? document.getElementById('tdp-auto').shadowRoot.textContent : 'none').replace(/\s+/g, ' ').slice(-200)));
+  await page.screenshot({ path: process.argv[2] + '/groups.png' });
+  console.log('errors', errors); await browser.close();
+})();

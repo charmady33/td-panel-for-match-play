@@ -7,6 +7,8 @@
 // Also keeps the toolbar badge = number of your tournaments in progress.
 
 const API = 'https://api.matchplay.events/api';
+// where new versions are published (GitHub Releases): the toolbar button and tournament pages say when one is out
+const REPO = 'charmady33/td-panel-for-match-play';
 const APP = 'https://app.matchplay.events';
 const store = {
   get: async (k, d = null) => { const o = await chrome.storage.local.get(k); return o[k] === undefined ? d : o[k]; },
@@ -37,7 +39,24 @@ chrome.alarms.onAlarm.addListener(a => { if (a.name === 'watch') tick().catch(e 
 
 const tabsOf = async tid => (await chrome.tabs.query({ url: `${APP}/tournaments/${tid}*` }));
 
+// ---------- new version on GitHub? (at most every 6 hours) ----------
+const newer = (a, b) => { const x = String(a).replace(/^v/, '').split('.').map(Number), y = String(b).replace(/^v/, '').split('.').map(Number); for (let i = 0; i < 3; i++) { if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0); } return false; };
+async function checkUpdate(force) {
+  const last = await store.get('bg:updateAt', 0);
+  if (!force && Date.now() - last < 6 * 3600e3) return;
+  await store.set('bg:updateAt', Date.now());
+  try {
+    const r = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, { headers: { Accept: 'application/vnd.github+json' } });
+    if (!r.ok) return;
+    const j = await r.json(), mine = chrome.runtime.getManifest().version;
+    const zip = (j.assets || []).find(a => /\.zip$/i.test(a.name));
+    await store.set('update', newer(j.tag_name, mine) ? { version: String(j.tag_name).replace(/^v/, ''), page: j.html_url, zip: zip ? zip.browser_download_url : j.html_url, notes: String(j.body || '').slice(0, 600) } : null);
+  } catch (e) { /* offline: try again later */ }
+}
+chrome.runtime.onMessage.addListener(m => { if (m && m.type === 'tdp-check-update') checkUpdate(true); });
+
 async function tick() {
+  checkUpdate(false);
   let u; try { u = await me(); } catch (e) { chrome.action.setBadgeText({ text: '' }); return; }
   const started = rows(await api(`/tournaments?owner=${u.userId}&status=started&limit=50`));
   chrome.action.setBadgeText({ text: started.length ? String(started.length) : '' });
@@ -79,7 +98,7 @@ async function needs(tid, st) {
 }
 
 function note(tid, message, windowId) {
-  chrome.notifications.create('tdp:' + tid + ':' + Date.now(), { type: 'basic', iconUrl: 'icons/icon128.png', title: 'Matchplay TD Panel', message, priority: 1 });
+  chrome.notifications.create('tdp:' + tid + ':' + Date.now(), { type: 'basic', iconUrl: 'icons/icon128.png', title: 'TD Panel for Match Play', message, priority: 1 });
   if (windowId) noteWin[tid] = windowId;
 }
 const noteWin = {};

@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Matchplay TD Panel",
-  "version": "0.11.2",
-  "description": "Tournament director tools built into app.matchplay.events: finals check-in and eligibility, tiebreakers that matter, bank building and assignment, auto rounds, game timers and IFPA submission.",
+  "name": "TD Panel for Match Play",
+  "version": "0.12.0",
+  "description": "Tournament director tools built into Match Play (app.matchplay.events): finals check-in and eligibility, tiebreakers, bank building, auto rounds, game timers and IFPA submission.",
   "icons": {
     "16": "icons/icon16.png",
     "32": "icons/icon32.png",
@@ -66,7 +66,7 @@
   ],
   "action": {
     "default_popup": "popup/popup.html",
-    "default_title": "Matchplay TD Panel",
+    "default_title": "TD Panel for Match Play",
     "default_icon": {
       "16": "icons/icon16.png",
       "32": "icons/icon32.png"
@@ -74,5 +74,6 @@
   },
   "background": {
     "service_worker": "bg.js"
-  }
+  },
+  "homepage_url": "https://github.com/charmady33/td-panel-for-match-play"
 }
