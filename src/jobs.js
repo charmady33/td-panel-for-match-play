@@ -99,7 +99,7 @@ TDP.jobs = (() => {
     async bankArenas(a) { await eachBank(a.banks, (b, tick) => T.mp.setBankArenas(b.name, b.arenas, tick), b => 2 * b.arenas.length + 1); },
     async assignBanks(a) {
       // check Matchplay right before: a group that already has a bank/arena is skipped, not an error
-      const fresh = a.roundId ? await T.api.all(`/tournaments/${a.tid}/games?round=${a.roundId}`, 0) : [];
+      const fresh = a.roundId ? await T.data.roundGames(a.tid, a.roundId) : [];
       const has = new Set(fresh.filter(g => g.bankId != null || g.arenaId != null).map(g => g.set + 1));
       const P = counter(a.pairs.length), skipped = [];
       for (const [i, x] of a.pairs.entries()) {
@@ -130,7 +130,7 @@ TDP.jobs = (() => {
       await note('Reading the tournament');
       const me = T.data.D.me || T.data.unwrap(await T.api.get('/users/profile', 3600e3));
       let t = null;
-      try { t = await T.data.loadTournament(a.tid, 0); }
+      try { t = await T.data.loadTournament(a.tid, 0, false, true); }   // (the API: is it really still there)
       catch (e) { return job.delTry === a.tid ? put('deleted') : put('skipped', 'not found (already deleted?)'); }   // (the page reloaded right after Matchplay deleted it)
       if (!t || t.test !== true) return put('skipped', 'not a test tournament');
       if (!me || t.organizerId !== me.userId) return put('skipped', "you're not the organizer");
@@ -150,7 +150,7 @@ TDP.jobs = (() => {
       const t = await T.data.loadTournament(a.tid, 0);
       if (!t || t.test !== true) throw new Error('Random results are only for Test tournaments.');
       const pm = T.data.playerMap(t), am = T.data.arenaMap(t);
-      const games = (await T.api.all(`/tournaments/${a.tid}/games?round=${a.roundId}`, 0)).filter(g => !g.bye && !T.timing.isDone(g));
+      const games = (await T.data.roundGames(a.tid, a.roundId)).filter(g => !g.bye && !T.timing.isDone(g));
       // Matchplay's tiebreaker games (set 9999) come without an arena: give each a random one first
       const arenas = (t.arenas || []).filter(x => !x.tournamentArena || x.tournamentArena.status !== 'inactive');
       for (const g of games.filter(x => x.set === 9999 && x.arenaId == null && arenas.length)) {
@@ -188,7 +188,7 @@ TDP.jobs = (() => {
     async copyArenas(a) { const P = counter(a.names.length); await T.mp.addArenas(a.names, text => P.tick(text)); },
     // Matchplay may close the last round itself: read it fresh first; "already closed" is done, not an error
     async closeRound(a) {
-      const closed = async () => { if (!a || !a.roundId) return false; const rs = T.data.arr(await T.api.get(`/tournaments/${a.tid}/rounds`, 0, true)); const r = rs.find(x => x.roundId === a.roundId); return !!(r && String(r.status) === 'completed'); };
+      const closed = async () => { if (!a || !a.roundId) return false; const rs = await T.data.roundsOf(a.tid); const r = rs.find(x => x.roundId === a.roundId); return !!(r && String(r.status) === 'completed'); };
       if (await closed()) return `${a.name || 'The round'} was already closed by Matchplay`;
       const b = await T.waitFor(() => T.findBtn(document, /Close round$/), 6000);
       if (!b) { if (await closed()) return `${a.name || 'The round'} was already closed by Matchplay`; throw new Error('No "Close round" button (are all games approved?).'); }
@@ -214,12 +214,12 @@ TDP.jobs = (() => {
         await T.data.refresh(true);
         round = (T.data.D.rounds || []).find(r => r.roundId === a.roundId) || null;
         const done = g => T.timing.hasScore(g);
-        if (round) games = (await T.api.all(`/tournaments/${a.tid}/games?round=${a.roundId}`, 0)).map(g => (done(g) || g.bye || g.set === 9999 ? g : { ...g, arenaId: null }));
+        if (round) games = (await T.data.roundGames(a.tid, a.roundId)).map(g => (done(g) || g.bye || g.set === 9999 ? g : { ...g, arenaId: null }));
       }
       for (let k = 0; k < 15 && !round; k++) {   // the new round can take a moment to show in the API
         await T.data.refresh(true);
         const D = T.data.D, r = D.rounds[D.rounds.length - 1];
-        if (r && String(r.status) !== 'completed') { games = await T.api.all(`/tournaments/${a.tid}/games?round=${r.roundId}`, 0); round = T.smart.roundToFill(D, games) ? r : null; }
+        if (r && String(r.status) !== 'completed') { games = await T.data.roundGames(a.tid, r.roundId); round = T.smart.roundToFill(D, games) ? r : null; }
         if (!round) await T.sleep(1000);
       }
       if (!round) return 'every game already has an arena';
@@ -237,7 +237,7 @@ TDP.jobs = (() => {
       return a.clear ? 'arenas cleared and drawn again' : 'arenas assigned';
     },
     async smartAssign(a) {
-      const fresh = await T.api.all(`/tournaments/${a.tid}/games?round=${a.roundId}`, 0), has = new Set(fresh.filter(g => g.arenaId != null).map(g => g.gameId));
+      const fresh = await T.data.roundGames(a.tid, a.roundId), has = new Set(fresh.filter(g => g.arenaId != null).map(g => g.gameId));
       const P = counter(a.items.length);
       for (const [i, x] of a.items.entries()) {
         const what = `Group ${x.group} · Game ${x.index + 1} → ${x.name}`;
@@ -256,7 +256,7 @@ TDP.jobs = (() => {
       await T.saveT(a.tid, { downSwaps: swaps });
       const r = T.data.currentRound();
       if (r) {
-        const games = await T.api.all(`/tournaments/${a.tid}/games?round=${r.roundId}`, 0);
+        const games = await T.data.roundGames(a.tid, r.roundId);
         const move = T.smart.downGames(D, games, ok, T.bankplan.estimates(D, st, extra));
         if (move.length) job.steps.splice(job.i + 1, 0, { tid: a.tid, page: 'matches', op: 'smartAssign', args: { tid: a.tid, roundId: r.roundId, items: move, change: true }, label: `Moving ${move.length} waiting game${move.length === 1 ? '' : 's'} off the down machine` });
         await save();

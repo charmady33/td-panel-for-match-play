@@ -1,11 +1,11 @@
 # TD Panel for Match Play — notes for Claude
 
 Chrome MV3 extension for pinball tournament directors on app.matchplay.events. Tools are built into Matchplay's own
-pages (no sidebar). Current version: **0.19.1** (see README.md for what each version added).
+pages (no sidebar). Current version: **0.20.0** (see README.md for what each version added).
 
 ## How the maintainer (Clark) wants to work
 - **Propose a plan first, then wait for "code it".** Don't change code until he says so. Number each proposed item
-  (the next free number is **69**; 35 and 39 are agreed and waiting — see docs/PENDING.md).
+  (the next free number is **70**; 35 and 39 are agreed and waiting — see docs/PENDING.md).
 - Edit files in place with targeted changes; don't rewrite whole files.
 - Explain in plain language; he's a TD, not a developer. Keep messages short and concrete.
 - Each release: bump `manifest.json` "version", `TDP.VERSION` in `src/util.js` and `package.json`; add the version at
@@ -35,6 +35,10 @@ pages (no sidebar). Current version: **0.19.1** (see README.md for what each ver
   - `util.js` storage (chrome.storage.local, localStorage fallback for tests), settings, per-tournament state
     `T.tstate[tid]` via `T.saveT` (merge-on-save, cross-tab sync), DOM helpers (`findBtn` ignores our own
     `[data-tdp]` buttons — keep it that way).
+  - `page.js` (MAIN world, own content-script entry) finds Match Play's Redux store through the React root (`#app`
+    `__reactContainer$…` fiber → `memoizedProps.store`), builds API-shaped data for the tournament in the URL and posts it
+    (`{__tdp:'page'}`) on every store change; `{__tdp:'pageReq'}` asks for it now. `pagedata.js` (`T.page`) validates it
+    (else null → API), `get(tid)`, `fresh()`, `shared(tid)` (other tabs' copies in storage key `pageShare`).
   - `api.js` rate-limited official API client (queue, ~1 req / 0.65 s, `prio` to jump the queue).
   - `data.js` loads the tournament family (qualifying + linked finals), rounds, games, standings; cache per
     tournament; change signature → `T.sync.auto()`.
@@ -55,7 +59,10 @@ pages (no sidebar). Current version: **0.19.1** (see README.md for what each ver
     when no tab is open; badge; notifications. `popup/` lists the TD's events (qualifying + finals) and the token.
 
 ## Matchplay facts worth knowing
-- SPA (React + Redux). Data is fetched once per tournament; tabs don't refetch. Rounds API returns newest first
+- SPA (React + Redux). Its store (players/tournamentPlayers `tid-pid`, arenas/tournamentArenas `tid-aid`, banks, rounds,
+  games, standings/tournamentStandings, linkedTournaments, bootData.currentUserId) holds API-shaped records and is
+  updated by Match Play's own real-time feed (~9 s after a change made elsewhere, at once for changes made in that tab;
+  hidden tabs too). Standings only after the Standings tab loads. Rounds API returns newest first
   (we sort ascending). Group Actions menu items wrap the real button.
 - Start next round modal: "Publish round immediately (recommended)". Unpublished round = "Pending" + Publish.
 - Delete: More… → Delete tournament → window "Delete tournament" with button **"Delete tournament permanently"**
@@ -81,7 +88,7 @@ pages (no sidebar). Current version: **0.19.1** (see README.md for what each ver
 
 ## Testing
 - `test/` — Playwright scripts that inject the bundle into mock Matchplay pages (API mocked with `page.route`), plus
-  unit scripts. Run with `node test/<file>.js [outDir]`. Useful ones: `v019_ui.js` (down-machine window, bank clash Fix), `v016_ui.js` (New rounds use, redo, live events), `v0152_ui.js` (quick test box, update bar), `even_unit.js` (round lengths), `v015_ui.js` (timers, Max est., on/off), `v014_ui.js` (Plays tab, optional ties, vote Change…, results grid), `smart_unit.js` (game-time planner), `down_unit.js`
+  unit scripts. Run with `node test/<file>.js [outDir]`. Useful ones: `v020_ui.js` (page data first; NOSTORE=1 = API fallback), `v019_ui.js` (down-machine window, bank clash Fix), `v016_ui.js` (New rounds use, redo, live events), `v0152_ui.js` (quick test box, update bar), `even_unit.js` (round lengths), `v015_ui.js` (timers, Max est., on/off), `v014_ui.js` (Plays tab, optional ties, vote Change…, results grid), `smart_unit.js` (game-time planner), `down_unit.js`
   (down machine in banks), `dup_unit.js` (bank duplicates),
   `sched_unit.js`, `gt.js` (bracket ties), `cascade.js` (finals standings ties), `embed_ui.js`
   (check-in; env CAP=1 / DONEJOB=1 / MOVEUP=1), `t6.js` (bank refresh via worker frame; PICK=1 picker),

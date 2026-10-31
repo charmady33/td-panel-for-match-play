@@ -150,7 +150,7 @@ var TDP = window.TDP || (window.TDP = {});
     if (!(await lock(tid))) return state('running in another tab');
     autoBusy = true;
     try {
-      const fresh = await T.api.all(`/tournaments/${tid}/games?round=${r.roundId}`, 0);
+      const fresh = await T.data.roundGames(tid, r.roundId);
       const gs = fresh.filter(g => !g.bye);
       const open = gs.filter(g => !T.timing.isDone(g));
       if (!gs.length || open.length) {

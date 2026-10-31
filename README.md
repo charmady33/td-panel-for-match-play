@@ -4,9 +4,9 @@ A free Chrome extension for pinball tournament directors who run events on [Matc
 It adds TD tools straight into Match Play's own pages: finals check-in and eligibility, tiebreakers that matter,
 bank building and assignment, automatic rounds, game timers, and IFPA submission.
 
-> Not made by or affiliated with Match Play Events. It reads your tournaments with Match Play's official
-> (read-only) API using your own API token, and makes changes by clicking Match Play's own buttons, after you
-> confirm.
+> Not made by or affiliated with Match Play Events. It reads the data Match Play's own page already has, plus Match
+> Play's official (read-only) API using your own API token, and makes changes by clicking Match Play's own buttons,
+> after you confirm.
 
 ## Install
 
@@ -106,7 +106,7 @@ Your settings, API token and saved tournament data stay as they are.
 - Game times use each game's **middle value** (median); a single game more than 3× that is left out (a game left open by mistake), and the Arenas tab hover says how many were left out.
 
 ## How it works
-- **Reads** use Matchplay's official read-only API with your own token. Requests are kept to about 1 every 0.65 s, standings are fetched no more than every 30 s, and finished data is cached.
+- **Reads** come first from the data Matchplay's own page already loaded (shown at once, updated as the page updates; nothing extra is fetched), then from Matchplay's official read-only API with your own token for anything the page doesn't have. Requests are kept to about 1 every 0.65 s, standings are fetched no more than every 30 s, and finished data is cached.
 - **Changes** (labels, adding players, check-in, seeds, banks, closing/starting rounds) are made by clicking Matchplay's own buttons. You see a preview or confirm first; progress shows in a small card at the bottom right. If a step fails, the task stops with a message and a Retry button.
 - Everything the panel remembers stays in this browser's extension storage: cutoffs, IFPA ranks, check-in, and bank settings.
 

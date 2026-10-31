@@ -335,7 +335,7 @@ table{width:100%;border-collapse:collapse}td{padding:4px 6px;border-top:1px soli
     const r = T.data.currentRound(); if (!r || D.t.test !== true) return;
     // the round straight from the API (a bank assigned a moment ago must count)
     let fresh = null;
-    try { fresh = await T.api.all(`/tournaments/${D.tid}/games?round=${r.roundId}`, 0); D.games = D.games.filter(g => g.roundId !== r.roundId).concat(fresh); } catch (e) { /* use what we have */ }
+    try { fresh = await T.data.roundGames(D.tid, r.roundId); D.games = D.games.filter(g => g.roundId !== r.roundId).concat(fresh); } catch (e) { /* use what we have */ }
     const open = D.games.filter(g => g.roundId === r.roundId && !g.bye && !T.timing.isDone(g));
     const ready = open.filter(g => g.arenaId != null || g.set === 9999), tbs = open.filter(g => g.set === 9999 && g.arenaId == null).length;
     cur = { mode: 'fill', r };

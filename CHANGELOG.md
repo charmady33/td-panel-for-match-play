@@ -2,6 +2,18 @@
 
 All notable changes, newest first. Versions follow [semantic versioning](https://semver.org/): new features bump the middle number, fixes the last.
 
+## 0.20.0 - 2026-10-31
+- Reads Match Play's own page data first (item 69): the tournament, players, arenas, banks, rounds and games the page
+  already loaded. Everything the extension adds (Assign Bank/Order, timers, Est., tie notes, bank bar, Matches bar…)
+  draws as soon as the page does and redraws the moment the page changes - no waiting on the API.
+- Tasks check each step against the page data (no API round trip per step).
+- Who's the TD comes from the page (your user ID, the organizer and managers).
+- Other open tabs share their event (and standings, when their page has them) - e.g. A Finals and B Finals tabs.
+- The API is still used for anything the page doesn't have: standings before the Standings tab is opened, events not
+  open in a tab, past events, Submit to IFPA, Delete test tournaments, the background watcher, and a once-a-minute check
+  in hidden tabs with an automatic option on. If Match Play changes how its page keeps data, the API is used instead.
+- Needs Chrome 111 or newer.
+
 ## 0.19.1 - 2026-10-31
 - A game going down (item 68): the replacement takes only the broken game's spot. The bank keeps its play order and
   its other games. Best fit now avoids games already at that game number in another bank (or busy then); those

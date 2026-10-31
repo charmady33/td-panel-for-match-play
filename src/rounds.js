@@ -64,7 +64,7 @@ TDP.rounds = (() => {
     if (!type || !(await lock(tid + ':guard'))) return;
     busy = true;
     try {
-      const games = await T.api.all(`/tournaments/${tid}/games?round=${r.roundId}`, 0);
+      const games = await T.data.roundGames(tid, r.roundId);
       await T.saveT(tid, { knownRounds: [...known, r.roundId].slice(-60) });   // once per round, whatever happens next
       const label = (TYPES.find(x => x[0] === type) || [])[1] || type, name = r.name || 'The new round';
       const age = Date.now() - (ts(r.createdAt) || Date.now());
