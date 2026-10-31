@@ -219,7 +219,7 @@ TDP.finals = (() => {
       const g = tbAll.filter(x => (x.playerIds || []).length && (x.playerIds || []).every(p => ids.has(Number(p)))).pop() || null;
       if (g) {
         t.tbGame = g; t.tbOpen = !T.timing.isDone(g); t.tbDone = !t.tbOpen;
-        if (t.tbDone) t.tbOrder = ((g.resultPositions || []).length ? g.resultPositions : g.playerIds).map(Number);
+        if (t.tbDone) t.tbOrder = ((g.resultPositions || []).some(x => x != null) ? g.resultPositions : g.playerIds).map(Number);
       } else { t.tbOpen = false; t.tbDone = false; }   // another tie's tiebreaker in the same group isn't this one's
       // fallback: a tiebreaker recorded with the extension (when Matchplay didn't add a game)
       const rec = T.ties && T.ties.gRec(D, t); if (!g && rec && rec.status === 'done') { t.tbDone = true; t.ours = rec; }

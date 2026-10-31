@@ -12,7 +12,7 @@ F.rounds.forEach(r => { r.status = 'completed'; });
 F.rounds.push({ roundId: 3, name: 'Round 3', index: 2, status: 'started', createdAt: new Date(now - 60e3).toISOString().replace('T', ' ').replace(/\.\d+Z/, 'Z'), completedAt: null });
 const r2 = F.games.filter(g => g.roundId === 2);
 let gid = 900;
-for (const g of r2) F.games.push({ ...g, gameId: gid++, roundId: 3, status: 'started', resultPositions: [], resultPoints: [], suggestions: [], duration: null, startedAt: new Date(now - 60e3).toISOString() });
+for (const g of r2) F.games.push({ ...g, gameId: gid++, roundId: 3, status: 'started', resultPositions: [null, null, null, null], resultPoints: [null, null, null, null], suggestions: [], duration: null, startedAt: new Date(now - 60e3).toISOString() });
 (async () => {
   const browser = await chromium.launch(); const page = await browser.newPage({ viewport: { width: 1300, height: 900 } });
   const errors = []; page.on('pageerror', e => errors.push(e.message));
@@ -57,6 +57,13 @@ for (const g of r2) F.games.push({ ...g, gameId: gid++, roundId: 3, status: 'sta
   await page.evaluate(async () => { window.__job = null; }); F.games.filter(g => g.roundId === 3)[0].suggestions = [{ createdAt: new Date().toISOString() }];
   await page.evaluate(async () => { await TDP.saveT(280051, { knownRounds: [1, 2] }); await TDP.data.refresh(true); await TDP.rounds.guard(async () => true); });
   console.log('with a score:', await page.evaluate(() => JSON.stringify(window.__job)), '(null = left alone)');
+  // fallback button (game time default, round 3 has unscored games)
+  await page.evaluate(async () => { await TDP.saveT(280051, { roundType: 'smart' }); TDP.inpage.render(); });
+  await page.waitForTimeout(300);
+  console.log('fallback button:', await page.evaluate(() => { const b = document.getElementById('tdp-auto').shadowRoot.querySelector('[data-act=smartNow]'); return b ? b.closest('.cb').innerText.replace(/\s+/g, ' ') : 'none'; }));
+  await page.evaluate(async () => { window.__job = null; window.confirm = () => true; document.getElementById('tdp-auto').shadowRoot.querySelector('[data-act=smartNow]').click(); await new Promise(r => setTimeout(r, 300)); });
+  console.log('button job:', await page.evaluate(() => JSON.stringify(window.__job && window.__job.s.map(x => x.op + ' ' + JSON.stringify(x.args)))));
+  await page.evaluate(async () => { await TDP.saveT(280051, { roundType: 'cat2' }); });
   // the Start next round window opens with the default (Solid state)
   await page.click('#snr'); await page.waitForTimeout(800);
   console.log('start window picks:', await page.evaluate(() => document.getElementById('categoryId').value));

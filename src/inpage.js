@@ -197,6 +197,17 @@ TDP.inpage = (() => {
   }
 
   // ---------- Matches tab ----------
+  // fallback: Assign arenas by game time for the newest open round (same code as the automatic redo)
+  function smartRow(D) {
+    if (!T.rounds || (D.qual && D.qual.tournamentId !== D.tid)) return '';
+    const r = T.data.latestRound(); if (!r || String(r.status) === 'completed') return '';
+    const gs = D.games.filter(g => g.roundId === r.roundId && !g.bye && g.set !== 9999), open = gs.filter(g => !T.timing.hasScore(g));
+    const none = open.filter(g => g.arenaId == null).length;
+    if (!open.length || (!none && T.rounds.typeOf(D) !== 'smart')) return '';
+    return `<div class="cb gap" style="border-top:1px solid var(--line);flex-wrap:wrap;align-items:center">
+      <button class="btn sm" data-act="smartNow" ${T.jobs.active() ? 'disabled' : ''}>Assign arenas by game time</button>
+      <span class="small flex1">${T.esc(r.name || 'This round')}: ${none ? `${none} game${none === 1 ? '' : 's'} without an arena` : 'every game has an arena'} · games with a score are never changed.</span></div>`;
+  }
   function matches(D) {
     const st = T.tstate[D.tid] || {};
     const refresh = T.findBtn(document.querySelector('main') || document, /^Refresh$/);
@@ -234,11 +245,19 @@ TDP.inpage = (() => {
       <span class="small" title="When every game is approved (no pending or partial scores, no open tiebreakers), closes the round and starts the next after a 10-second countdown you can cancel. Never past the last round; never completes the tournament." style="cursor:help">ⓘ</span>
       <span class="small flex1">${st.auto ? T.esc(autoState || 'watching') : 'Off'}</span>
       ${T.rounds ? T.rounds.selectHtml(D) : ''}
-      </div>${bankRow}${testRow}</div>` : '';
+      </div>${smartRow(D)}${bankRow}${testRow}</div>` : '';
     block('tdp-auto', html ? bar : null, 'after', html, async e => {
       const el = e.target;
       if (e.type === 'click' && el.closest && el.closest('[data-act=assign]')) return T.bankbar.assignPreview(T.data.D);
       if (e.type === 'click' && el.closest && el.closest('[data-act=fill]')) return T.bankbar.fillConfirm(T.data.D);
+      if (e.type === 'click' && el.closest && el.closest('[data-act=smartNow]')) {
+        const D2 = T.data.D, r = T.data.latestRound(); if (!r) return;
+        const gs = D2.games.filter(g => g.roundId === r.roundId && !g.bye && g.set !== 9999 && !T.timing.hasScore(g)), had = gs.filter(g => g.arenaId != null).length;
+        if (had && !confirm(`${had} game${had === 1 ? ' already has an arena' : 's already have arenas'} in ${r.name || 'this round'}. Give every game without a score its arena by game time (changes those too)?`)) return;
+        try { await T.jobs.start(`${r.name || 'Round'}: arenas by game time`, [{ tid: D2.tid, page: 'matches', op: 'smartPlan', args: { tid: D2.tid, roundId: r.roundId, redo: true, publish: String(r.status) === 'pending' }, label: 'Giving every game its arena by game time' }]); }
+        catch (err) { T.panel.say(err.message || String(err), 'err'); }
+        return;
+      }
       if (e.type !== 'change') return;
       if (el.dataset.act === 'auto') { await T.saveT(D.tid, { auto: el.checked }); autoState = ''; render(); }
       if (el.dataset.act === 'roundType') { await T.rounds.setType(T.data.D, el.value); render(); }

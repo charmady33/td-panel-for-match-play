@@ -2,6 +2,10 @@
 
 All notable changes, newest first. Versions follow [semantic versioning](https://semver.org/): new features bump the middle number, fixes the last.
 
+## 0.17.1 - 2026-10-31
+- Fixed: a round started on a phone was "left as it is (scores already entered)" even though nobody had played - Matchplay lists an unplayed game's finishing places as empty slots, which were counted as scores. Now only a filled-in place, a completed game or a suggestion counts.
+- **Assign arenas by game time** button on the Matches tab (newest open round): the same as the automatic redo, as a fallback. Games with a score are never changed; asks first if some games already have arenas.
+
 ## 0.17.0 - 2026-10-31
 - **New rounds use** (Matches tab): pick each tournament's default - Any category (game time), Any category, EM / SS / DMD, labels A-E, Banks, or Don't draw arenas. The Start next round window opens with it, and Auto close/start uses it.
 - **Rounds started on a phone** (or another device) with something different are redone with the default within seconds - game time: every game gets its arena in place; a category: Matchplay's round Actions → Clear all arenas + Assign arenas with that category; banks: Assign banks. Only while nobody has entered or suggested a score and the round is under 10 minutes old; otherwise it's left alone with a note. Rounds started from this computer are never redone.

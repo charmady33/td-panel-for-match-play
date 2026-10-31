@@ -12,6 +12,8 @@ TDP.timing = (() => {
   const ts = v => { if (!v) return null; const t = Date.parse(v); return isFinite(t) ? t : null; };
   const isDone = g => String(g && g.status || '').toLowerCase() === 'completed';
   const isTiebreak = g => g && g.set === 9999;
+  // a score is in: completed, a finishing place filled in, or a suggestion (an unplayed game's resultPositions is [null, null, ...])
+  const hasScore = g => !!g && (isDone(g) || (g.resultPositions || []).some(x => x != null) || (g.suggestions || []).length > 0);
 
   // does every player in the game have a suggested score or position?
   function suggestState(g) {
@@ -111,5 +113,5 @@ TDP.timing = (() => {
     });
   }
 
-  return { logEnd, ts, isDone, isTiebreak, suggestState, noteSuggestions, fullSeen, doneish, gEnd, realStart, gameLen, arenaTimes, roundTimes, GAME_MIN_MS, GAME_MAX_MS };
+  return { logEnd, ts, isDone, hasScore, isTiebreak, suggestState, noteSuggestions, fullSeen, doneish, gEnd, realStart, gameLen, arenaTimes, roundTimes, GAME_MIN_MS, GAME_MAX_MS };
 })();

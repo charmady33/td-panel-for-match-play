@@ -39,7 +39,7 @@ TDP.rounds = (() => {
   }
 
   // ---------- a round started elsewhere ----------
-  const hasScore = g => T.timing.isDone(g) || (g.resultPositions || []).length || (g.suggestions || []).length;
+  const hasScore = g => T.timing.hasScore(g);
   const ts = v => { const t = Date.parse(String(v || '').replace(' ', 'T')); return isFinite(t) ? t : null; };
   // does the round already match the default? (categories: every assigned arena in that category / label)
   function matches(D, type, games) {

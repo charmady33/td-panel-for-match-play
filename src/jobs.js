@@ -204,7 +204,7 @@ TDP.jobs = (() => {
       if (a.redo && a.roundId) {   // a round started elsewhere: every game without a score gets its arena again
         await T.data.refresh(true);
         round = (T.data.D.rounds || []).find(r => r.roundId === a.roundId) || null;
-        const done = g => T.timing.isDone(g) || (g.resultPositions || []).length || (g.suggestions || []).length;
+        const done = g => T.timing.hasScore(g);
         if (round) games = (await T.api.all(`/tournaments/${a.tid}/games?round=${a.roundId}`, 0)).map(g => (done(g) || g.bye || g.set === 9999 ? g : { ...g, arenaId: null }));
       }
       for (let k = 0; k < 15 && !round; k++) {   // the new round can take a moment to show in the API
