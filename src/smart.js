@@ -14,7 +14,7 @@ TDP.smart = (() => {
   const T = TDP;
   const VALUE = 'tdp-gt', LABEL = 'Any category (game time) · TD Panel';
   const BUFFER = 60;   // seconds between one group leaving a machine and the next starting it
-  const W = { wait: 40, repeat: 2500, repeatEach: 1500, repeatMore: 2500, equal: 12000, era: 120, len: 0.2, spread: 1, span: 0.5, roundDup: 1e7, b2b: 1e5, recent: 600 };
+  const W = { wait: 40, repeat: 2500, repeatEach: 1500, repeatMore: 2500, equal: 12000, era: 120, len: 0.2, spread: 1, span: 0.5, roundDup: 1e7, b2b: 1e5, recent: 600, quota: 15000, target: 6, equalAll: 50000 };
 
   function rngFrom(seed) {
     let a = (seed >>> 0) || 1;
@@ -40,7 +40,15 @@ TDP.smart = (() => {
     for (const [p, m] of Object.entries(inp.played || {})) { played[p] = { ...m }; repeats[p] = Object.values(m).reduce((s, c) => s + Math.max(0, c - 1), 0); }
     const plays = { ...(inp.plays || {}) }, planned = {};
     const busy = {};   // arenaId -> [[s, e]]
-    const G = inp.groups.map(g => ({ g, t: 0, k: 0, used: new Set(), eras: [] }));
+    const G = inp.groups.map(g => ({ g, t: 0, k: 0, used: new Set(), eras: [], sum: 0 }));
+    // even rounds: each round takes its share of each era (long modern games spread over the night, not bunched),
+    // and every group aims at the same length (long games paired with short ones)
+    const eraOf = a => a.era === 'LCD' ? 'DMD' : a.era, byEra = {};
+    arenas.forEach(a => { (byEra[eraOf(a)] = byEra[eraOf(a)] || []).push(a); });
+    const slotsAll = inp.groups.reduce((n, g) => n + g.slots.length, 0), quota = {}, eraCount = {};
+    let avgSlot = 0;
+    for (const [e, list] of Object.entries(byEra)) { quota[e] = slotsAll * list.length / arenas.length; avgSlot += quota[e] * list.reduce((x, a) => x + a.sec, 0) / list.length; }
+    avgSlot = slotsAll ? avgSlot / slotsAll : 0;
     const out = [], notes = [];
     let cost = 0;
     const startAt = (id, t, sec) => {
@@ -51,7 +59,8 @@ TDP.smart = (() => {
       }
       return s;
     };
-    const minUse = () => Math.min(...arenas.map(a => (plays[a.arenaId] || 0) + (planned[a.arenaId] || 0)));
+    // equal play within each era (every EM game as often as the other EM games, etc.)
+    const minUse = e => Math.min(...byEra[e].map(a => (plays[a.arenaId] || 0) + (planned[a.arenaId] || 0)));
     const nameOf = p => (inp.names && inp.names[p]) || 'Player ' + p;
     for (;;) {
       const open = G.filter(x => x.k < x.g.slots.length);
@@ -65,8 +74,11 @@ TDP.smart = (() => {
         const a = byId[slot.arenaId] || { arenaId: slot.arenaId, name: '', era: 'Unknown', sec: 13 * 60 };
         pick = { a, s: startAt(a.arenaId, cur.t, a.sec), fixed: true };
       } else {
-        const m = minUse(), cands = [];
+        const mins = {}; Object.keys(byEra).forEach(e => { mins[e] = minUse(e); });
+        const minAll = Math.min(...Object.values(mins));
+        const cands = [], left = cur.g.slots.length - cur.k - 1, target = avgSlot * cur.g.slots.length;
         for (const a of arenas) {
+          const m = mins[eraOf(a)];
           const s = startAt(a.arenaId, cur.t, a.sec), wait = s - cur.t;
           let c = wait * W.wait;
           if (cur.used.has(a.arenaId)) c += W.roundDup;
@@ -79,7 +91,11 @@ TDP.smart = (() => {
           }
           const d = (plays[a.arenaId] || 0) + (planned[a.arenaId] || 0) - m;
           c += W.equal * d * d;
+          const dAll = (plays[a.arenaId] || 0) + (planned[a.arenaId] || 0) - minAll;   // across eras: no game gets a 2nd extra play before the others caught up
+          if (dAll >= 1) c += W.equalAll * dAll * dAll;
           c += W.era * cur.eras.filter(e => e === a.era).length;
+          const over = (eraCount[eraOf(a)] || 0) + 1 - Math.ceil(quota[eraOf(a)] - 1e-9); if (over > 0) c += W.quota * over;
+          c += W.target * Math.abs(cur.sum + a.sec + left * avgSlot - target);
           c += W.len * a.sec;
           c += rng() * 5;
           cands.push({ a, s, c, wait, d });
@@ -104,7 +120,7 @@ TDP.smart = (() => {
       }
       for (const p of cur.g.players) { played[p] = played[p] || {}; played[p][a.arenaId] = (played[p][a.arenaId] || 0) + 1; }
       planned[a.arenaId] = (planned[a.arenaId] || 0) + 1;
-      cur.used.add(a.arenaId); cur.eras.push(a.era);
+      cur.used.add(a.arenaId); cur.eras.push(a.era); cur.sum += a.sec || 0; eraCount[eraOf(a)] = (eraCount[eraOf(a)] || 0) + 1;
       out.push({ gameId: slot.gameId, group: cur.g.no, index: slot.index, arenaId: a.arenaId, name: a.name, s, e, fixed: !!pick.fixed });
       cost += extra;
       cur.t = e; cur.k++;

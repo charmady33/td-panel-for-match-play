@@ -48,3 +48,4 @@ Reference: Clark's artifact "Pinball Tournament Bank Builder" — its
 - 41 and 42 shipped in 0.13.0 (live-tested on test tournament #281201 "Game time test (extension)").
 - 37, 38, 43-47 shipped in 0.14.0.
 - 48-53 shipped in 0.15.0.
+- 54 shipped in 0.15.1.

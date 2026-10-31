@@ -2,6 +2,10 @@
 
 All notable changes, newest first. Versions follow [semantic versioning](https://semver.org/): new features bump the middle number, fixes the last.
 
+## 0.15.1 - 2026-10-31
+- **Even round lengths** with Any category (game time): each round takes its share of each era (long modern games spread over the night instead of bunched into every other round), and every group aims at the same length (a long game paired with a short one). Every game is still played equally (within 1). Simulated on "test new games" (43 games, 12 groups × 2, 8 rounds): Max est. went from 21/34/21/34/29/26/29/26 to 26-29 every round.
+- The group **Est.** on the Matches tab says "(era guess)" when none of its games has a measured time yet.
+
 ## 0.15.0 - 2026-10-31
 - **On/off switch** in the toolbar button (where the API token goes): off = nothing on Matchplay's pages and no automatic options, in every tab at once; the icon shows OFF. Settings are kept. A task already running finishes first.
 - **Matches tab timers**: each group shows **Est. 34 min** (its games' estimated times added up, worked out once when the round starts and never changed) plus its time so far; over the estimate turns amber. Each game shows a live ⏱ timer from when it really started (waiting until the group / machine is free), stopping at its final time ✓ when done.

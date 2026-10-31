@@ -5,7 +5,7 @@ var TDP = window.TDP || (window.TDP = {});
 
 TDP.timers = (() => {
   const T = TDP;
-  let est = null, estAt = 0, estTid = null, loading = false, ticker = null;
+  let est = null, guess = new Set(), estAt = 0, estTid = null, loading = false, ticker = null;
   const fmt = ms => { const s = Math.max(0, Math.round(ms / 1000)), h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60; return h ? `${h}:${String(m).padStart(2, '0')}:${String(x).padStart(2, '0')}` : `${m}:${String(x).padStart(2, '0')}`; };
   const mins = sec => `${Math.round(sec / 60)} min`;
 
@@ -14,7 +14,7 @@ TDP.timers = (() => {
     if (est && estTid === D.tid && Date.now() - estAt < 300e3) return est;
     if (!loading) {
       loading = true;
-      T.bankplan.extras(D).then(x => { est = {}; T.bankplan.estimates(D, T.tstate[D.tid] || {}, x, true).forEach(a => { est[a.arenaId] = a.sec; }); estAt = Date.now(); estTid = D.tid; })
+      T.bankplan.extras(D).then(x => { est = {}; guess = new Set(); T.bankplan.estimates(D, T.tstate[D.tid] || {}, x, true).forEach(a => { est[a.arenaId] = a.sec; if (a.src === 'era estimate') guess.add(a.arenaId); }); estAt = Date.now(); estTid = D.tid; })
         .catch(() => {}).finally(() => { loading = false; render(T.data.D); });
     }
     return estTid === D.tid ? est : null;
@@ -22,15 +22,16 @@ TDP.timers = (() => {
   // each group's estimate for a round: saved the first time all its games have an arena, never changed after
   let saving = false;
   function groupEst(D, roundId) {
-    const st = T.tstate[D.tid] || {}, saved = { ...((st.est || {})[roundId] || {}) }, E = estimates(D);
+    const st = T.tstate[D.tid] || {}, saved = { ...((st.est || {})[roundId] || {}) }, guessed = { ...((st.estGuess || {})[roundId] || {}) }, E = estimates(D);
     let added = false;
     const sets = {};
     for (const g of D.games) if (g.roundId === roundId && !g.bye && g.set !== 9999) (sets[g.set] = sets[g.set] || []).push(g);
     for (const [set, gs] of Object.entries(sets)) {
       if (saved[set] != null || !E || gs.some(g => g.arenaId == null)) continue;
       saved[set] = Math.round(gs.reduce((s, g) => s + (E[g.arenaId] || 13 * 60), 0)); added = true;
+      if (gs.every(g => guess.has(g.arenaId) || !E[g.arenaId])) { guessed[set] = 1; }
     }
-    if (added && !saving) { saving = true; T.saveT(D.tid, { est: { ...(st.est || {}), [roundId]: saved } }).finally(() => { saving = false; }); }
+    if (added && !saving) { saving = true; T.saveT(D.tid, { est: { ...(st.est || {}), [roundId]: saved }, estGuess: { ...(st.estGuess || {}), [roundId]: guessed } }).finally(() => { saving = false; }); }
     return saved;
   }
 
@@ -60,7 +61,7 @@ TDP.timers = (() => {
       const ordered = games.slice().sort((a, b) => (a.index || 0) - (b.index || 0));
       const s0 = T.timing.realStart(ordered[0], rg), all = ordered.every(T.timing.doneish), last = all ? Math.max(...ordered.map(g => T.timing.gEnd(g) || 0)) : null;
       const e = set === 9999 ? null : groupEst(D, rid)[set];
-      put(ths[0], 'tdp-ge', '', { start: s0 || '', end: last || '', est: e || '' });
+      put(ths[0], 'tdp-ge', '', { start: s0 || '', end: last || '', est: e || '', guess: set !== 9999 && ((T.tstate[D.tid] || {}).estGuess || {})[rid] && T.tstate[D.tid].estGuess[rid][set] ? 1 : '' });
     }
     tick();
   }
@@ -75,7 +76,7 @@ TDP.timers = (() => {
     for (const el of document.querySelectorAll('[data-tdp="timer"].tdp-ge')) {
       const s = +el.dataset.start, e = +el.dataset.end, est = +el.dataset.est;
       const run = s ? (e || now) - s : 0, over = est && run > est * 1000;
-      const html = `${est ? `<span title="Estimated when the round started (game times added up) - doesn't change">Est. ${mins(est)}</span>` : '<span style="color:#9ca3af">Est. –</span>'}${s ? ` · <span style="color:${over ? '#b45309' : e ? '#6b7280' : '#4f46e5'}">${e ? '✓ ' : ''}${fmt(run)}</span>` : ''}`;
+      const html = `${est ? `<span title="Estimated when the round started (game times added up) - doesn't change${el.dataset.guess ? '. No game times yet for these games: era guess (EM 9, SS 12, DMD 17 min)' : ''}">Est. ${mins(est)}${el.dataset.guess ? ' <span style="color:#9ca3af">(era guess)</span>' : ''}</span>` : '<span style="color:#9ca3af">Est. –</span>'}${s ? ` · <span style="color:${over ? '#b45309' : e ? '#6b7280' : '#4f46e5'}">${e ? '✓ ' : ''}${fmt(run)}</span>` : ''}`;
       if (el.dataset.h !== html) { el.dataset.h = html; el.innerHTML = html; }
     }
   }
