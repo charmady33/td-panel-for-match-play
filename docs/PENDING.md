@@ -32,19 +32,6 @@ Reference: Clark's artifact "Pinball Tournament Bank Builder" — its
 - Test: 14 games, 2/bank, 8 banks, 7 rounds → counts differ ≤ 1 after each round, zero in-bank repeats.
 - Live evidence: "test tuesday" (#280207) Stats → Arenas: Sing Along & Sky Jump played 12, all others 6.
 
-## 37. Last round / already-closed round
-- Before Close round, read the round fresh; if already completed → done ("Round 6 was already closed by Matchplay"),
-  also when the button is missing because it just closed.
-- When the round count is reached: auto close/start does nothing more; status "Round 6 of 6 done. Complete the
-  tournament on the Overview when you're ready". Never completes the tournament.
-- Every round (Fill random results) stops at the last round.
-
-## 38. Finals standings ties
-- "-T" shared seed only for unresolved ties that matter (cut/eligibility/bye/pick): e.g. A7-T for all three.
-  Other ties keep Matchplay's qualifying order/seed (its automatic tiebreaker) with the small "tied" note.
-- A player in a cut-off tie is listed only in that division (not again under Not in Finals). Cut line under the
-  whole tie. Check-in list shows the same seeds.
-
 ## 39. Game times sooner + pick past events
 - Use this event's time from the first finished game (blend with other sources weighted by count; median/3× rule once
   a few games exist).
@@ -59,3 +46,4 @@ Reference: Clark's artifact "Pinball Tournament Bank Builder" — its
 
 # Built
 - 41 and 42 shipped in 0.13.0 (live-tested on test tournament #281201 "Game time test (extension)").
+- 37, 38, 43-47 shipped in 0.14.0.

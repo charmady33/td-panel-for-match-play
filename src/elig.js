@@ -9,7 +9,8 @@ TDP.elig = (() => {
   let host = null, cur = null;
 
   const isQual = D => D && D.qual && D.tid === D.qual.tournamentId && D.isTD;
-  const divs = D => T.finals.divisions(D);
+  // Matchplay's cut lines, plus a B and C cut even when Matchplay doesn't have those lines (yet)
+  const divs = D => { const ds = T.finals.divisions(D); if (!ds.length) return ds; const out = [...ds]; for (const L of ['B', 'C']) if (!out.some(d => d.letter === L)) out.push({ i: out.length, letter: L, extra: true }); return out; };
   const qst = D => T.tstate[D.qual.tournamentId] || {};
 
   // the label each player should carry for these cuts (null = eligible everywhere)
@@ -109,7 +110,7 @@ table{width:100%;border-collapse:collapse}td,th{padding:4px 6px;border-top:1px s
     const D = T.data.D, ds = divs(D).slice(1), ranks = Object.keys(T.finals.ranksOf(D)).length;
     const err = valid(ds), target = want(D, cur.cuts), groups = err ? [] : changes(D, target);
     const tally = {}; let none = 0; for (const [, l] of target) { if (l) tally[l] = (tally[l] || 0) + 1; else none++; }
-    const rows = ds.slice(0, cur.shown).map(d => `<div class="cut"><b style="width:56px">${d.letter} cut</b>IFPA rank <input type="number" min="1" data-cut="${d.letter}" value="${cur.cuts[d.letter] || ''}" placeholder="e.g. 1000"> or better can't play in ${d.letter}${d.letter !== ds[0].letter ? ' <span class="small">(empty = everyone can)</span>' : ''}</div>`).join('');
+    const rows = ds.slice(0, cur.shown).map(d => `<div class="cut"><b style="width:56px">${d.letter} cut</b>IFPA rank <input type="number" min="1" data-cut="${d.letter}" value="${cur.cuts[d.letter] || ''}" placeholder="e.g. 1000"> or better can't play in ${d.letter}${d.letter !== ds[0].letter ? ' <span class="small">(empty = everyone can)</span>' : ''}${d.extra ? ` <span class="small">(no ${d.letter} cut line in Matchplay yet)</span>` : ''}</div>`).join('');
     const pm = T.data.playerMap(D.qual);
     const list = groups.flatMap(g => g.ids.map(id => `<tr><td>${T.esc((pm[id] || {}).name || id)}</td><td class="small">${T.finals.ranksOf(D)[id] || 'unranked'}</td><td>${T.esc(g.labels.filter(isEligLabel).join(', ') || 'no label')}</td></tr>`)).join('');
     host.shadowRoot.innerHTML = `<style>${CSS()}</style><div class="wrap${document.documentElement.classList.contains('dark') ? ' dark' : ''}"><div class="ov" data-act="bg"><div class="dlg">

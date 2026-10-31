@@ -96,6 +96,9 @@ var TDP = window.TDP || (window.TDP = {});
     if (T.jobs.active()) return state('waiting for the running task');
     if (D.t.status !== 'started') return state('tournament not in progress');
     const r = T.data.latestRound();
+    const total = D.t.roundCount || D.t.duration || 0, last = !!total && D.rounds.length >= total;
+    // the set number of rounds is done: nothing more to do (the TD completes the tournament on the Overview)
+    if (r && String(r.status) === 'completed' && last) return state(`${r.name || 'Round ' + total} of ${total} done. Complete the tournament on the Overview when you're ready`);
     if (!r || String(r.status) === 'completed') return state('no round in progress');
     if (!(await lock(tid))) return state('running in another tab');
     autoBusy = true;
@@ -110,10 +113,9 @@ var TDP = window.TDP || (window.TDP = {});
       D.games = D.games.filter(g => g.roundId !== r.roundId).concat(fresh);
       const ft = T.finals.groupTies(D).filter(t => !t.tbDone);
       if (ft.length) return state(ft[0].tbGame ? `waiting for Group ${ft[0].group}'s tiebreaker` : 'tie needs breaking first: ' + ft[0].why);
-      const total = D.t.roundCount || D.t.duration || 0, last = !!total && D.rounds.length >= total;
       const go = await T.panel.showCountdown(`All games approved in ${r.name}. Closing the round${last ? '' : ' and starting the next one'} in`, 10);
       if (!go || !(T.tstate[tid] || {}).auto) return state('cancelled - will check again');
-      const steps = [{ tid, page: 'matches', op: 'closeRound', label: `Closing ${r.name}` }];
+      const steps = [{ tid, page: 'matches', op: 'closeRound', args: { tid, roundId: r.roundId, name: r.name }, label: `Closing ${r.name}` }];
       const stt = T.tstate[tid] || {}, banksOn = /bank/i.test(D.t.arenaAssignment || '');
       const smart = stt.smartArenas && !isFinals(D), assign = banksOn && stt.autoAssign && !smart;
       if (!last && smart) {

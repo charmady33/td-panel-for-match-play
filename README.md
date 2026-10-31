@@ -46,9 +46,12 @@ Your settings, API token and saved tournament data stay as they are.
     - tied players are highlighted in Matchplay's table
     - Matchplay's standings stay on the left, with **Finals standings (eligibility applied)** next to them on the right
     - resolved ties show decimal points (a 5-way tie on 32 → 32.4 … 32.0, winner highest), here and in the Finals standings table; hover for details
+    - an unbroken tie that matters shares one seed (A7-T); a player in a cut-off tie is listed once, in that finals
+    - ties that don't change the finals are listed as **Optional ties** with a grey Break tie (optional) button
     - **Break tie / tags / Matchplay's "Manual" buttons** open the tiebreaker window (IFPA18 §IV.1):
       - seeding-only ties: head-to-head win %, then IFPA rank, no game played
-      - bubble ties: "IFPA draw + vote" (one Old EM / Mid SS / New DMD game; click the voted game or Random pick) or "Just random"
+      - bubble ties: "IFPA draw + vote" (one Old EM / Mid SS / New DMD game; Change… any of them or Set my own games; click the voted game or Random pick) or "Just random"
+      - results are entered like Matchplay's Results window: tap names or circles, the last place fills itself
       - random player order; click the finishing order; advancers are then seeded by head-to-head; Apply fills in Matchplay's Resolve ties
       - progress is saved: leave and come back with "Enter results" (a reminder bar shows on every tournament page), or Start over
       - an already resolved tie shows its recorded order
@@ -71,6 +74,7 @@ Your settings, API token and saved tournament data stay as they are.
   - **Another arrangement** never repeats one already shown or created, and keeps bank times balanced
   - **⚙ Settings**: each game Use / Never / Always; time sources
   - banks are built once and lock when the event starts. A machine you deactivate (Arenas tab) is replaced automatically in the banks that hold it - only those banks change - and waiting games move to the replacement; **Put … back in its banks** appears when it works again
+- **Stats tab (in Matchplay) → Plays**: who played which game and how many times, sortable by any column, with round / completed / active / tiebreaker filters
 - **Arenas tab (in Matchplay)**:
   - **Display**: EM / SS / DMD / **LCD**. LCD comes from Matchplay's OPDB data (e.g. Ninja Eclipse); a menu per game overrides it, saved for that arena in every tournament. Bank Builder balances all four; tiebreaker draws count LCD as "New" with DMD
   - **This event**: running average game time; **Combined**: this event + qualifying + Matchplay IDs + ticked past events, weighted by games (what Bank Builder uses; hover for the breakdown)

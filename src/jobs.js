@@ -164,8 +164,21 @@ TDP.jobs = (() => {
       return `${ready.length} game${ready.length === 1 ? '' : 's'} filled${skipped ? `, ${skipped} skipped (no arena yet - assign banks first)` : ''}`;
     },
     async copyArenas(a) { const P = counter(a.names.length); await T.mp.addArenas(a.names, text => P.tick(text)); },
-    async closeRound() { await T.mp.closeRound(); },
-    async startNextRound(a) { await T.mp.startNextRound({ publish: !(a && a.publish === false), category: a && a.category }); await T.data.refresh(true); },
+    // Matchplay may close the last round itself: read it fresh first; "already closed" is done, not an error
+    async closeRound(a) {
+      const closed = async () => { if (!a || !a.roundId) return false; const rs = T.data.arr(await T.api.get(`/tournaments/${a.tid}/rounds`, 0, true)); const r = rs.find(x => x.roundId === a.roundId); return !!(r && String(r.status) === 'completed'); };
+      if (await closed()) return `${a.name || 'The round'} was already closed by Matchplay`;
+      const b = await T.waitFor(() => T.findBtn(document, /Close round$/), 6000);
+      if (!b) { if (await closed()) return `${a.name || 'The round'} was already closed by Matchplay`; throw new Error('No "Close round" button (are all games approved?).'); }
+      await T.mp.closeRound();
+    },
+    async startNextRound(a) {
+      const D = T.data.D, total = (D.t && (D.t.roundCount || D.t.duration)) || 0;
+      if (total && D.rounds.length >= total) { job.steps = job.steps.slice(0, job.i + 1); return `all ${total} rounds played - not starting another`; }   // (later steps were for the new round)
+      const ok = await T.mp.startNextRound({ publish: !(a && a.publish === false), category: a && a.category });
+      if (!ok) { job.steps = job.steps.slice(0, job.i + 1); return 'no "Start next round" button (last round?) - stopped here'; }
+      await T.data.refresh(true);
+    },
     async publishRound(a) {
       if (a && a.ifPending && !(await T.waitFor(() => T.findBtn(document.querySelector('main') || document, /^Publish$/), 4000))) return 'already published';
       await T.mp.publishRound();

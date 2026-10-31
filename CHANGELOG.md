@@ -2,6 +2,15 @@
 
 All notable changes, newest first. Versions follow [semantic versioning](https://semver.org/): new features bump the middle number, fixes the last.
 
+## 0.14.0 - 2026-10-31
+- **Stats → Plays** (new sub-tab next to Rounds / Arenas / Players / Points/round): who played which game and how many times - one row per player, one column per game, plus Total, Different and Repeats. Click any column to sort (again to reverse). 2+ plays shaded; hover a number for the rounds. Filters: round, completed games only, active players only, count tiebreakers.
+- **Last round**: with a set number of rounds, Auto close/start stops after the last one ("Round 6 of 6 done. Complete the tournament on the Overview when you're ready") and never completes the tournament. A round Matchplay already closed itself counts as done instead of an error.
+- **Finals standings**: a tie that matters and isn't broken shares one seed (A7-T for all of them); a player in a cut-off tie is listed once, in that finals, with one line in the next finals for "whoever loses the A cut-off tie" (no more listing them twice).
+- **Optional ties**: ties that don't change the finals can be broken too - listed under "Optional ties" with a grey **Break tie (optional)** button (grey "tied · optional" tags on the finals standings, a grey note on the Resolve ties page). Ties that matter keep the strong buttons.
+- **Finals eligibility**: a **C cut** is always offered (and B), even before Matchplay has that cut line.
+- **IFPA draw + vote**: each drawn game has a **Change…** list (that era's games first, then the rest; disabled machines left out), ✕ to leave one out, **+ Add a game…**, and **Set my own games** to skip the draw. The result notes "games set by the TD".
+- **Tiebreaker results** use the same layout as Matchplay's Results window: "Results for <game>", 1st / 2nd / 3rd… circles, tap names or circles, the last place fills itself, Save.
+
 ## 0.13.0 - 2026-10-31
 - **Any category (game time)**: a new choice in Matchplay's **Start next round → Limit arenas to…**. The round starts without Matchplay drawing arenas, then the extension gives every game its arena straight away (and publishes the round if "Publish round immediately" was ticked). Rules, most important first: no machine used by two groups at the same time (from each game's estimated time and its place in the group's order), nobody plays a game twice in a round, every game played equally across the night, groups finish at about the same time, eras mixed. A game a player already played is a last resort; when it can't be avoided it goes to the player with the fewest repeats so far. The choice is remembered per tournament and works with Auto close/start (and the background window). Separate from Assign banks, which stays.
 - **Banks are built once**, like finals: the qualifying **Rebuild banks every round** option is gone, and banks lock when the event starts.

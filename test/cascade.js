@@ -33,8 +33,8 @@ const bundle = order.map(f => fs.readFileSync(path.join(__dirname, '..', f), 'ut
     const R = () => document.getElementById('tdp-tb').shadowRoot, click = async sel => { R().querySelector(sel).click(); await new Promise(r => setTimeout(r, 150)); };
     const first = R().querySelector('.db').innerText.slice(0, 200);
     await click('[data-act=gRandom]');
-    const fins = [...R().querySelectorAll('[data-act=gFin]')].map(b => b.dataset.p);
-    await click(`[data-act=gFin][data-p="${fins[1]}"]`); await click(`[data-act=gFin][data-p="${fins[0]}"]`);
+    const fins = [...R().querySelectorAll('[data-act=gName]')].map(b => b.dataset.p);
+    await click(`[data-act=gName][data-p="${fins[1]}"]`);   // the last place fills itself (like Matchplay's Results window)
     await click('[data-act=gDone]');
     return { first, after: R().querySelector('.db').innerText.slice(-160), rec: TDP.ties.gRec(D, gt) };
   });
