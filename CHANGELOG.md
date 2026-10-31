@@ -2,6 +2,9 @@
 
 All notable changes, newest first. Versions follow [semantic versioning](https://semver.org/): new features bump the middle number, fixes the last.
 
+## 0.18.1 - 2026-10-31
+- **Assign Bank/Order** order boxes: click a box for a 1-2-3-4 list, or just type the number (only 1…N is accepted, and it replaces what was there). The player gets that number and the others shift to make room (A=1 B=2 C=3 D=4, A types 4 → A=4 D=3 C=2 B=1). Once all but one have a number, the last fills itself. Clicking away keeps the number.
+
 ## 0.18.0 - 2026-10-31
 - **Assign Bank/Order** (bank events, e.g. finals with Arena banks (manual)): the group button opens one window - the bank as a dropdown (Random bank; banks other groups already have this round are greyed out) and the play order typed as 1, 2, 3, 4 next to each player (leave empty to keep Matchplay's order). Save assigns the bank and sets the order (Matchplay's Change player order). The button goes away once the group has its bank (it used to turn into "Change bank" and open the Actions menu).
 - **Optional ties** open the same window as cut-line ties (IFPA draw + vote / Random game) - only the grey Optional tag differs - and show "Tiebreaker in progress: <game>" in Finals standings while being played.

@@ -343,28 +343,57 @@ TDP.inpage = (() => {
     const banks = (D.t.banks || []).filter(b => b.status !== 'inactive');
     const usedBy = {}; D.games.filter(g => g.roundId === r.roundId && g.bankId != null && g.set !== no - 1).forEach(g => { usedBy[g.bankId] = g.set + 1; });
     boCur = { no, roundId: r.roundId, players: ids.map(id => ({ id, name: (pm[id] || {}).name || '#' + id })), banks, usedBy, bank: 'random', order: {}, err: '' };
-    if (!boHost) { boHost = document.createElement('div'); boHost.id = 'tdp-bankorder'; boHost.attachShadow({ mode: 'open' }); boHost.shadowRoot.addEventListener('click', boClick); boHost.shadowRoot.addEventListener('input', boInput); boHost.shadowRoot.addEventListener('change', boInput); document.documentElement.appendChild(boHost); }
+    if (!boHost) { boHost = document.createElement('div'); boHost.id = 'tdp-bankorder'; boHost.attachShadow({ mode: 'open' }); boHost.shadowRoot.addEventListener('click', boClick); boHost.shadowRoot.addEventListener('input', boInput); boHost.shadowRoot.addEventListener('change', boInput); boHost.shadowRoot.addEventListener('keydown', boKey);
+      // click a box: the 1…N list opens under it; click away: closes, the number stays
+      boHost.shadowRoot.addEventListener('focusin', e => { const id = e.target.dataset && e.target.dataset.p; if (id && boCur && String(boCur.menu) !== String(id)) { boCur.menu = id; boDraw(); const i = boHost.shadowRoot.querySelector(`input[data-p="${id}"]`); if (i) i.focus(); } });
+      boHost.shadowRoot.addEventListener('mousedown', e => { if (e.target.closest('[data-pick]')) e.preventDefault(); });
+      boHost.shadowRoot.addEventListener('focusout', e => { if (!e.target.dataset || !e.target.dataset.p) return; setTimeout(() => { if (!boHost || !boCur) return; const a = boHost.shadowRoot.activeElement; if (!(a && a.dataset && a.dataset.p) && boCur.menu != null) { boCur.menu = null; boDraw(); } }, 0); }); document.documentElement.appendChild(boHost); }
     boDraw();
   }
   function boDraw() {
     if (!boHost || !boCur) return;
     const c = boCur, free = c.banks.filter(b => !c.usedBy[b.bankId]);
     const opt = b => `<option value="${b.bankId}"${String(c.bank) === String(b.bankId) ? ' selected' : ''}${c.usedBy[b.bankId] ? ' disabled' : ''}>${T.esc(b.name)}${c.usedBy[b.bankId] ? ` - Group ${c.usedBy[b.bankId]}` : ''}</option>`;
-    boHost.shadowRoot.innerHTML = `<style>${T.panel.CSS}:host{all:initial}.ov{position:fixed;inset:0;background:rgba(17,24,39,.5);z-index:2147483000;display:flex;align-items:flex-start;justify-content:center;padding:8vh 16px}.dlg{background:var(--card);border-radius:8px;box-shadow:0 20px 40px rgba(0,0,0,.25);width:440px;max-width:100%;font-family:ui-sans-serif,system-ui,sans-serif;font-size:14px;color:var(--text)}.dh{padding:16px 20px 8px;font-size:18px;font-weight:500}.db{padding:4px 20px 16px}.df{background:var(--head);padding:12px 20px;display:flex;justify-content:flex-end;gap:8px;border-radius:0 0 8px 8px}.pl{display:grid;grid-template-columns:52px 1fr;gap:8px;align-items:center;margin:6px 0}.pl input{width:52px;box-sizing:border-box;text-align:center}</style>
+    boHost.shadowRoot.innerHTML = `<style>${T.panel.CSS}:host{all:initial}.ov{position:fixed;inset:0;background:rgba(17,24,39,.5);z-index:2147483000;display:flex;align-items:flex-start;justify-content:center;padding:8vh 16px}.dlg{background:var(--card);border-radius:8px;box-shadow:0 20px 40px rgba(0,0,0,.25);width:440px;max-width:100%;font-family:ui-sans-serif,system-ui,sans-serif;font-size:14px;color:var(--text)}.dh{padding:16px 20px 8px;font-size:18px;font-weight:500}.db{padding:4px 20px 16px}.df{background:var(--head);padding:12px 20px;display:flex;justify-content:flex-end;gap:8px;border-radius:0 0 8px 8px}.pl{display:grid;grid-template-columns:52px 1fr;gap:8px;align-items:center;margin:6px 0;position:relative}.pl input{width:52px;box-sizing:border-box;text-align:center;caret-color:transparent;cursor:pointer}
+.pm{position:absolute;left:0;top:100%;z-index:5;display:flex;gap:4px;background:var(--card);border:1px solid var(--line);border-radius:6px;padding:4px;box-shadow:0 6px 16px rgba(0,0,0,.15)}.pm button{width:30px;height:28px;border:1px solid var(--line);border-radius:5px;background:var(--card);color:var(--text);font:inherit;cursor:pointer}.pm button:hover,.pm button.on{background:#e0e7ff;border-color:#a5b4fc}</style>
       <div class="wrap${document.documentElement.classList.contains('dark') ? ' dark' : ''}"><div class="ov" data-act="bg"><div class="dlg"><div class="dh">Group ${c.no} · Assign Bank/Order</div><div class="db">
       <div class="lab mb">Bank</div><select data-f="bank" style="width:100%"><option value="random"${c.bank === 'random' ? ' selected' : ''}>Random bank (${free.length} free)</option>${c.banks.map(opt).join('')}</select>
       <div class="lab mt mb">Play order <span class="small">(type 1, 2, 3… next to each player - leave empty to keep Matchplay's order)</span></div>
-      ${c.players.map(p => `<div class="pl"><input type="number" min="1" max="${c.players.length}" data-p="${p.id}" value="${c.order[p.id] || ''}"><span>${T.esc(p.name)}</span></div>`).join('')}
+      ${c.players.map(p => `<div class="pl"><input type="text" inputmode="numeric" autocomplete="off" data-p="${p.id}" value="${c.order[p.id] || ''}" title="Click to pick, or type 1-${c.players.length}"><span>${T.esc(p.name)}</span>${String(c.menu) === String(p.id) ? `<div class="pm">${c.players.map((_, k) => `<button type="button" data-pick="${k + 1}" data-pp="${p.id}" class="${c.order[p.id] === k + 1 ? 'on' : ''}">${k + 1}</button>`).join('')}</div>` : ''}</div>`).join('')}
       ${c.err ? `<div class="callout err mt">${T.esc(c.err)}</div>` : ''}
       </div><div class="df"><button class="btn sec" data-act="close">Cancel</button><button class="btn" data-act="save" ${free.length ? '' : 'disabled'}>Save</button></div></div></div></div>`;
   }
   function boInput(e) {
     if (!boCur) return;
     if (e.target.dataset.f === 'bank') { boCur.bank = e.target.value; return; }
-    const id = e.target.dataset.p; if (!id) return;
-    const v = parseInt(e.target.value, 10); if (v > 0) boCur.order[id] = v; else delete boCur.order[id];
+    if (e.target.dataset.p) e.target.value = boCur.order[e.target.dataset.p] || '';   // only picks / digit keys change it
+  }
+  // a player gets number v: whoever had it shifts down one (and so on) to the nearest free number below, else up;
+  // when only one player is left without a number, they get the one left
+  function boAssign(id, v) {
+    const c = boCur, n = c.players.length, ord = c.order;
+    delete ord[id];
+    const holder = k => Object.keys(ord).find(p => ord[p] === k);
+    if (holder(v)) {
+      let free = null; for (let k = v - 1; k >= 1; k--) if (!holder(k)) { free = k; break; }
+      if (free != null) { for (let k = free + 1; k <= v; k++) { const h = holder(k); if (h) ord[h] = k - 1; } }
+      else { for (let k = v + 1; k <= n; k++) if (!holder(k)) { free = k; break; } for (let k = free - 1; k >= v; k--) { const h = holder(k); if (h) ord[h] = k + 1; } }
+    }
+    ord[id] = v;
+    const left = c.players.filter(p => !ord[p.id]);
+    if (left.length === 1) { const used = new Set(Object.values(ord)); for (let k = 1; k <= n; k++) if (!used.has(k)) { ord[left[0].id] = k; break; } }
+    c.err = ''; c.menu = null; boDraw();
+  }
+  function boKey(e) {
+    const id = e.target.dataset && e.target.dataset.p; if (!id || !boCur) return;
+    if (e.key === 'Tab') return;
+    e.preventDefault();
+    if (e.key === 'Escape') { boCur.menu = null; return boDraw(); }
+    const v = parseInt(e.key, 10);
+    if (v >= 1 && v <= boCur.players.length) boAssign(id, v);   // anything else is ignored
   }
   async function boClick(e) {
+    const pk = e.target.closest('[data-pick]'); if (pk && boCur) return boAssign(pk.dataset.pp, +pk.dataset.pick);
     const a = e.target.closest('[data-act]'); if (!a || !boCur) return;
     if (a.dataset.act === 'bg' && e.target !== a) return;
     if (a.dataset.act === 'bg' || a.dataset.act === 'close') { boHost.remove(); boHost = null; boCur = null; return; }

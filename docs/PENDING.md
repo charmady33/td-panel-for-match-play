@@ -53,3 +53,4 @@ Reference: Clark's artifact "Pinball Tournament Bank Builder" — its
 - 58-59 shipped in 0.17.0 (round Actions Clear + Assign arenas live-tested on #281230; real-time event arrived ~8 s after Start round).
 - 60 shipped in 0.17.1.
 - 61-62 shipped in 0.18.0.
+- 63 shipped in 0.18.1.
