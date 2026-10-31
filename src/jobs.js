@@ -222,7 +222,7 @@ TDP.jobs = (() => {
       const r = T.data.currentRound();
       if (r) {
         const games = await T.api.all(`/tournaments/${a.tid}/games?round=${r.roundId}`, 0);
-        const move = T.smart.downGames(D, games, ok);
+        const move = T.smart.downGames(D, games, ok, T.bankplan.estimates(D, st, extra));
         if (move.length) job.steps.splice(job.i + 1, 0, { tid: a.tid, page: 'matches', op: 'smartAssign', args: { tid: a.tid, roundId: r.roundId, items: move, change: true }, label: `Moving ${move.length} waiting game${move.length === 1 ? '' : 's'} off the down machine` });
         await save();
       }

@@ -14,7 +14,7 @@ TDP.smart = (() => {
   const T = TDP;
   const VALUE = 'tdp-gt', LABEL = 'Any category (game time) · TD Panel';
   const BUFFER = 60;   // seconds between one group leaving a machine and the next starting it
-  const W = { wait: 40, repeat: 2500, repeatEach: 1500, repeatMore: 2500, equal: 12000, era: 120, len: 0.2, spread: 1, span: 0.5, roundDup: 1e7 };
+  const W = { wait: 40, repeat: 2500, repeatEach: 1500, repeatMore: 2500, equal: 12000, era: 120, len: 0.2, spread: 1, span: 0.5, roundDup: 1e7, b2b: 1e5, recent: 600 };
 
   function rngFrom(seed) {
     let a = (seed >>> 0) || 1;
@@ -70,7 +70,13 @@ TDP.smart = (() => {
           const s = startAt(a.arenaId, cur.t, a.sec), wait = s - cur.t;
           let c = wait * W.wait;
           if (cur.used.has(a.arenaId)) c += W.roundDup;
-          for (const p of cur.g.players) { const n = (played[p] || {})[a.arenaId] || 0; if (n) c += W.repeat + W.repeatEach * (repeats[p] || 0) + W.repeatMore * (n - 1); }
+          for (const p of cur.g.players) {
+            const n = (played[p] || {})[a.arenaId] || 0; if (!n) continue;
+            c += W.repeat + W.repeatEach * (repeats[p] || 0) + W.repeatMore * (n - 1);
+            // a repeat is never a game from the round just before (last resort); otherwise the one played longest ago
+            const ago = ((inp.ago || {})[p] || {})[a.arenaId];
+            if (ago === 1) c += W.b2b; else if (ago) c += W.recent * Math.max(0, 5 - ago);
+          }
           const d = (plays[a.arenaId] || 0) + (planned[a.arenaId] || 0) - m;
           c += W.equal * d * d;
           c += W.era * cur.eras.filter(e => e === a.era).length;
@@ -91,7 +97,7 @@ TDP.smart = (() => {
         if (cur.used.has(a.arenaId)) notes.push(`${label} plays ${a.name} twice this round (not enough games)`);
         for (const p of cur.g.players) {
           const n = (played[p] || {})[a.arenaId] || 0;
-          if (n) { notes.push(`${nameOf(p)} replays ${a.name} - every other game was taken`); repeats[p] = (repeats[p] || 0) + 1; }
+          if (n) { notes.push(((inp.ago || {})[p] || {})[a.arenaId] === 1 ? `${nameOf(p)} replays ${a.name} from the last round - nothing else was free` : `${nameOf(p)} replays ${a.name} - every other game was taken`); repeats[p] = (repeats[p] || 0) + 1; }
         }
         if (pick.wait > 30) notes.push(`${label} waits about ${Math.round(pick.wait / 60)} min for ${a.name}`);
         if (pick.d >= 1) notes.push(`${a.name} gets an extra play (others caught up later)`);
@@ -124,14 +130,18 @@ TDP.smart = (() => {
       const gs = sets[set].sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
       return { no: set + 1, players: [...new Set(gs.flatMap(g => g.playerIds || []))], slots: gs.map(g => ({ gameId: g.gameId, index: g.index ?? 0, arenaId: g.arenaId })) };
     });
-    const played = {}, plays = {};
+    const played = {}, plays = {}, ago = {};
+    const rs = [...(D.rounds || [])], ri = {}; rs.forEach((r, i) => { ri[r.roundId] = i; });
+    const now = ri[round.roundId] != null ? ri[round.roundId] : rs.length;
     for (const g of D.games) {
       if (g.bye || g.arenaId == null || g.roundId === round.roundId) continue;
+      // how many rounds ago each player last played each game (1 = the round just before)
+      if (ri[g.roundId] != null && ri[g.roundId] < now) for (const p of g.playerIds || []) { const d = now - ri[g.roundId]; ago[p] = ago[p] || {}; if (!ago[p][g.arenaId] || d < ago[p][g.arenaId]) ago[p][g.arenaId] = d; }
       for (const p of g.playerIds || []) { played[p] = played[p] || {}; played[p][g.arenaId] = (played[p][g.arenaId] || 0) + 1; }
       if (g.set !== 9999) plays[g.arenaId] = (plays[g.arenaId] || 0) + 1;
     }
     const names = {}; for (const p of D.t.players || []) names[p.playerId] = p.name;
-    return { groups, arenas, played, plays, names };
+    return { groups, arenas, played, plays, names, ago };
   }
   async function make(D, roundGames, round) {
     const est = T.bankplan.estimates(D, T.tstate[D.tid] || {}, await T.bankplan.extras(D));
@@ -239,7 +249,7 @@ TDP.smart = (() => {
     return changes;
   }
   // games of the open round still waiting on a down machine -> the replacement from their bank (or any free game)
-  function downGames(D, roundGames, changes) {
+  function downGames(D, roundGames, changes, alts) {
     const am = T.data.arenaMap(D.t), out = [];
     const bankOf = id => (D.t.banks || []).find(b => b.bankId === id);
     for (const g of roundGames) {
@@ -248,8 +258,17 @@ TDP.smart = (() => {
       const ch = changes.find(c => c.downId === g.arenaId && (!bank || c.bank === bank.name)) || changes.find(c => c.downId === g.arenaId);
       if (!ch || ch.none) continue;
       const mine = roundGames.filter(x => x.set === g.set && x.roundId === g.roundId).map(x => x.arenaId);
-      if (mine.includes(ch.replId)) continue;   // the group plays it already this round
-      out.push({ gameId: g.gameId, arenaId: ch.replId, name: ch.repl, group: g.set === 9999 ? 'Tiebreaker' : g.set + 1, index: g.index ?? 0 });
+      // the group's players: games they had in the round just before are a last resort (never back to back)
+      const rs = D.rounds || [], i = rs.findIndex(r => r.roundId === g.roundId), prev = i > 0 ? rs[i - 1].roundId : null;
+      const ps = new Set(roundGames.filter(x => x.set === g.set && x.roundId === g.roundId).flatMap(x => x.playerIds || []));
+      const hadLast = new Set((D.games || []).filter(x => x.roundId === prev && (x.playerIds || []).some(p => ps.has(p))).map(x => x.arenaId));
+      let pick = { arenaId: ch.replId, name: ch.repl };
+      if (mine.includes(pick.arenaId) || hadLast.has(pick.arenaId)) {
+        const alt = (alts || []).find(a => !mine.includes(a.arenaId) && !hadLast.has(a.arenaId) && !isDown(am[a.arenaId]));
+        if (alt) pick = { arenaId: alt.arenaId, name: alt.name };
+        else if (mine.includes(pick.arenaId)) continue;   // the group plays it already this round
+      }
+      out.push({ gameId: g.gameId, arenaId: pick.arenaId, name: pick.name, group: g.set === 9999 ? 'Tiebreaker' : g.set + 1, index: g.index ?? 0 });
     }
     return out;
   }

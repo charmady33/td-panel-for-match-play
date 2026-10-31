@@ -21,13 +21,23 @@ var TDP = window.TDP || (window.TDP = {});
     return;
   }
 
+  // the on/off switch (toolbar button): off = nothing on Matchplay's pages, no automatic options (a task already
+  // running finishes, so Matchplay isn't left half-changed)
+  const off = () => !!T.settings.off;
+  function teardown() {
+    T.panel.unmount(); T.data.stop();
+    document.querySelectorAll('[id^="tdp-"]').forEach(e => { if (!/^tdp-(worker|busy-card|cover|host)/.test(e.id)) e.remove(); });
+    document.querySelectorAll('[data-tdp]').forEach(e => { if (e.closest('[id^="tdp-"]')) return; if (e.tagName === 'OPTION' || e.dataset.tdp === 'note' || e.dataset.tdpPlays || e.id === 'tdp-smart-hint' || e.dataset.tdp === 'timer') e.remove(); });
+  }
+
   T.busy.render();   // mid-task reload: cover the page straight away
-  bgRunner();
+  if (!off()) bgRunner();
   T.jobs.afterLoad();
 
   // ---------- route watching (Matchplay is a single-page app) ----------
   let lastPath = null;
   async function onRoute() {
+    if (off()) { lastPath = null; return; }
     if (location.pathname === lastPath || T.sync.hopping()) return;   // (a soft refresh hops away and back - not a new page)
     const prevTid = lastPath ? Number((lastPath.match(/^\/tournaments\/(\d+)/) || [])[1]) : null;
     lastPath = location.pathname;
@@ -47,6 +57,7 @@ var TDP = window.TDP || (window.TDP = {});
   let drawTimer = null, toastTimer = null;
   const draw = () => {
     drawTimer = null;
+    if (off()) { if (T.jobs.get()) T.busy.render(); return; }
     onRoute();
     T.flag.swap();
     if (T.data.D.t) { T.inpage.render(); T.embed.render(); T.panel.render(); }
@@ -55,6 +66,7 @@ var TDP = window.TDP || (window.TDP = {});
     if (T.jobs.get()) T.busy.render();
   };
   new MutationObserver(ms => {
+    if (ms.every(m => m.target.closest && m.target.closest('[data-tdp]'))) return;   // only our own timers ticking
     for (const m of ms) for (const n of m.addedNodes) {
       if (n.nodeType !== 1 || (n.id || '').startsWith('tdp-')) continue;
       const tx = n.textContent || ''; if (tx.length > 200) continue;   // toasts are short
@@ -64,19 +76,22 @@ var TDP = window.TDP || (window.TDP = {});
   }).observe(document.documentElement, { childList: true, subtree: true });
 
   T.data.on(D => {
+    if (off()) return;
     if (D.isTD === false && T.settings.token) { T.panel.unmount(); return; }   // not your tournament: stay out of the way
     T.panel.mount(); T.panel.render();
     T.embed.render(); T.inpage.render();
     autoTick().then(autoAssign).then(autoFill).then(() => T.smart.downCheck());
   });
-  T.jobs.on(() => { T.panel.render(); T.embed.render(); T.busy.render(); T.inpage.render(); T.deltest.render(); });
+  T.jobs.on(() => { if (off()) { T.busy.render(); return; } T.panel.render(); T.embed.render(); T.busy.render(); T.inpage.render(); T.deltest.render(); });
   // Matchplay doesn't push changes: when the API shows something new (a score from a phone, a new round…),
   // Matchplay's page fetches again in place - unless the TD is busy with it
-  T.data.onChange(() => T.sync.auto());
+  T.data.onChange(() => { if (!off()) T.sync.auto(); });
   // a setting changed (here or in another tab): redraw everything that shows settings
   let sharedTimer = null;
-  let lastToken = T.settings.token;
+  let lastToken = T.settings.token, wasOff = off();
   T.onShared(() => {
+    if (off() !== wasOff) { wasOff = off(); if (wasOff) { teardown(); return; } lastPath = null; onRoute(); draw(); return; }
+    if (off()) return;
     if (T.settings.token !== lastToken) { lastToken = T.settings.token; T.api.clear(); T.data.D.me = null; T.data.refresh(true); }   // token set from the toolbar button
     clearTimeout(sharedTimer); sharedTimer = setTimeout(() => { T.panel.render(); T.embed.render(); T.inpage.render(); }, 150);
   });

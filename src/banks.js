@@ -140,15 +140,10 @@ TDP.banks = (() => {
   }
 
   // pairs/usage from earlier rounds: rounds = [[ [name, name, ...], ... ], ...]  (banks per round)
-  function historyMaps(rounds) {
-    const avoid = new Map(), usage = new Map();
-    for (const banks of rounds || []) for (const names of banks) {
-      const gs = names.map(n => ({ name: n }));
-      gs.forEach(g => usage.set(nk(g), (usage.get(nk(g)) || 0) + 1));
-      for (let a = 0; a < gs.length; a++) for (let b = a + 1; b < gs.length; b++) { const k = pairKey(gs[a], gs[b]); avoid.set(k, (avoid.get(k) || 0) + 1); }
-    }
-    return { avoid, usage };
-  }
+  // Banks are built once now (no per-round banks): which games shared a bank before doesn't matter (Clark), so
+  // nothing is remembered - empty maps keep the builder's options in place
+  function historyMaps() { return { avoid: new Map(), usage: new Map() }; }
+
 
   // Which bank each group plays this round, so players spread over every game:
   // a game a player hasn't played yet is good, playing it again costs more each time.

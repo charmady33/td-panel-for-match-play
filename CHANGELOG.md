@@ -2,6 +2,14 @@
 
 All notable changes, newest first. Versions follow [semantic versioning](https://semver.org/): new features bump the middle number, fixes the last.
 
+## 0.15.0 - 2026-10-31
+- **On/off switch** in the toolbar button (where the API token goes): off = nothing on Matchplay's pages and no automatic options, in every tab at once; the icon shows OFF. Settings are kept. A task already running finishes first.
+- **Matches tab timers**: each group shows **Est. 34 min** (its games' estimated times added up, worked out once when the round starts and never changed) plus its time so far; over the estimate turns amber. Each game shows a live ⏱ timer from when it really started (waiting until the group / machine is free), stopping at its final time ✓ when done.
+- **Stats → Rounds**: a **Max est.** column next to Duration - the longest group estimate of each round (Total and Average too). Rounds from before this version get theirs worked out once, then kept.
+- **Any category (game time)**: a forced repeat is never a game the player had in the round just before (only if nothing else is free, with a note); otherwise the repeat they played longest ago. Moving games off a down machine follows the same rule.
+- **Bank building** no longer remembers which games shared a bank before (left over from per-round banks).
+- **Ties to break before finals** lists only ties that matter; optional ties keep their grey "tied · optional" tags in the finals standings.
+
 ## 0.14.0 - 2026-10-31
 - **Stats → Plays** (new sub-tab next to Rounds / Arenas / Players / Points/round): who played which game and how many times - one row per player, one column per game, plus Total, Different and Repeats. Click any column to sort (again to reverse). 2+ plays shaded; hover a number for the rounds. Filters: round, completed games only, active players only, count tiebreakers.
 - **Last round**: with a set number of rounds, Auto close/start stops after the last one ("Round 6 of 6 done. Complete the tournament on the Overview when you're ready") and never completes the tournament. A round Matchplay already closed itself counts as done instead of an error.

@@ -53,9 +53,11 @@ async function checkUpdate(force) {
     await store.set('update', newer(j.tag_name, mine) ? { version: String(j.tag_name).replace(/^v/, ''), page: j.html_url, zip: zip ? zip.browser_download_url : j.html_url, notes: String(j.body || '').slice(0, 600) } : null);
   } catch (e) { /* offline: try again later */ }
 }
-chrome.runtime.onMessage.addListener(m => { if (m && m.type === 'tdp-check-update') checkUpdate(true); });
+chrome.runtime.onMessage.addListener(m => { if (m && m.type === 'tdp-check-update') checkUpdate(true); if (m && m.type === 'tdp-onoff') tick().catch(() => {}); });
 
 async function tick() {
+  const { settings: sx = {} } = await chrome.storage.local.get('settings');
+  if (sx.off) { chrome.action.setBadgeText({ text: 'OFF' }); chrome.action.setBadgeBackgroundColor({ color: '#6b7280' }); return; }   // switched off: watch nothing
   checkUpdate(false);
   let u; try { u = await me(); } catch (e) { chrome.action.setBadgeText({ text: '' }); return; }
   const started = rows(await api(`/tournaments?owner=${u.userId}&status=started&limit=50`));

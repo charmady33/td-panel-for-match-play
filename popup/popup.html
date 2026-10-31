@@ -22,6 +22,8 @@ h2{font-size:13px;font-weight:600;margin:12px 0 6px;color:var(--muted);text-tran
 .upd{margin:10px 0 0;padding:8px 10px;border-radius:8px;background:#fef3c7;color:#78350f;font-size:13px}.upd a{color:#92400e;font-weight:600}
 .b{font-size:11px;font-weight:500;border-radius:9999px;padding:1px 7px;white-space:nowrap}.b.g{background:#d1fae5;color:#065f46}.b.p{background:#e0e7ff;color:#3730a3}.b.c{background:#dbeafe;color:#1e40af}.b.a{background:#ede9fe;color:#5b21b6}
 #msg{min-height:16px;margin-top:6px}
+.sw{display:flex;gap:10px;align-items:flex-start;font-weight:400;margin:4px 0 8px;cursor:pointer}.sw input{width:auto;margin-top:3px;accent-color:#4f46e5;transform:scale(1.2)}
+body.off #events,body.off h2{opacity:.45}
 </style></head>
 <body><div class="w">
   <h1>TD Panel for Match Play</h1>
@@ -30,6 +32,7 @@ h2{font-size:13px;font-weight:600;margin:12px 0 6px;color:var(--muted);text-tran
   <h2>Your tournaments</h2>
   <div id="events"></div>
   <hr>
+  <label class="sw"><input type="checkbox" id="on"> <span><b id="onTxt">TD Panel is on</b><br><span class="s">Off: nothing is added to Matchplay's pages and no automatic options run, in every tab. Your settings are kept.</span></span></label>
   <label for="tok">Matchplay API token</label>
   <input id="tok" type="password" placeholder="Paste your token" autocomplete="off">
   <div class="s" style="margin-top:4px"><a href="https://app.matchplay.events/account/tokens" target="_blank" rel="noopener">Create an API token ↗</a> - name it anything (e.g. TD Panel), copy it, paste it here. Kept only in this browser; used to read data (changes are made with Matchplay's own buttons).</div>

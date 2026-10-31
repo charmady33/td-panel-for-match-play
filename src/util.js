@@ -1,7 +1,7 @@
 // TD Panel for Match Play - shared helpers. Every file adds to the one global namespace TDP.
 /* global chrome */
 var TDP = window.TDP || (window.TDP = {});
-TDP.VERSION = '0.14.0';
+TDP.VERSION = '0.15.0';
 
 // the hidden worker frame (worker.js): a copy of Matchplay inside the TD's tab that makes the changes
 TDP.isFrame = (() => { try { return window.top !== window && window.name === 'tdp-worker'; } catch (e) { return false; } })();
@@ -34,6 +34,7 @@ TDP.store = {
 // settings shared by every tournament
 TDP.DEFAULT_SETTINGS = {
   token: '',             // the TD's own Matchplay API token (toolbar button, or the prompt on a tournament page)
+  off: false,            // the toolbar button's on/off switch: true = the extension stays out of Matchplay's pages
 };
 TDP.settings = { ...TDP.DEFAULT_SETTINGS };
 TDP.loadSettings = async () => { TDP.settings = { ...TDP.DEFAULT_SETTINGS, ...(await TDP.store.get('settings', {})) }; return TDP.settings; };

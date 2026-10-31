@@ -58,6 +58,7 @@ Your settings, API token and saved tournament data stay as they are.
   - **Resolve ties page**: important ties are outlined, with the reason shown on each card
   - **Matches tab**:
     - the **Auto close round & start next round** checkbox and its status
+    - **Est. 34 min** by each group (kept from round start) with its time so far, and a live ⏱ timer over each game that stops at the final time
     - **Start next round → Limit arenas to… → Any category (game time)**: every game gets its arena right away - no machine shared at the same time, no game twice in a round, every game played equally, groups finishing together; a repeat of a game a player already had is a last resort and is spread over the players. Remembered per tournament; works with Auto close/start
     - finals groups with a tie for an advancing spot, or any tie in the final, are outlined
   - **Finals Players tab (each A/B/C finals)**: **Finals check-in**, shown once qualifying is completed
@@ -74,6 +75,7 @@ Your settings, API token and saved tournament data stay as they are.
   - **Another arrangement** never repeats one already shown or created, and keeps bank times balanced
   - **⚙ Settings**: each game Use / Never / Always; time sources
   - banks are built once and lock when the event starts. A machine you deactivate (Arenas tab) is replaced automatically in the banks that hold it - only those banks change - and waiting games move to the replacement; **Put … back in its banks** appears when it works again
+- **Stats tab (in Matchplay) → Rounds**: a **Max est.** column (longest group estimate) next to Duration
 - **Stats tab (in Matchplay) → Plays**: who played which game and how many times, sortable by any column, with round / completed / active / tiebreaker filters
 - **Arenas tab (in Matchplay)**:
   - **Display**: EM / SS / DMD / **LCD**. LCD comes from Matchplay's OPDB data (e.g. Ninja Eclipse); a menu per game overrides it, saved for that arena in every tournament. Bank Builder balances all four; tiebreaker draws count LCD as "New" with DMD
@@ -86,7 +88,7 @@ Your settings, API token and saved tournament data stay as they are.
   3. **Format notes**, ready to paste, with the Matchplay links
   4. **Submit**: link to IFPA and a checklist
   5. **Done**: until ticked, the Overview shows how many of IFPA's 45 days are left
-- **Toolbar button**: your events with links, your API token, and Clear saved data for the open tournament
+- **Toolbar button**: your events with links, an **on/off switch** for the whole extension, your API token, and Clear saved data for the open tournament
 
 - **Matches tab (bank tournaments)**: **Assign banks** gives each group of the new round one of your banks - games its players haven't played, avoiding any bank that shares 2+ games with one a player already had. Preview with **Another option**, then **Assign**. **Automatic** (off by default) does it for every new round without the preview. The bar then shows "Group 2 → Bank 4 · 11 of 12 new"
 - **Overview**: **Submit to IFPA** sits under Re-open tournament, same size and style

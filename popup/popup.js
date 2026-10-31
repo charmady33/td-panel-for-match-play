@@ -14,6 +14,15 @@
   chrome.runtime.sendMessage({ type: 'tdp-check-update' }).catch(() => {});
   const { settings = {} } = await chrome.storage.local.get('settings');
   $('tok').value = settings.token || '';
+  // on/off switch: every Matchplay tab follows straight away (they watch the saved settings)
+  const showOn = v => { $('on').checked = v; $('onTxt').textContent = v ? 'TD Panel is on' : 'TD Panel is off'; document.body.classList.toggle('off', !v); };
+  showOn(!settings.off);
+  $('on').addEventListener('change', async () => {
+    const cur = (await chrome.storage.local.get('settings')).settings || {};
+    await chrome.storage.local.set({ settings: { ...cur, off: !$('on').checked } });
+    showOn($('on').checked);
+    chrome.runtime.sendMessage({ type: 'tdp-onoff' }).catch(() => {});
+  });
   $('save').addEventListener('click', async () => {
     const cur = (await chrome.storage.local.get('settings')).settings || {};
     await chrome.storage.local.set({ settings: { ...cur, token: $('tok').value.trim() } });

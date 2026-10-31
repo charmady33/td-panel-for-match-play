@@ -37,19 +37,14 @@ TDP.inpage = (() => {
   // short list: the reasons live in the tiebreaker window
   const tieCard = (ties, D, link) => {
     const other = ties.other || [];
-    if (!ties.length && !other.length) return '';
+    if (!ties.length) return '';   // (optional ties: grey "tied · optional" tags on the finals standings only)
     const rows = ties.map(t => {
       const c = colorOf(t, D), key = T.ties.keyOf(t), rec = tieRec(D, t);
       const kinds = [...new Set([t.kind, ...(t.reasons || []).map(r => /bye/.test(r) ? 'bye' : /picks games/.test(r) ? 'pick' : null)].filter(Boolean).map(k => KIND[k]))].join(' + ');
       const btn = rec.status === 'playing' ? `<button class="btn sm" data-act="tb" data-key="${key}">Enter results · ${T.esc(rec.game || '')}</button>` : `<button class="btn sm sec" data-act="tb" data-key="${key}">Resolve</button>`;
       return `<div class="tie gap" style="background:${c[0]};color:${c[1]};border-left:4px solid ${c[2]};align-items:center"><div class="flex1"><b>Positions ${t.pos}–${t.pos + (t.span || t.players.length) - 1}</b> · ${T.esc(kinds)} <span class="small">(${T.esc((t.playing || t.players).map(r => r.p ? r.p.name : r.playerId).join(', '))})</span></div>${btn}</div>`;
     }).join('');
-    // ties that don't change the finals: breaking them is optional (grey button)
-    const others = other.length ? `<div class="lab mt">Optional ties <span class="small">(don't change who makes the finals or their seeds)</span></div>` + other.map(o => {
-      const key = T.ties.keyOf(o), rec = tieRec(D, o);
-      const btn = rec.status === 'done' ? '<span class="small">broken</span>' : `<button class="btn sm" data-act="tb" data-key="${key}" style="background:#fff;color:#4b5563;border:1px solid #d1d5db">${rec.status === 'playing' ? 'Enter results' : 'Break tie (optional)'}</button>`;
-      return `<div class="tie gap" style="background:var(--head);border-left:4px solid #d1d5db;align-items:center"><div class="flex1"><b>Positions ${o.pos}–${o.pos + o.players.length - 1}</b> <span class="small">(${T.esc(o.players.map(r => r.p ? r.p.name : r.playerId).join(', '))})</span></div>${btn}</div>`;
-    }).join('') : '';
+    const others = '';   // ties that don't change the finals: only the grey "tied · optional" tags on the finals standings
     return `<div class="card" style="margin:16px 0"><div class="ch"><span class="h">Ties to break before finals</span>${ties.length ? `<span class="badge b-rose">${ties.length} unresolved</span>` : '<span class="badge b-green">none that matter</span>'}${link ? `<a class="btn sm" href="/tournaments/${D.tid}/resolve-ties">Resolve ties page</a>` : ''}</div><div class="cb">${rows}${others}</div></div>`;
   };
   // clicks inside our shadow blocks: open the tiebreaker window
@@ -360,6 +355,7 @@ TDP.inpage = (() => {
       if (T.elig) T.elig.render(D);
       if (T.ifpa) T.ifpa.render(D);
       if (T.plays) T.plays.render(D);
+      if (T.timers) T.timers.render(D);
     } catch (e) { T.warn('inpage', e); }
   }
   // Matchplay's "Manual" button in the standings Ties column: show our resolved-tie window instead of its info box
