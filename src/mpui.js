@@ -411,6 +411,27 @@ TDP.mp = (() => {
     T.click(await needBtn('Assign bank'));
     return needDialog();
   }
+  // group Actions -> Change player order: click a player, then "Move to player N" (Save)
+  async function setPlayerOrder(groupNo, names) {
+    const head = await T.waitFor(() => groupHead(groupNo), 8000) || fail(`Group ${groupNo} not found on the Matches tab.`);
+    let scope = head.closest('table') || head.parentElement; while (scope && ![...scope.querySelectorAll('button')].some(b => T.txt(b) === 'Actions')) scope = scope.parentElement;
+    const btn = scope && [...scope.querySelectorAll('button')].find(b => T.txt(b) === 'Actions') || fail(`Group ${groupNo} has no Actions menu.`);
+    T.click(btn);
+    T.click(await needBtn(/^Change player order$/));
+    const d = await needDialog();
+    const rows = () => [...d.querySelectorAll('li button')];
+    const nameOf = b => { const t = (b.innerText || '').split('\n').map(x => x.trim()).filter(Boolean); return t.find(x => !/^P\d+$/.test(x) && !/^Seed:/.test(x) && !/^Move to player/.test(x)) || ''; };
+    await T.waitFor(() => rows().length >= names.length, 5000);
+    for (let i = 0; i < names.length; i++) {
+      if (nameOf(rows()[i]) === names[i]) continue;
+      const src = rows().find(b => nameOf(b) === names[i]) || (T.click(T.findBtn(d, 'Cancel')), fail(`${names[i]} isn't in Group ${groupNo}.`));
+      src.click();
+      const tgt = await T.waitFor(() => rows().find(b => new RegExp('Move to player ' + (i + 1) + '$').test(T.txt(b))), 3000, 40) || (T.click(T.findBtn(d, 'Cancel')), fail('Change player order: no target position.'));
+      tgt.click(); await T.waitFor(() => nameOf(rows()[i]) === names[i], 1500, 40);
+    }
+    if (rows().map(nameOf).slice(0, names.length).join('|') !== names.join('|')) { T.click(T.findBtn(d, 'Cancel')); fail(`Group ${groupNo}: couldn't set the player order.`); }
+    T.click(await needBtn(/^Save$/, d)); await dialogClosed();
+  }
   async function assignBank(groupNo, bankName) {
     const d = await openAssign(groupNo);
     const boxes = await T.waitFor(() => { const b = [...d.querySelectorAll('input[type=checkbox]')]; return b.length ? b : null; }, 8000) || fail('Bank list did not load.');
@@ -522,5 +543,5 @@ TDP.mp = (() => {
     await dialogClosed();
   }
 
-  return { deleteTournament, roundArenas, addTestPlayers, addTestArenas, setArenaById, setGameArena, gameCard, openAssign, groupHead, goTab, menu, playerRows, selectPlayers, setLabels, bulk, setActive, readIfpaRanks, addFromQualifying, setSeeds, closeRound, startNextRound, publishRound, createBank, setBankArenas, reorderBank, assignBank, enterResults, addArenas, resolveTie, needBtn, needDialog, dialogClosed };
+  return { deleteTournament, setPlayerOrder, roundArenas, addTestPlayers, addTestArenas, setArenaById, setGameArena, gameCard, openAssign, groupHead, goTab, menu, playerRows, selectPlayers, setLabels, bulk, setActive, readIfpaRanks, addFromQualifying, setSeeds, closeRound, startNextRound, publishRound, createBank, setBankArenas, reorderBank, assignBank, enterResults, addArenas, resolveTie, needBtn, needDialog, dialogClosed };
 })();

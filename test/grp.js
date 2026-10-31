@@ -24,9 +24,13 @@ const bundle = order.map(f => fs.readFileSync(path.join(__dirname, '..', f), 'ut
   await page.addScriptTag({ content: bundle }); console.log('loaded'); await page.waitForTimeout(6000); console.log('waited');
   console.log('buttons:', await page.evaluate(() => [...document.querySelectorAll('[data-tdp=abtn]')].map(b => b.closest('th').innerText)));
   console.log('direct:', await page.evaluate(async () => { try { await TDP.mp.openAssign(2); return 'ok'; } catch (e) { return 'ERR ' + e.message; } }));
-  await page.evaluate(() => { document.getElementById('mpdlg') && document.getElementById('mpdlg').remove(); document.querySelectorAll('[data-tdp=abtn]')[1].click(); }); await page.waitForTimeout(800);
-  console.log('toast:', await page.evaluate(() => { const h = document.getElementById('tdp-host'); return h ? h.shadowRoot.innerText : ''; }));
-  console.log('dialog opened:', await page.evaluate(() => !!document.getElementById('mpdlg')));
+  // our Assign Bank/Order window: bank dropdown (Random bank first), order boxes; bad order caught on Save
+  await page.evaluate(() => { document.getElementById('mpdlg') && document.getElementById('mpdlg').remove(); TDP.jobs.start = async (t, s) => { window.__job = { t, s }; }; document.querySelector('[data-tdp=abtn]').click(); }); await page.waitForTimeout(500);
+  const R = () => document.getElementById('tdp-bankorder').shadowRoot;
+  console.log('window:', await page.evaluate(() => { const r = document.getElementById('tdp-bankorder').shadowRoot; return r.querySelector('.dh').innerText + ' | banks: ' + [...r.querySelectorAll('select option')].map(o => o.text + (o.disabled ? ' (grey)' : '')).join(', ') + ' | players: ' + r.querySelectorAll('input[data-p]').length; }));
+  console.log('half-typed order:', await page.evaluate(async () => { const r = document.getElementById('tdp-bankorder').shadowRoot, i = r.querySelector('input[data-p]'); i.value = '2'; i.dispatchEvent(new Event('input', { bubbles: true })); r.querySelector('[data-act=save]').click(); await new Promise(x => setTimeout(x, 100)); return (r.querySelector('.callout.err') || {}).innerText; }));
+  console.log('full order:', await page.evaluate(async () => { const r = document.getElementById('tdp-bankorder').shadowRoot, ins = [...r.querySelectorAll('input[data-p]')]; ins.forEach((i, k) => { i.value = String(ins.length - k); i.dispatchEvent(new Event('input', { bubbles: true })); }); r.querySelector('[data-act=save]').click(); await new Promise(x => setTimeout(x, 200)); return JSON.stringify(window.__job && window.__job.s.map(x => x.op + ' ' + JSON.stringify(x.args))); }));
+  console.log('no order (still saves):', await page.evaluate(async () => { window.__job = null; document.querySelector('[data-tdp=abtn]').click(); await new Promise(x => setTimeout(x, 200)); const r = document.getElementById('tdp-bankorder').shadowRoot; r.querySelector('[data-act=save]').click(); await new Promise(x => setTimeout(x, 200)); return JSON.stringify(window.__job && window.__job.s.map(x => x.op)); }));
   console.log('status line:', await page.evaluate(() => (document.getElementById('tdp-auto') ? document.getElementById('tdp-auto').shadowRoot.textContent : 'none').replace(/\s+/g, ' ').slice(-200)));
   await page.screenshot({ path: process.argv[2] + '/groups.png' });
   console.log('errors', errors); await browser.close();

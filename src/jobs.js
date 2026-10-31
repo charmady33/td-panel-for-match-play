@@ -109,6 +109,7 @@ TDP.jobs = (() => {
       await T.saveT(a.tid, { banksDoneRound: a.roundId, assignDoneRound: a.roundId });
       return skipped.length ? `${skipped.join(', ')} already had a bank (skipped)` : '';
     },
+    async playerOrder(a) { await T.mp.setPlayerOrder(a.group, a.names); return `Group ${a.group}: ${a.names.join(', ')}`; },
     async noop() { /* just brings you back to a page */ },
     async resolveTie(a) { await T.mp.resolveTie(a.from, a.names); if (a.key) await T.ties.markApplied(a.qid, a.key); },
     // TEST tournaments only: a random finishing order for every open game of the round that has its arena

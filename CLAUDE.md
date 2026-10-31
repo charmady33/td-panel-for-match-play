@@ -1,11 +1,11 @@
 # TD Panel for Match Play — notes for Claude
 
 Chrome MV3 extension for pinball tournament directors on app.matchplay.events. Tools are built into Matchplay's own
-pages (no sidebar). Current version: **0.17.1** (see README.md for what each version added).
+pages (no sidebar). Current version: **0.18.0** (see README.md for what each version added).
 
 ## How the maintainer (Clark) wants to work
 - **Propose a plan first, then wait for "code it".** Don't change code until he says so. Number each proposed item
-  (the next free number is **61**; 35 and 39 are agreed and waiting — see docs/PENDING.md).
+  (the next free number is **63**; 35 and 39 are agreed and waiting — see docs/PENDING.md).
 - Edit files in place with targeted changes; don't rewrite whole files.
 - Explain in plain language; he's a TD, not a developer. Keep messages short and concrete.
 - Each release: bump `manifest.json` "version", `TDP.VERSION` in `src/util.js` and `package.json`; add the version at
@@ -68,6 +68,7 @@ pages (no sidebar). Current version: **0.17.1** (see README.md for what each ver
 - A round's own **Actions** menu (Matches tab): Print sheets, Assign arenas (select automatic / category_id_1-8, + greedy),
   Add group…, Activity log, Open arenas, Clear all arenas (type "clear arenas" → Remove arena assignments), Delete….
 - An unplayed game's `resultPositions` is `[null, null, …]` - use `T.timing.hasScore(g)`, never `.length`.
+- Group Actions → **Change player order**: rows P1… (name, "Seed: n"); click a player, then "Move to player N"; Save / Cancel / Flip order.
 - Final round: Matchplay may close it itself (no Close round button) — see item 37.
 - Real time API (experimental): Pusher web socket wss://ws.app.matchplay.events/app/tnrxzkahdeullnwje83e?protocol=7&client=js&version=8.5.0&flash=false,
   channel tournaments.{ID}; events RoundCreatedOrUpdated, GameCreatedOrUpdated, RoundsDeleted, … (see item 59).

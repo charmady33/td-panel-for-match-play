@@ -203,7 +203,7 @@ table.rg td{border:0;padding:4px 10px;text-align:center}table.rg td:first-child{
       const d = t.div, p = (T.data.playerMap(D.qual) || {})[id];
       return d && T.finals.ineligible(p, d, T.finals.ranksOf(D)) ? `${d.letter} Ineligible: doesn't play this tiebreaker` : `not in ${d ? d.letter + ' finals' : 'this division'}: doesn't play this tiebreaker`;
     };
-    const bubble = t.kind === 'cutline' || t.kind === 'boundary';
+    const cutTie = t.kind === 'cutline' || t.kind === 'boundary', bubble = cutTie || t.kind === 'optional';   // optional ties: same window as cut-line ties
     let body = '', foot = '';
     const head = `<div class="dh">Tie · positions ${t.pos}–${t.pos + all.length - 1}<span class="badge ${bubble ? 'b-rose' : t.kind === 'optional' ? 'b-gray' : 'b-amber'}">${KIND[t.kind] || 'Tie'}</span></div>`;
     const first = t.waitFor && !(store(D)[keyOf(t.waitFor)] || {}).status ? t.waitFor : null;
@@ -249,8 +249,8 @@ table.rg td{border:0;padding:4px 10px;text-align:center}table.rg td:first-child{
         ${resultsHtml(rec.game, order, ids.length, finish, id => name(D, id), '')}
         ${t.spots && t.spots < ids.length ? `<div class="small">Places 1–${t.spots} ${bubble ? 'advance' : t.kind === 'bye' ? 'get the bye' : t.kind === 'pick' ? 'pick games' : 'go ahead'}.</div>` : ''}
         ${outs.length ? `<div class="small mt">Not playing: ${outs.map(id => T.esc(name(D, id))).join(', ')} (placed after the players above in Matchplay's order).</div>` : ''}
-        ${complete(finish, ids.length) ? (() => { cur.final = (bubble ? finalOrder(D, t, finish) : finish).concat(outs); return `<div class="lab mt">Matchplay order</div><div class="small mb">${bubble ? 'Advancers seeded by head-to-head (IFPA: the tiebreaker only decides who advances), then the rest by tiebreaker finish.' : 'In tiebreaker finishing order.'}</div><ol>${cur.final.map(id => `<li>${T.esc(name(D, id))}</li>`).join('')}</ol>`; })() : ''}`;
-      foot = `<button class="btn sec" data-act="restart">Start over</button><button class="btn sec" data-act="close">Cancel (results kept)</button><button class="btn" data-act="apply" ${complete(finish, ids.length) ? '' : 'disabled'}>Save</button>`;
+        ${complete(finish, ids.length) ? (() => { cur.final = (cutTie ? finalOrder(D, t, finish) : finish).concat(outs); return `<div class="lab mt">Matchplay order</div><div class="small mb">${cutTie ? 'Advancers seeded by head-to-head (IFPA: the tiebreaker only decides who advances), then the rest by tiebreaker finish.' : 'In tiebreaker finishing order.'}</div><ol>${cur.final.map(id => `<li>${T.esc(name(D, id))}</li>`).join('')}</ol>`; })() : ''}`;
+      foot = `<button class="btn sec" data-act="restart">Start over</button><button class="btn" data-act="apply" title="${complete(finish, ids.length) ? 'Save to Matchplay' : 'Not every place is filled in: closes and keeps what you entered'}">Save</button>`;
     }
     host.shadowRoot.innerHTML = `<style>${CSS()}</style><div class="wrap${document.documentElement.classList.contains('dark') ? ' dark' : ''}"><div class="ov" data-act="bg"><div class="dlg">${head}<div class="db">${body}</div><div class="df">${foot}</div></div></div></div>`;
   }
@@ -280,6 +280,9 @@ table.rg td{border:0;padding:4px 10px;text-align:center}table.rg td:first-child{
       if (act === 'restart') { cur.pickGame = false; await save(D, cur.key, null); }
       if (act === 'forget') { await save(D, cur.key, null); return close(); }
       if (act === 'apply') {
+        // Save with places still empty: just close, the results entered so far are kept
+        const recNow = store(D)[cur.key] || {};
+        if (recNow.status === 'playing' && !complete(recNow.finish, ids.length)) return close();
         const final = cur.final || all, qid = qidOf(D), names = final.map(id => name(D, id));
         const was = (store(D)[cur.key] || {}).status;
         await save(D, cur.key, { ...base, final, status: was === 'playing' ? 'playing' : was === 'h2h' ? 'h2h' : 'applying', kind: t.kind });
@@ -355,7 +358,7 @@ table.rg td{border:0;padding:4px 10px;text-align:center}table.rg td:first-child{
       const fin = rec.finish || [];
       body += `<div class="callout">Tiebreaker on <span class="game">${T.esc(rec.game)}</span></div><div class="small">Player order (random): ${rec.order.map((id, i) => `P${i + 1} ${T.esc(gName(D, id))}`).join(' · ')}</div>
         ${resultsHtml(rec.game, rec.order, ids.length, fin, id => gName(D, id), 'g', i => sup(gt.place + i))}`;
-      foot = `<button class="btn sec" data-act="gRestart">Start over</button><button class="btn sec" data-act="close">Cancel (results kept)</button><button class="btn" data-act="gDone" ${complete(fin, ids.length) ? '' : 'disabled'}>Save</button>`;
+      foot = `<button class="btn sec" data-act="gRestart">Start over</button><button class="btn" data-act="gDone">Save</button>`;
     }
     host.shadowRoot.innerHTML = `<style>${CSS()}</style><div class="wrap${document.documentElement.classList.contains('dark') ? ' dark' : ''}"><div class="ov" data-act="bg"><div class="dlg"><div class="dh">${T.esc(gt.groupName || 'Group ' + gt.group)} · tie<span class="badge b-rose">${gt.kind === 'final' ? 'Final' : 'Advancing spot'}</span></div><div class="db">${body}</div><div class="df">${foot}</div></div></div></div>`;
   }
@@ -387,7 +390,7 @@ table.rg td{border:0;padding:4px 10px;text-align:center}table.rg td:first-child{
     if (act === 'gUndo') await gSave(D, key, { finish: (rec.finish || []).slice(0, -1) });
     if (act === 'gRestart') await gSave(D, key, null);
     if (act === 'gForget') { await gSave(D, key, null); close(); T.inpage.render(); return; }
-    if (act === 'gDone') { await gSave(D, key, { status: 'done' }); T.inpage.render(); }
+    if (act === 'gDone') { if (!complete(rec.finish, gt.ids.length)) { close(); T.inpage.render(); return; } await gSave(D, key, { status: 'done' }); T.inpage.render(); }
     gDraw();
   }
 

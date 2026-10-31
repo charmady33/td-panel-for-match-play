@@ -44,7 +44,7 @@ const out = process.argv[2] || '.';
   // IFPA draw + vote: change a drawn game by hand, then the results grid
   const vote = await page.evaluate(async () => {
     const S = () => document.getElementById('tdp-tb').shadowRoot, w = () => new Promise(r => setTimeout(r, 200));
-    S().querySelector('[data-act=mPlay]').click(); await w(); S().querySelector('[data-act=mIfpa]').click(); await w();
+    S().querySelector('[data-act=mIfpa]').click(); await w();   // optional ties: same choices as cut-line ties
     const before = [...S().querySelectorAll('.vrow b')].map(b => b.innerText);
     const sel = S().querySelector('select[data-ch="0"]'); const pick = [...sel.options].find(o => o.value && !o.disabled && !before.some(b => b.includes(o.value)));
     sel.value = pick.value; sel.dispatchEvent(new Event('change', { bubbles: true })); await w(); await w();

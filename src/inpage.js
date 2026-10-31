@@ -58,7 +58,8 @@ TDP.inpage = (() => {
     const tag = r => {   // clickable "Unresolved tie" tag: opens the tiebreaker window
       const t = tieOf.get(r.playerId);
       const o = otherOf.get(r.playerId);
-      const plain = o ? ` <button data-act="tb" data-key="${T.ties.keyOf(o)}" title="Tied, but it doesn't change the finals - breaking it is optional" style="font:500 11px ui-sans-serif,system-ui,sans-serif;padding:1px 8px;border-radius:9999px;background:#fff;color:#6b7280;border:1px solid #d1d5db;white-space:nowrap;cursor:pointer">tied · optional</button>` : '';
+      const orec = o ? tieRec(D, o) : {};
+      const plain = o ? ` <button data-act="tb" data-key="${T.ties.keyOf(o)}" title="Tied, but it doesn't change the finals - breaking it is optional" style="font:500 11px ui-sans-serif,system-ui,sans-serif;padding:1px 8px;border-radius:9999px;background:#fff;color:#6b7280;border:1px solid #d1d5db;white-space:nowrap;cursor:pointer">${orec.status === 'playing' ? `Tiebreaker in progress: ${T.esc(orec.game || '')}` : 'tied · optional'}</button>` : '';
       if (!t) return plain;
       if ((t.sitOut || []).includes(r.playerId)) return ' <span class="small" title="Tied, but not eligible for / in the division this tie decides - doesn\'t play the tiebreaker">tied</span>';
       const c = colorOf(t, D), rec = tieRec(D, t), key = T.ties.keyOf(t);
@@ -203,7 +204,8 @@ TDP.inpage = (() => {
     const r = T.data.latestRound(); if (!r || String(r.status) === 'completed') return '';
     const gs = D.games.filter(g => g.roundId === r.roundId && !g.bye && g.set !== 9999), open = gs.filter(g => !T.timing.hasScore(g));
     const none = open.filter(g => g.arenaId == null).length;
-    if (!open.length || (!none && T.rounds.typeOf(D) !== 'smart')) return '';
+    const type = T.rounds.typeOf(D);
+    if (!open.length || (!none && type !== 'smart') || (/bank/i.test(D.t.arenaAssignment || '') && type !== 'smart')) return '';   // bank events: Assign banks instead
     return `<div class="cb gap" style="border-top:1px solid var(--line);flex-wrap:wrap;align-items:center">
       <button class="btn sm" data-act="smartNow" ${T.jobs.active() ? 'disabled' : ''}>Assign arenas by game time</button>
       <span class="small flex1">${T.esc(r.name || 'This round')}: ${none ? `${none} game${none === 1 ? '' : 's'} without an arena` : 'every game has an arena'} · games with a score are never changed.</span></div>`;
@@ -312,34 +314,71 @@ TDP.inpage = (() => {
     card.style.boxShadow = t.tbOpen ? `0 0 0 3px ${c[2]}` : '';
   }
 
-  // "Assign bank" / "Change bank" next to each group's name: opens Matchplay's own Assign bank dialog (Actions → Assign bank)
+  // "Assign Bank/Order" next to each group's name (bank tournaments, e.g. finals with Arena banks (manual)): our window
+  // with the bank as a dropdown (Random bank; banks other groups have this round greyed out) and the play order typed
+  // as 1, 2, 3, 4 next to each player (empty = Matchplay's order). Gone once the group has its bank.
   function groupButtons(D, usesBanks) {
     const r = T.data.currentRound();
     const heads = [...document.querySelectorAll('main th, main td, main div, main span')].filter(e => [...e.children].every(c => c.dataset && c.dataset.tdp) && /^Group \d+/.test(T.txt(e)) && T.visible(e));
     for (const h of heads) {
       const no = +T.txt(h).match(/^Group (\d+)/)[1];
-      const gs = r && usesBanks && String(r.status) !== 'completed' ? D.games.filter(g => g.roundId === r.roundId && g.set === no - 1 && !g.bye) : [];
-      const want = gs.length && gs.some(g => !T.timing.isDone(g));
+      const gs = r && usesBanks && String(r.status) !== 'completed' ? D.games.filter(g => g.roundId === r.roundId && g.set === no - 1 && !g.bye && g.set !== 9999) : [];
+      const want = gs.length && gs.some(g => !T.timing.isDone(g)) && gs.every(g => g.bankId == null && g.arenaId == null);
       let b = h.querySelector(':scope > [data-tdp=abtn]');
       if (!want) { if (b) b.remove(); continue; }
-      const label = gs.some(g => g.bankId != null) ? 'Change bank' : 'Assign bank';
       if (!b) {
-        b = document.createElement('button'); b.dataset.tdp = 'abtn'; b.type = 'button';
+        b = document.createElement('button'); b.dataset.tdp = 'abtn'; b.type = 'button'; b.textContent = 'Assign Bank/Order';
         b.style.cssText = 'margin-left:10px;font:500 12px ui-sans-serif,system-ui,sans-serif;padding:2px 9px;border-radius:6px;border:1px solid #a5b4fc;background:#fff;color:#4338ca;cursor:pointer;vertical-align:middle;white-space:nowrap';
-        b.addEventListener('click', async ev => {
-          ev.preventDefault(); ev.stopPropagation();
-          try {
-            const d = await T.mp.openAssign(no);
-            // when the TD saves (or cancels), read the round again so "N groups need a bank" is right
-            await T.waitFor(() => !d.isConnected || !T.visible(d), 600000, 300);
-            T.data.refresh(true);
-          } catch (err) { T.panel.say(err.message || String(err), 'err'); }
-        });
+        b.addEventListener('click', ev => { ev.preventDefault(); ev.stopPropagation(); bankOrder(T.data.D, no); });
         h.appendChild(b);
       }
-      if (b.textContent !== label) b.textContent = label;
       b.disabled = !!T.jobs.active();
     }
+  }
+  let boHost = null, boCur = null;
+  function bankOrder(D, no) {
+    const r = T.data.currentRound(); if (!r) return;
+    const gs = D.games.filter(g => g.roundId === r.roundId && g.set === no - 1 && !g.bye).sort((a, b) => (a.index || 0) - (b.index || 0));
+    const pm = T.data.playerMap(D.t), ids = (gs[0] && gs[0].playerIds) || [];
+    const banks = (D.t.banks || []).filter(b => b.status !== 'inactive');
+    const usedBy = {}; D.games.filter(g => g.roundId === r.roundId && g.bankId != null && g.set !== no - 1).forEach(g => { usedBy[g.bankId] = g.set + 1; });
+    boCur = { no, roundId: r.roundId, players: ids.map(id => ({ id, name: (pm[id] || {}).name || '#' + id })), banks, usedBy, bank: 'random', order: {}, err: '' };
+    if (!boHost) { boHost = document.createElement('div'); boHost.id = 'tdp-bankorder'; boHost.attachShadow({ mode: 'open' }); boHost.shadowRoot.addEventListener('click', boClick); boHost.shadowRoot.addEventListener('input', boInput); boHost.shadowRoot.addEventListener('change', boInput); document.documentElement.appendChild(boHost); }
+    boDraw();
+  }
+  function boDraw() {
+    if (!boHost || !boCur) return;
+    const c = boCur, free = c.banks.filter(b => !c.usedBy[b.bankId]);
+    const opt = b => `<option value="${b.bankId}"${String(c.bank) === String(b.bankId) ? ' selected' : ''}${c.usedBy[b.bankId] ? ' disabled' : ''}>${T.esc(b.name)}${c.usedBy[b.bankId] ? ` - Group ${c.usedBy[b.bankId]}` : ''}</option>`;
+    boHost.shadowRoot.innerHTML = `<style>${T.panel.CSS}:host{all:initial}.ov{position:fixed;inset:0;background:rgba(17,24,39,.5);z-index:2147483000;display:flex;align-items:flex-start;justify-content:center;padding:8vh 16px}.dlg{background:var(--card);border-radius:8px;box-shadow:0 20px 40px rgba(0,0,0,.25);width:440px;max-width:100%;font-family:ui-sans-serif,system-ui,sans-serif;font-size:14px;color:var(--text)}.dh{padding:16px 20px 8px;font-size:18px;font-weight:500}.db{padding:4px 20px 16px}.df{background:var(--head);padding:12px 20px;display:flex;justify-content:flex-end;gap:8px;border-radius:0 0 8px 8px}.pl{display:grid;grid-template-columns:52px 1fr;gap:8px;align-items:center;margin:6px 0}.pl input{width:52px;box-sizing:border-box;text-align:center}</style>
+      <div class="wrap${document.documentElement.classList.contains('dark') ? ' dark' : ''}"><div class="ov" data-act="bg"><div class="dlg"><div class="dh">Group ${c.no} · Assign Bank/Order</div><div class="db">
+      <div class="lab mb">Bank</div><select data-f="bank" style="width:100%"><option value="random"${c.bank === 'random' ? ' selected' : ''}>Random bank (${free.length} free)</option>${c.banks.map(opt).join('')}</select>
+      <div class="lab mt mb">Play order <span class="small">(type 1, 2, 3… next to each player - leave empty to keep Matchplay's order)</span></div>
+      ${c.players.map(p => `<div class="pl"><input type="number" min="1" max="${c.players.length}" data-p="${p.id}" value="${c.order[p.id] || ''}"><span>${T.esc(p.name)}</span></div>`).join('')}
+      ${c.err ? `<div class="callout err mt">${T.esc(c.err)}</div>` : ''}
+      </div><div class="df"><button class="btn sec" data-act="close">Cancel</button><button class="btn" data-act="save" ${free.length ? '' : 'disabled'}>Save</button></div></div></div></div>`;
+  }
+  function boInput(e) {
+    if (!boCur) return;
+    if (e.target.dataset.f === 'bank') { boCur.bank = e.target.value; return; }
+    const id = e.target.dataset.p; if (!id) return;
+    const v = parseInt(e.target.value, 10); if (v > 0) boCur.order[id] = v; else delete boCur.order[id];
+  }
+  async function boClick(e) {
+    const a = e.target.closest('[data-act]'); if (!a || !boCur) return;
+    if (a.dataset.act === 'bg' && e.target !== a) return;
+    if (a.dataset.act === 'bg' || a.dataset.act === 'close') { boHost.remove(); boHost = null; boCur = null; return; }
+    if (a.dataset.act !== 'save') return;
+    const c = boCur, D = T.data.D, n = c.players.length, typed = Object.values(c.order);
+    // order: all empty = keep Matchplay's; otherwise every player gets 1…N, each once
+    if (typed.length && (typed.length !== n || new Set(typed).size !== n || typed.some(v => v < 1 || v > n))) { c.err = `Give each player a different number from 1 to ${n} (or leave them all empty).`; return boDraw(); }
+    const free = c.banks.filter(b => !c.usedBy[b.bankId]);
+    const bank = c.bank === 'random' ? free[Math.floor(Math.random() * free.length)] : c.banks.find(b => String(b.bankId) === String(c.bank));
+    if (!bank) { c.err = 'Pick a bank.'; return boDraw(); }
+    const steps = [{ tid: D.tid, page: 'matches', op: 'assignBanks', args: { tid: D.tid, roundId: c.roundId, pairs: [{ group: c.no, bank: bank.name }] }, label: `Group ${c.no} → ${bank.name}` }];
+    if (typed.length) steps.push({ tid: D.tid, page: 'matches', op: 'playerOrder', args: { group: c.no, names: [...c.players].sort((x, y) => c.order[x.id] - c.order[y.id]).map(p => p.name) }, label: `Group ${c.no}: play order` });
+    boHost.remove(); boHost = null; boCur = null;
+    try { await T.jobs.start(`Group ${c.no}: ${bank.name}${typed.length ? ' + play order' : ''}`, steps); } catch (err) { T.panel.say(err.message || String(err), 'err'); }
   }
 
   // reminder on every page of the tournament while a tiebreaker waits for results, or check-in ticks wait for Confirm

@@ -2,6 +2,12 @@
 
 All notable changes, newest first. Versions follow [semantic versioning](https://semver.org/): new features bump the middle number, fixes the last.
 
+## 0.18.0 - 2026-10-31
+- **Assign Bank/Order** (bank events, e.g. finals with Arena banks (manual)): the group button opens one window - the bank as a dropdown (Random bank; banks other groups already have this round are greyed out) and the play order typed as 1, 2, 3, 4 next to each player (leave empty to keep Matchplay's order). Save assigns the bank and sets the order (Matchplay's Change player order). The button goes away once the group has its bank (it used to turn into "Change bank" and open the Actions menu).
+- **Optional ties** open the same window as cut-line ties (IFPA draw + vote / Random game) - only the grey Optional tag differs - and show "Tiebreaker in progress: <game>" in Finals standings while being played.
+- **One Save button** when entering tiebreaker results: places still empty = closes and keeps what you entered; all filled in = saves as before ("Cancel (results kept)" is gone).
+- The "Assign arenas by game time" button no longer shows in bank events unless their default is game time.
+
 ## 0.17.1 - 2026-10-31
 - Fixed: a round started on a phone was "left as it is (scores already entered)" even though nobody had played - Matchplay lists an unplayed game's finishing places as empty slots, which were counted as scores. Now only a filled-in place, a completed game or a suggestion counts.
 - **Assign arenas by game time** button on the Matches tab (newest open round): the same as the automatic redo, as a fallback. Games with a score are never changed; asks first if some games already have arenas.
