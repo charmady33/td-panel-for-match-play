@@ -5,7 +5,7 @@ pages (no sidebar). Current version: **0.12.0** (see README.md for what each ver
 
 ## How the maintainer (Clark) wants to work
 - **Propose a plan first, then wait for "code it".** Don't change code until he says so. Number each proposed item
-  (the next free number is **40**; 35–39 are agreed and waiting — see docs/PENDING.md).
+  (the next free number is **41**; 35–39 are agreed and waiting — see docs/PENDING.md).
 - Edit files in place with targeted changes; don't rewrite whole files.
 - Explain in plain language; he's a TD, not a developer. Keep messages short and concrete.
 - Each release: bump `manifest.json` "version", `TDP.VERSION` in `src/util.js` and `package.json`; add the version at
