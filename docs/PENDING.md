@@ -59,3 +59,4 @@ Reference: Clark's artifact "Pinball Tournament Bank Builder" — its
 - 64 shipped in 0.18.2.
 - 65 shipped in 0.18.3.
 - 66-67 shipped in 0.19.0.
+- 68 shipped in 0.19.1.

@@ -266,17 +266,17 @@ TDP.smart = (() => {
     const avg = others.length ? others.reduce((t, o) => t + tot(o.ids), 0) / others.length : tot(b.ids);
     const rest = b.ids.filter((_, i) => i !== pos), restEras = new Set(rest.map(id => eraK(X.secOf(id).era)));
     const cands = est.filter(a => !X.never.has(a.arenaId) && !isDown(X.am[a.arenaId]) && !b.ids.includes(a.arenaId));
-    const out = [];
+    const out = [], base = T.banks.schedule([], otherW);
     for (const c of cands) {
+      // only the down game's spot changes: the bank keeps its order and its other games (item 68)
       const games = b.ids.map((x, i) => (i === pos ? c : X.secOf(x)));
-      const trial = [{ games: games.map(g => ({ ...g })) }];
-      const overlap = T.banks.schedule(trial, otherW);   // may re-order this bank so the machine isn't busy then
-      const order = trial[0].games.map(g => g.arenaId);
+      const overlap = Math.max(0, T.banks.schedule([], [games, ...otherW]) - base);
+      const order = games.map(g => g.arenaId);
       const cost = overlap * 10 + Math.abs(tot(rest) + c.sec - avg) + (restEras.has(eraK(c.era)) ? 300 : 0) + 400 * X.count(c.arenaId);
       let clash = '';
       if (overlap >= 1e6) { const o = others.find(o => o.ids.indexOf(c.arenaId) === order.indexOf(c.arenaId)); clash = `same game number in ${o ? o.name : 'another bank'}`; }
       else if (overlap > 0) { const o = others.find(o => o.ids.includes(c.arenaId)); clash = `busy at that time in ${o ? o.name : 'another bank'}`; }
-      out.push({ c, cost, order, clash, reordered: order.join() !== games.map(g => g.arenaId).join() });
+      out.push({ c, cost, order, clash, reordered: false });
     }
     return out.sort((x, y) => x.cost - y.cost);
   }
@@ -378,7 +378,7 @@ TDP.smart = (() => {
       if (ch.none) return `<tr><td><b>${T.esc(ch.bank)}</b></td><td colspan="2" class="small">No free game fits - this bank keeps ${T.esc(ch.down)}.</td></tr>`;
       const o = pvChoice(ch, k);
       return `<tr><td><b>${T.esc(ch.bank)}</b><div class="small">game ${ch.pos + 1}</div></td><td><select data-k="${k}" style="width:100%">${ch.options.map((x, i) => `<option value="${x.id}"${String(x.id) === String(o.id) ? ' selected' : ''}>${i === 0 ? '★ ' : ''}${T.esc(x.name)} (${x.era}, ~${Math.round(x.sec / 60)} min)${x.clash ? ' ⚠ ' + T.esc(x.clash) : ''}</option>`).join('')}</select>
-        <div class="small" style="margin-top:3px">${o.clash ? `<span style="color:#b45309">⚠ ${T.esc(o.clash)}</span> · ` : ''}Play order: ${o.arenas.map(T.esc).join(' → ')}${o.reordered ? ' <i>(order changed)</i>' : ''}</div></td></tr>`;
+        <div class="small" style="margin-top:3px">${o.clash ? `<span style="color:#b45309">⚠ ${T.esc(o.clash)}</span> · ` : ''}Play order: ${o.arenas.map(T.esc).join(' → ')}</div></td></tr>`;
     }).join('');
     const moving = downGames(D, pv.roundGames, pv.changes.filter(c => !c.none).map((c, k) => { const o = pvChoice(c, pv.changes.indexOf(c)); return { ...c, repl: o.name, replId: o.id }; }));
     pvHost.shadowRoot.innerHTML = `<style>${T.panel.CSS}:host{all:initial}.ov{position:fixed;inset:0;background:rgba(17,24,39,.5);z-index:2147483000;display:flex;align-items:flex-start;justify-content:center;padding:7vh 16px;overflow:auto}.dlg{background:var(--card);border-radius:8px;box-shadow:0 20px 40px rgba(0,0,0,.25);width:640px;max-width:100%;font-family:ui-sans-serif,system-ui,sans-serif;font-size:14px;color:var(--text)}.dh{padding:16px 20px 8px;font-size:18px;font-weight:500}.db{padding:4px 20px 16px}.df{background:var(--head);padding:12px 20px;display:flex;justify-content:flex-end;gap:8px;border-radius:0 0 8px 8px}td{vertical-align:top;padding:6px 4px;border-top:1px solid var(--line)}</style>

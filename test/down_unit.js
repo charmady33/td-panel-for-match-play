@@ -16,6 +16,9 @@ const ch = TDP.smart.downPlan(D, est.filter(a => a.arenaId !== 1), est);
 console.log(ch.map(c => `${c.bank}: ${c.down} -> ${c.repl} (${c.arenas.join(' > ')})`).join('\n'));
 ok(ch.length === 2 && ch.every(c => c.bank !== 'Bank 3'), 'only banks 1 and 2 change');
 for (const c of ch) { ok(!c.arenas.includes('Aztec'), 'Aztec gone from ' + c.bank); ok(new Set(c.arenas).size === 3, 'no game twice in ' + c.bank); }
+// item 68: only the down game's spot changes - order and other games kept, in every option
+for (const c of ch) { const old = banks.find(b => b.name === c.bank).arenaIds.map(id => names[id - 1]);
+  for (const o of [c, ...c.options]) ok(o.arenas.every((n, i) => i === c.pos ? n !== 'Aztec' : n === old[i]), `${c.bank} keeps order/other games (${o.arenas.join('>')})`); }
 // the two replacements, if the same game, must not be the same game number
 const b1 = ch.find(c => c.bank === 'Bank 1'), b2 = ch.find(c => c.bank === 'Bank 2');
 if (b1.repl === b2.repl) ok(b1.arenas.indexOf(b1.repl) !== b2.arenas.indexOf(b2.repl), 'same replacement in the same slot of two banks');
@@ -25,6 +28,9 @@ TDP.timing = { isDone: g => g.status === 'completed' };
 const mv = TDP.smart.downGames(D, games, ch);
 console.log('move:', JSON.stringify(mv));
 ok(mv.length === 1 && mv[0].gameId === 11 && mv[0].name === b1.repl, 'only the waiting Aztec game moves, to Bank 1\'s replacement');
+// a game being played now on the down machine moves too; a completed one never does
+const mv2 = TDP.smart.downGames(D, [...games, { gameId: 14, roundId: 9, set: 2, index: 1, arenaId: 1, bankId: 2, status: 'started', startedAt: '2026-10-31T20:00:00Z' }], ch);
+ok(mv2.some(m => m.gameId === 14 && m.name === b2.repl) && !mv2.some(m => m.gameId === 13), 'in-progress game moves to Bank 2\'s replacement; completed game untouched');
 // ranked choices for the TD: best first, no clash on the best
 ok(b1.options && b1.options.length > 1 && !b1.options[0].clash, 'Bank 1 has ranked options, best without a clash');
 console.log('Bank 1 options:', b1.options.slice(0, 4).map(o => `${o.name}${o.clash ? ' ⚠' + o.clash : ''}`).join(' | '));
