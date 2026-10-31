@@ -363,7 +363,7 @@ TDP.inpage = (() => {
 .pm{position:absolute;left:0;top:100%;z-index:5;display:flex;gap:4px;background:var(--card);border:1px solid var(--line);border-radius:6px;padding:4px;box-shadow:0 6px 16px rgba(0,0,0,.15)}.pm button{width:30px;height:28px;border:1px solid var(--line);border-radius:5px;background:var(--card);color:var(--text);font:inherit;cursor:pointer}.pm button:hover,.pm button.on{background:#e0e7ff;border-color:#a5b4fc}</style>
       <div class="wrap${document.documentElement.classList.contains('dark') ? ' dark' : ''}"><div class="ov" data-act="bg"><div class="dlg"><div class="dh">Group ${c.no} · Assign Bank/Order</div><div class="db">
       <div class="lab mb">Bank</div><select data-f="bank" style="width:100%"><option value="random"${c.bank === 'random' ? ' selected' : ''}>Random bank (${free.length} free)</option>${c.banks.map(opt).join('')}</select>${gamesHtml}
-      <div class="lab mt mb">Play order <span class="small">(click a box to pick, or type 1, 2, 3… then Tab to the next player - leave empty to keep Matchplay's order)</span></div>
+      <div class="lab mt mb" style="display:flex;align-items:center;gap:8px"><span class="flex1">Play order <span class="small">(click a box to pick, or type 1, 2, 3… then Tab to the next player - leave empty to keep Matchplay's order)</span></span>${Object.keys(c.order).length ? '<button class="btn sm sec" data-act="clearOrder" type="button">Clear order</button>' : ''}</div>
       ${c.players.map(p => `<div class="pl"><input type="text" inputmode="numeric" autocomplete="off" data-p="${p.id}" value="${c.order[p.id] || ''}" title="Click to pick, or type 1-${c.players.length}"><span>${T.esc(p.name)}</span>${String(c.menu) === String(p.id) ? `<div class="pm">${c.players.map((_, k) => k + 1).filter(k => !taken(p.id).has(k)).map(k => `<button type="button" tabindex="-1" data-pick="${k}" data-pp="${p.id}" class="${c.order[p.id] === k ? 'on' : ''}">${k}</button>`).join('')}</div>` : ''}</div>`).join('')}
       ${c.err ? `<div class="callout err mt">${T.esc(c.err)}</div>` : ''}
       </div><div class="df"><button class="btn sec" data-act="close">Cancel</button><button class="btn" data-act="save" ${free.length ? '' : 'disabled'}>Save</button></div></div></div></div>`;
@@ -403,6 +403,7 @@ TDP.inpage = (() => {
     const a = e.target.closest('[data-act]'); if (!a || !boCur) return;
     if (a.dataset.act === 'bg' && e.target !== a) return;
     if (a.dataset.act === 'bg' || a.dataset.act === 'close') { boHost.remove(); boHost = null; boCur = null; return; }
+    if (a.dataset.act === 'clearOrder') { boCur.order = {}; boCur.err = ''; boCur.menu = null; return boDraw(); }   // start the order over (nothing in Matchplay changes until Save)
     if (a.dataset.act !== 'save') return;
     const c = boCur, D = T.data.D, n = c.players.length, typed = Object.values(c.order);
     // order: all empty = keep Matchplay's; otherwise every player gets 1…N, each once

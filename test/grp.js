@@ -45,6 +45,8 @@ const bundle = order.map(f => fs.readFileSync(path.join(__dirname, '..', f), 'ut
   console.log('after 1 + Tab: focus on box', await page.evaluate(() => { const r = document.getElementById('tdp-bankorder').shadowRoot; return [...r.querySelectorAll('input[data-p]')].indexOf(r.activeElement); }), '| list:', await page.evaluate(() => [...document.getElementById('tdp-bankorder').shadowRoot.querySelectorAll('[data-pick]')].map(b => b.textContent).join('')));
   await page.keyboard.type('3'); await page.keyboard.press('Tab'); await page.waitForTimeout(150); await page.keyboard.type('2');
   console.log('typed 1,3,2 with Tab:', await ord());
+  await page.evaluate(() => document.getElementById('tdp-bankorder').shadowRoot.querySelector('[data-act=clearOrder]').click()); console.log('Clear order:', await ord());
+  await box(0).click(); await page.keyboard.type('4'); await page.keyboard.press('Tab'); await page.keyboard.type('3'); await page.keyboard.press('Tab'); await page.keyboard.type('2'); console.log('typed again 4,3,2:', await ord());
   // bank: games in the dropdown and listed under it
   await page.evaluate(() => { const r = document.getElementById('tdp-bankorder').shadowRoot, s = r.querySelector('[data-f=bank]'); s.value = s.options[2].value; s.dispatchEvent(new Event('change', { bubbles: true })); });
   console.log('bank option:', await page.evaluate(() => document.getElementById('tdp-bankorder').shadowRoot.querySelector('[data-f=bank]').options[2].text), '| listed:', await page.evaluate(() => [...document.getElementById('tdp-bankorder').shadowRoot.querySelectorAll('ol li b')].map(b => b.textContent).join(' / ')));

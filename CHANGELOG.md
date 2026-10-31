@@ -2,6 +2,9 @@
 
 All notable changes, newest first. Versions follow [semantic versioning](https://semver.org/): new features bump the middle number, fixes the last.
 
+## 0.18.3 - 2026-10-31
+- **Assign Bank/Order**: a **Clear order** button empties all the order boxes so a wrong order can be typed again (nothing changes in Matchplay until Save).
+
 ## 0.18.2 - 2026-10-31
 - **Assign Bank/Order**: type a number and press Tab to go to the next player (Shift+Tab back). A box's list only shows the numbers still free. The bank dropdown shows each bank's games ("Bank 2 – Aztec, Cinema, Dune"), and the chosen bank's games are listed under it, one per row in bold.
 
