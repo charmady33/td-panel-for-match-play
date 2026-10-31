@@ -188,6 +188,7 @@ TDP.jobs = (() => {
     async startNextRound(a) {
       const D = T.data.D, total = (D.t && (D.t.roundCount || D.t.duration)) || 0;
       if (total && D.rounds.length >= total) { job.steps = job.steps.slice(0, job.i + 1); return `all ${total} rounds played - not starting another`; }   // (later steps were for the new round)
+      await T.saveT(T.data.D.tid, { localStartAt: Date.now() });   // a round the extension starts is never "redone"
       const ok = await T.mp.startNextRound({ publish: !(a && a.publish === false), category: a && a.category });
       if (!ok) { job.steps = job.steps.slice(0, job.i + 1); return 'no "Start next round" button (last round?) - stopped here'; }
       await T.data.refresh(true);
@@ -200,6 +201,12 @@ TDP.jobs = (() => {
     // set them (chunks of 8 games) and publish it
     async smartPlan(a) {
       let round = null, games = [];
+      if (a.redo && a.roundId) {   // a round started elsewhere: every game without a score gets its arena again
+        await T.data.refresh(true);
+        round = (T.data.D.rounds || []).find(r => r.roundId === a.roundId) || null;
+        const done = g => T.timing.isDone(g) || (g.resultPositions || []).length || (g.suggestions || []).length;
+        if (round) games = (await T.api.all(`/tournaments/${a.tid}/games?round=${a.roundId}`, 0)).map(g => (done(g) || g.bye || g.set === 9999 ? g : { ...g, arenaId: null }));
+      }
       for (let k = 0; k < 15 && !round; k++) {   // the new round can take a moment to show in the API
         await T.data.refresh(true);
         const D = T.data.D, r = D.rounds[D.rounds.length - 1];
@@ -210,9 +217,15 @@ TDP.jobs = (() => {
       await note('Planning games by game time');
       const { res } = await T.smart.make(T.data.D, games, round);
       await T.saveT(a.tid, { smartLast: { roundId: round.roundId, at: Date.now(), notes: res.notes.slice(0, 20), mins: Math.round(Math.max(0, ...res.ends) / 60) } });
-      const steps = T.smart.fillSteps(a.tid, round.roundId, res.assign, a.publish);
+      const steps = T.smart.fillSteps(a.tid, round.roundId, res.assign, a.publish, !!a.redo);
       job.steps.splice(job.i + 1, 0, ...steps); await save();
       return `${res.assign.filter(x => !x.fixed).length} games planned · about ${Math.round(Math.max(0, ...res.ends) / 60)} min${res.notes.length ? ' · ' + res.notes.slice(0, 3).join('; ') : ''}`;
+    },
+    // Matchplay's round Actions: Clear all arenas (games still in progress) + Assign arenas with a category
+    async roundArenas(a) {
+      const r = (T.data.D.rounds || []).find(x => x.roundId === a.roundId);
+      await T.mp.roundArenas(r ? r.name : null, a.value, a.clear, note);
+      return a.clear ? 'arenas cleared and drawn again' : 'arenas assigned';
     },
     async smartAssign(a) {
       const fresh = await T.api.all(`/tournaments/${a.tid}/games?round=${a.roundId}`, 0), has = new Set(fresh.filter(g => g.arenaId != null).map(g => g.gameId));

@@ -32,7 +32,7 @@ async function me() {
   return u;
 }
 
-function setup() { chrome.alarms.create('watch', { periodInMinutes: 1 }); }
+function setup() { chrome.alarms.create('watch', { periodInMinutes: 0.5 }); }   // (Chrome's fastest; real-time events do the quick part)
 chrome.runtime.onInstalled.addListener(setup);
 chrome.runtime.onStartup.addListener(setup);
 chrome.alarms.onAlarm.addListener(a => { if (a.name === 'watch') tick().catch(e => console.warn('[TD Panel bg]', e)); });
@@ -57,16 +57,17 @@ chrome.runtime.onMessage.addListener(m => { if (m && m.type === 'tdp-check-updat
 
 async function tick() {
   const { settings: sx = {} } = await chrome.storage.local.get('settings');
-  if (sx.off) { chrome.action.setBadgeText({ text: 'OFF' }); chrome.action.setBadgeBackgroundColor({ color: '#6b7280' }); return; }   // switched off: watch nothing
+  if (sx.off) { wsWant = new Set(); try { if (ws) ws.close(); } catch (e) { /* */ } chrome.action.setBadgeText({ text: 'OFF' }); chrome.action.setBadgeBackgroundColor({ color: '#6b7280' }); return; }   // switched off: watch nothing
   checkUpdate(false);
   let u; try { u = await me(); } catch (e) { chrome.action.setBadgeText({ text: '' }); return; }
   const started = rows(await api(`/tournaments?owner=${u.userId}&status=started&limit=50`));
+  liveWatch(started.map(t => t.tournamentId));
   chrome.action.setBadgeText({ text: started.length ? String(started.length) : '' });
   chrome.action.setBadgeBackgroundColor({ color: '#4f46e5' });
   const runs = await store.get('bg:runs', {});
   for (const t of started) {
     const tid = t.tournamentId, st = await store.get('t:' + tid, {});
-    if (!(st.auto || st.autoAssign)) continue;
+    if (!(st.auto || st.autoAssign || st.roundType || st.smartArenas)) continue;
     const run = runs[tid];
     if (run && run.windowId) {   // already working on it: give up waiting after 20 min and tell the TD
       const alive = await chrome.windows.get(run.windowId).then(() => true, () => false);
@@ -90,6 +91,10 @@ async function needs(tid, st) {
   const rounds = rows(await api(`/tournaments/${tid}/rounds`)).sort((a, b) => (a.index ?? a.roundId) - (b.index ?? b.roundId));
   const r = rounds[rounds.length - 1]; if (!r || String(r.status) === 'completed') return null;
   const games = rows(await api(`/tournaments/${tid}/games?round=${r.roundId}`)).filter(g => !g.bye);
+  // a round started somewhere else (a phone) while "New rounds use" is set: the tournament's page redoes it
+  const type = st.roundType || (st.smartArenas ? 'smart' : '');
+  if (type && type !== 'none' && st.knownRounds && !st.knownRounds.includes(r.roundId) && !(st.localStartAt && Date.now() - st.localStartAt < 120e3))
+    return { sig: `guard:${r.roundId}`, what: `${r.name || 'A new round'} was started on another device` };
   if (!games.length) return null;
   const noBank = games.some(g => g.set !== 9999 && g.arenaId == null && g.bankId == null);
   if (st.autoAssign && !st.smartArenas && noBank && st.assignDoneRound !== r.roundId && st.banksDoneRound !== r.roundId)
@@ -127,6 +132,35 @@ chrome.runtime.onMessage.addListener((m, sender) => {
     }
   })();
 });
+
+// ---------- Matchplay's real-time events (experimental Real time API, Pusher web socket) ----------
+// One connection for every in-progress tournament you run: a round started on a phone (or a game finished) is acted
+// on within seconds instead of at the next check. Pings keep it (and this background part) awake.
+const WS_URL = 'wss://ws.app.matchplay.events/app/tnrxzkahdeullnwje83e?protocol=7&client=js&version=8.5.0&flash=false';
+let ws = null, wsOk = false, wsWant = new Set(), wsSub = new Set(), wsRetry = 0, wsLast = 0, kick = null;
+function liveWatch(ids) { wsWant = new Set(ids); if (!wsWant.size) return; if (!ws || ws.readyState > 1) liveConnect(); else liveSync(); }
+function liveSend(o) { try { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); } catch (e) { /* */ } }
+function liveSync() {
+  if (!wsOk) return;
+  for (const t of wsWant) if (!wsSub.has(t)) { liveSend({ event: 'pusher:subscribe', data: { auth: '', channel: 'tournaments.' + t } }); wsSub.add(t); }
+  for (const t of [...wsSub]) if (!wsWant.has(t)) { liveSend({ event: 'pusher:unsubscribe', data: { channel: 'tournaments.' + t } }); wsSub.delete(t); }
+}
+function liveConnect() {
+  try { ws = new WebSocket(WS_URL); } catch (e) { return; }
+  ws.onmessage = m => {
+    wsLast = Date.now();
+    let d; try { d = JSON.parse(m.data); } catch (e) { return; }
+    if (d.event === 'pusher:connection_established') { wsOk = true; wsRetry = 0; wsSub.clear(); liveSync(); return; }
+    if (d.event === 'pusher:ping') return liveSend({ event: 'pusher:pong', data: {} });
+    if (!d.channel || /^pusher/.test(d.event)) return;
+    // a new / changed round: check now; a game result: check soon (auto close)
+    const round = /Round/.test(d.event);
+    clearTimeout(kick); kick = setTimeout(() => tick().catch(() => {}), round ? 1500 : 5000);
+  };
+  ws.onclose = () => { wsOk = false; wsSub.clear(); setTimeout(() => { if (wsWant.size) liveConnect(); }, Math.min(60000, 2000 * Math.pow(2, wsRetry++))); };
+  ws.onerror = () => { try { ws.close(); } catch (e) { /* */ } };
+}
+setInterval(() => { if (wsOk && Date.now() - wsLast > 20000) liveSend({ event: 'pusher:ping', data: {} }); }, 10000);
 
 // a fresh install / update: start watching straight away
 setup(); tick().catch(() => {});

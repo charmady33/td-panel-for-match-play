@@ -58,6 +58,7 @@ Your settings, API token and saved tournament data stay as they are.
   - **Resolve ties page**: important ties are outlined, with the reason shown on each card
   - **Matches tab**:
     - the **Auto close round & start next round** checkbox and its status
+    - **New rounds use**: the tournament's default round type; a round started on a phone with something else is redone with it within seconds (while no scores are in)
     - **Est. 34 min** by each group (kept from round start) with its time so far, and a live ⏱ timer over each game that stops at the final time
     - **Start next round → Limit arenas to… → Any category (game time)**: every game gets its arena right away - no machine shared at the same time, no game twice in a round, every game played equally, groups finishing together; a repeat of a game a player already had is a last resort and is spread over the players. Remembered per tournament; works with Auto close/start
     - finals groups with a tie for an advancing spot, or any tie in the final, are outlined

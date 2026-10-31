@@ -179,16 +179,23 @@ TDP.smart = (() => {
   function decorate() {
     if (T.isFrame) return;
     const D = T.data.D, x = startDialog();
-    if (!x || !D || !D.t || !D.isTD || isFinals(D) || T.jobs.active()) return;
+    if (!x || !D || !D.t || !D.isTD || T.jobs.active()) return;
     const { d, sel } = x;
+    // the tournament's default ("New rounds use", Matches tab): picked when the window opens
+    if (!d.dataset.tdpPre) {
+      d.dataset.tdpPre = '1';
+      const t = T.rounds.typeOf(D), v = T.rounds.startValue(t);
+      if (t && t !== 'smart' && v != null && sel.value !== v && [...sel.options].some(o => o.value === v)) T.setVal(sel, v);
+    }
+    if (isFinals(D)) return;
     if (!sel.querySelector(`option[value="${VALUE}"]`)) {
       const o = document.createElement('option'); o.value = VALUE; o.textContent = LABEL; o.dataset.tdp = '1';
       sel.insertBefore(o, sel.options[1] || null);
       // Matchplay never hears about our choice (it would not know it); its own choices go through as usual
       const block = e => { if (sel.value === VALUE) e.stopImmediatePropagation(); };
-      sel.addEventListener('change', e => { want.set(d, sel.value === VALUE); T.saveT(D.tid, { smartArenas: sel.value === VALUE }); hint(d, sel); block(e); });
+      sel.addEventListener('change', e => { want.set(d, sel.value === VALUE); if (!(T.tstate[D.tid] || {}).roundType) T.saveT(D.tid, { smartArenas: sel.value === VALUE }); hint(d, sel); block(e); });   // (with a "New rounds use" default, a pick here is just for this round)
       sel.addEventListener('input', block);
-      if ((T.tstate[D.tid] || {}).smartArenas) want.set(d, true);
+      if (T.rounds.typeOf(D) === 'smart') want.set(d, true);
       d.addEventListener('click', onClick, true);
       clearInterval(poll); poll = setInterval(() => { const y = startDialog(); if (!y) { clearInterval(poll); return; } if (want.get(y.d) && y.sel.value !== VALUE) y.sel.value = VALUE; hint(y.d, y.sel); }, 300);
     }
@@ -204,6 +211,11 @@ TDP.smart = (() => {
     el.textContent = 'TD Panel gives every game its arena right after the round starts: no two groups on a machine at once, no game twice for a player, every game played equally, groups finishing together.';
     sel.parentElement.appendChild(el);
   }
+  // any Start round from this computer: the TD picked it - a round started here is never "redone"
+  if (!T.isFrame && typeof document !== 'undefined') document.addEventListener('click', e => {
+    const b = e.target.closest && e.target.closest('button'); if (!b || !/^Start round$/i.test(T.txt(b)) || !startDialog()) return;
+    const D = T.data.D; if (D && D.tid) T.saveT(D.tid, { localStartAt: Date.now() });
+  }, true);
   async function onClick(e) {
     if (passing) return;
     const b = e.target.closest('button'); if (!b || !/^Start round$/i.test(T.txt(b))) return;
@@ -223,11 +235,11 @@ TDP.smart = (() => {
   }
 
   // job steps that fill the round: the plan, then the games in chunks (Matchplay's Arena window, one game at a time)
-  function fillSteps(tid, roundId, assign, publish) {
+  function fillSteps(tid, roundId, assign, publish, change) {
     const todo = assign.filter(x => !x.fixed), steps = [];
     for (let i = 0; i < todo.length; i += 8) {
       const part = todo.slice(i, i + 8);
-      steps.push({ tid, page: 'matches', op: 'smartAssign', args: { tid, roundId, items: part.map(x => ({ gameId: x.gameId, arenaId: x.arenaId, name: x.name, group: x.group, index: x.index })) }, label: `Arenas for games ${i + 1}-${i + part.length} of ${todo.length}` });
+      steps.push({ tid, page: 'matches', op: 'smartAssign', args: { tid, roundId, change: !!change, items: part.map(x => ({ gameId: x.gameId, arenaId: x.arenaId, name: x.name, group: x.group, index: x.index })) }, label: `Arenas for games ${i + 1}-${i + part.length} of ${todo.length}` });
     }
     if (publish) steps.push({ tid, page: 'matches', op: 'publishRound', args: { ifPending: true }, label: 'Publishing the round' });
     return steps;

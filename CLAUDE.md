@@ -1,11 +1,11 @@
 # TD Panel for Match Play — notes for Claude
 
 Chrome MV3 extension for pinball tournament directors on app.matchplay.events. Tools are built into Matchplay's own
-pages (no sidebar). Current version: **0.16.0** (see README.md for what each version added).
+pages (no sidebar). Current version: **0.17.0** (see README.md for what each version added).
 
 ## How the maintainer (Clark) wants to work
 - **Propose a plan first, then wait for "code it".** Don't change code until he says so. Number each proposed item
-  (the next free number is **58**; 35 and 39 are agreed and waiting — see docs/PENDING.md).
+  (the next free number is **60**; 35 and 39 are agreed and waiting — see docs/PENDING.md).
 - Edit files in place with targeted changes; don't rewrite whole files.
 - Explain in plain language; he's a TD, not a developer. Keep messages short and concrete.
 - Each release: bump `manifest.json` "version", `TDP.VERSION` in `src/util.js` and `package.json`; add the version at
@@ -49,7 +49,7 @@ pages (no sidebar). Current version: **0.16.0** (see README.md for what each ver
     check-in; `elig.js` eligibility labels; `bankbar.js` + `bankplan.js` + `banks.js` Bank Builder;
     `arenatab.js` game times + categories; `timing.js` game timing rules; `ifpa.js` Submit to IFPA page;
     `smart.js` "Any category (game time)" round option (planner + Start round window) and down-machine bank fixes;
-    `plays.js` Stats → Plays sub-tab; `timers.js` Matches group Est. + game timers, Stats Rounds Max est.; `quicktest.js` Quick test setup on Create new tournament; `deltest.js` Delete test tournaments; `panel.js` header chip, toasts, token prompt; `main.js` wiring,
+    `plays.js` Stats → Plays sub-tab; `timers.js` Matches group Est. + game timers, Stats Rounds Max est.; `quicktest.js` Quick test setup on Create new tournament; `rounds.js` "New rounds use" default + redo of rounds started elsewhere; `live.js` real-time socket for open tabs (bg.js has its own); `deltest.js` Delete test tournaments; `panel.js` header chip, toasts, token prompt; `main.js` wiring,
     one MutationObserver page watcher, auto close/start, auto banks/assign/fill, background-window runner.
   - `bg.js` background watcher (alarms, ~1/min): opens a minimized window for tournaments with automatic options
     when no tab is open; badge; notifications. `popup/` lists the TD's events (qualifying + finals) and the token.
@@ -65,7 +65,11 @@ pages (no sidebar). Current version: **0.16.0** (see README.md for what each ver
 - Start next round window: `select#categoryId` (0 Any category, -1 Don't draw arenas, 1-3 EM/SS/DMD, 4-8 labels).
   A game's cell on the Matches tab has an **Arena** button + `a[href$=/matches/{gameId}]` (Details → side panel →
   Change arena); the arena window's `<select>` values are arena ids. A deactivated arena = `tournamentArena.status: inactive`.
+- A round's own **Actions** menu (Matches tab): Print sheets, Assign arenas (select automatic / category_id_1-8, + greedy),
+  Add group…, Activity log, Open arenas, Clear all arenas (type "clear arenas" → Remove arena assignments), Delete….
 - Final round: Matchplay may close it itself (no Close round button) — see item 37.
+- Real time API (experimental): Pusher web socket wss://ws.app.matchplay.events/app/tnrxzkahdeullnwje83e?protocol=7&client=js&version=8.5.0&flash=false,
+  channel tournaments.{ID}; events RoundCreatedOrUpdated, GameCreatedOrUpdated, RoundsDeleted, … (see item 59).
 - More in docs/matchplay-reference.md.
 
 ## Game timing rules (verified live 2026-10-26 on #280212: within 1 s)
@@ -75,7 +79,7 @@ pages (no sidebar). Current version: **0.16.0** (see README.md for what each ver
 
 ## Testing
 - `test/` — Playwright scripts that inject the bundle into mock Matchplay pages (API mocked with `page.route`), plus
-  unit scripts. Run with `node test/<file>.js [outDir]`. Useful ones: `v0152_ui.js` (quick test box, update bar), `even_unit.js` (round lengths), `v015_ui.js` (timers, Max est., on/off), `v014_ui.js` (Plays tab, optional ties, vote Change…, results grid), `smart_unit.js` (game-time planner), `down_unit.js`
+  unit scripts. Run with `node test/<file>.js [outDir]`. Useful ones: `v016_ui.js` (New rounds use, redo, live events), `v0152_ui.js` (quick test box, update bar), `even_unit.js` (round lengths), `v015_ui.js` (timers, Max est., on/off), `v014_ui.js` (Plays tab, optional ties, vote Change…, results grid), `smart_unit.js` (game-time planner), `down_unit.js`
   (down machine in banks), `dup_unit.js` (bank duplicates),
   `sched_unit.js`, `gt.js` (bracket ties), `cascade.js` (finals standings ties), `embed_ui.js`
   (check-in; env CAP=1 / DONEJOB=1 / MOVEUP=1), `t6.js` (bank refresh via worker frame; PICK=1 picker),

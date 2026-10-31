@@ -233,6 +233,7 @@ TDP.inpage = (() => {
       <label class="gap"><input type="checkbox" data-act="auto" ${st.auto ? 'checked' : ''}> <span class="lab">Auto close round &amp; start next round</span></label>
       <span class="small" title="When every game is approved (no pending or partial scores, no open tiebreakers), closes the round and starts the next after a 10-second countdown you can cancel. Never past the last round; never completes the tournament." style="cursor:help">ⓘ</span>
       <span class="small flex1">${st.auto ? T.esc(autoState || 'watching') : 'Off'}</span>
+      ${T.rounds ? T.rounds.selectHtml(D) : ''}
       </div>${bankRow}${testRow}</div>` : '';
     block('tdp-auto', html ? bar : null, 'after', html, async e => {
       const el = e.target;
@@ -240,6 +241,7 @@ TDP.inpage = (() => {
       if (e.type === 'click' && el.closest && el.closest('[data-act=fill]')) return T.bankbar.fillConfirm(T.data.D);
       if (e.type !== 'change') return;
       if (el.dataset.act === 'auto') { await T.saveT(D.tid, { auto: el.checked }); autoState = ''; render(); }
+      if (el.dataset.act === 'roundType') { await T.rounds.setType(T.data.D, el.value); render(); }
       if (el.dataset.act === 'autoAssign') { await T.saveT(D.tid, { autoAssign: el.checked }); render(); }
       if (el.dataset.act === 'autoFill') { await T.saveT(D.tid, { autoFill: el.checked }); render(); }
     });

@@ -2,6 +2,12 @@
 
 All notable changes, newest first. Versions follow [semantic versioning](https://semver.org/): new features bump the middle number, fixes the last.
 
+## 0.17.0 - 2026-10-31
+- **New rounds use** (Matches tab): pick each tournament's default - Any category (game time), Any category, EM / SS / DMD, labels A-E, Banks, or Don't draw arenas. The Start next round window opens with it, and Auto close/start uses it.
+- **Rounds started on a phone** (or another device) with something different are redone with the default within seconds - game time: every game gets its arena in place; a category: Matchplay's round Actions → Clear all arenas + Assign arenas with that category; banks: Assign banks. Only while nobody has entered or suggested a score and the round is under 10 minutes old; otherwise it's left alone with a note. Rounds started from this computer are never redone.
+- **Real-time updates**: Matchplay's (experimental) real-time events. Open tournament pages update within a second or two of a change (new round, scores from phones, arena changes) instead of every 15 s; with no tab open, the background watcher listens to every in-progress tournament you run and acts within seconds (30 s check as a fallback).
+- **Quick test setup fixes**: waits for Matchplay's Add players / Add arenas lists to load before deciding they're empty (the "No arenas in your Existing arenas list" error). A task that stops part way now refreshes the page so what it already did shows (the 42 players).
+
 ## 0.16.0 - 2026-10-31
 - **Quick test setup**: on Matchplay's Create new tournament page, picking **Test tournament** shows Players / Arenas / Arena mix (remembered). After Create tournament the extension adds that many of your existing players (random) - any shortfall as "Test Player N" (made once, reused next time) - and that many of your existing arenas, spread over EM / SS / DMD or random. Only for a new Test tournament.
 - **No more locked pages after an update**: a tab that was open while the extension was updated now lifts its cover and shows "TD Panel was updated - reload this page (F5) to carry on" (a running task continues after the reload). This was why Delete test tournaments looked stuck.

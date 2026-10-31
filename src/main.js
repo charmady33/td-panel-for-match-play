@@ -25,7 +25,7 @@ var TDP = window.TDP || (window.TDP = {});
   // running finishes, so Matchplay isn't left half-changed)
   const off = () => !!T.settings.off || T.dead;
   function teardown() {
-    T.panel.unmount(); T.data.stop();
+    T.panel.unmount(); T.data.stop(); T.live.stop();
     document.querySelectorAll('[id^="tdp-"]').forEach(e => { if (!/^tdp-(worker|busy-card|cover|host)/.test(e.id)) e.remove(); });
     document.querySelectorAll('[data-tdp]').forEach(e => { if (e.closest('[id^="tdp-"]')) return; if (e.tagName === 'OPTION' || e.dataset.tdp === 'note' || e.dataset.tdpPlays || e.id === 'tdp-smart-hint' || e.dataset.tdp === 'timer') e.remove(); });
   }
@@ -93,12 +93,26 @@ var TDP = window.TDP || (window.TDP = {});
     if (!drawTimer) drawTimer = setTimeout(draw, 60);
   }).observe(document.documentElement, { childList: true, subtree: true });
 
+  // Matchplay's real-time events: refresh as soon as something changes in a tournament of this event
+  let liveT = null;
+  T.live.on(tid => {
+    const D = T.data.D; if (off() || !D.t) return;
+    const fam = [D.tid, D.qual && D.qual.tournamentId, ...(D.finals || []).map(f => f.tid)];
+    if (!fam.includes(tid)) return;
+    clearTimeout(liveT); liveT = setTimeout(() => T.data.refresh(true), 500);
+  });
   T.data.on(D => {
     if (off()) return;
+    if (D.t && D.isTD) T.live.watch([D.tid, D.qual && D.qual.tournamentId, ...(D.finals || []).map(f => f.tid)]);
     if (D.isTD === false && T.settings.token) { T.panel.unmount(); return; }   // not your tournament: stay out of the way
     T.panel.mount(); T.panel.render();
     T.embed.render(); T.inpage.render();
-    autoTick().then(autoAssign).then(autoFill).then(() => T.smart.downCheck());
+    autoTick().then(autoAssign).then(autoFill).then(() => T.smart.downCheck()).then(() => T.rounds.guard(lock));
+  });
+  let refreshedFor = null;
+  T.jobs.on(j => {
+    // a task that stopped part way: show what it did change (the normal refresh only follows a finished task)
+    if (j && j.error && j.i > 0 && refreshedFor !== j.startedAt && j.owner === T.tabId && j.steps.slice(0, j.i).some(s => s.tid === T.routeTid())) { refreshedFor = j.startedAt; setTimeout(() => T.sync.soft(), 300); }
   });
   T.jobs.on(() => { if (off()) { T.busy.render(); return; } T.panel.render(); T.embed.render(); T.busy.render(); T.inpage.render(); T.deltest.render(); });
   // Matchplay doesn't push changes: when the API shows something new (a score from a phone, a new round…),
@@ -150,14 +164,15 @@ var TDP = window.TDP || (window.TDP = {});
       if (!go || !(T.tstate[tid] || {}).auto) return state('cancelled - will check again');
       const steps = [{ tid, page: 'matches', op: 'closeRound', args: { tid, roundId: r.roundId, name: r.name }, label: `Closing ${r.name}` }];
       const stt = T.tstate[tid] || {}, banksOn = /bank/i.test(D.t.arenaAssignment || '');
-      const smart = stt.smartArenas && !isFinals(D), assign = banksOn && stt.autoAssign && !smart;
+      const type = T.rounds.typeOf(D), smart = type === 'smart' && !isFinals(D), assign = banksOn && (type === 'banks' || (!type && stt.autoAssign)) && !smart;
+      const cat = !smart && !assign ? T.rounds.startValue(type) : null;   // a category / Any category / Don't draw
       if (!last && smart) {
         // "Any category (game time)": start without drawing arenas, set every game's arena, then publish
         steps.push({ tid, page: 'matches', op: 'startNextRound', args: { publish: false, category: '-1' }, label: 'Starting the next round (not published yet)' });
         steps.push({ tid, page: 'matches', op: 'smartPlan', args: { tid, publish: true }, label: 'Working out the arenas by game time' });
       } else if (!last) {
         // Automatic assign (Matches tab): the round starts unpublished, gets its banks, then goes live
-        steps.push({ tid, page: 'matches', op: 'startNextRound', args: { publish: !assign }, label: assign ? 'Starting the next round (not published yet)' : 'Starting the next round' });
+        steps.push({ tid, page: 'matches', op: 'startNextRound', args: { publish: !assign, category: cat }, label: assign ? 'Starting the next round (not published yet)' : 'Starting the next round' });
         if (assign) {
           steps.push({ tid, page: 'matches', op: 'assignRound', args: { tid }, label: 'Assigning a bank to each group' });
           steps.push({ tid, page: 'matches', op: 'publishRound', label: 'Publishing the round' });

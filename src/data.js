@@ -187,7 +187,8 @@ TDP.data = (() => {
   // slow it to about once a minute), so a round started on a phone is still noticed
   const autosOn = () => { const st = T.tstate[D.tid] || {}; return !!(st.auto || st.autoAssign); };
   let ticks = 0;
-  function start() { stop(); timer = setInterval(() => { ticks++; if (!document.hidden || (autosOn() && ticks % 2 === 0)) refresh(); }, 15000); }
+  // real-time events (live.js) do the quick updates; this timer is the safety net (every minute while they're on)
+  function start() { stop(); timer = setInterval(() => { ticks++; if (T.live && T.live.ok() && ticks % 4) return; if (!document.hidden || (autosOn() && ticks % 2 === 0)) refresh(); }, 15000); }
   function stop() { if (timer) clearInterval(timer); timer = null; }
 
   // ---------- derived ----------

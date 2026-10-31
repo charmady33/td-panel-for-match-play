@@ -283,12 +283,42 @@ TDP.mp = (() => {
     await pickArenas(d, names, '', tick, 'This tournament');
   }
 
+  // ---------- a round's own Actions menu (Matches tab): Clear all arenas / Assign arenas (category) ----------
+  function roundActions(name) {
+    const isActions = b => T.txt(b) === 'Actions' && !b.closest('table') && !b.closest('[data-tdp]');
+    const heads = [...document.querySelectorAll('main h2, main h3, main div, main span')].filter(e => e.children.length <= 2 && name && T.txt(e).startsWith(name) && T.txt(e).length < name.length + 20 && T.visible(e));
+    for (const h of heads) { let c = h; for (let k = 0; k < 6 && c; k++, c = c.parentElement) { const b = [...c.querySelectorAll('button')].find(isActions); if (b) return b; } }
+    return [...document.querySelectorAll('main button')].find(isActions) || null;
+  }
+  async function roundMenu(name, item) {
+    const b = await T.waitFor(() => roundActions(name), 8000) || fail(`No Actions menu for ${name || 'the round'}.`);
+    T.click(b);
+    T.click(await needBtn(item));
+    return needDialog();
+  }
+  async function roundArenas(name, value, clear, tick = noTick) {
+    if (clear) {
+      tick('Clearing the arenas (games in progress)');
+      const d = await roundMenu(name, /^Clear all arenas$/);
+      const box = await T.waitFor(() => d.querySelector('input'), 4000) || fail('No confirm box in Clear all arenas.');
+      T.setVal(box, 'clear arenas'); await T.sleep(200);
+      T.click(await needBtn(/^Remove arena assignments$/, d)); await dialogClosed(15000);
+    }
+    tick('Assigning arenas');
+    const d = await roundMenu(name, /^Assign arenas$/);
+    const sel = await T.waitFor(() => d.querySelector('select'), 4000) || fail('No arena choice in Assign arenas.');
+    if (![...sel.options].some(o => o.value === value)) { T.click(T.findBtn(d, 'Cancel')); fail(`"${value}" isn't a choice in Assign arenas.`); }
+    T.setVal(sel, value); await T.sleep(200);
+    T.click(await needBtn(/^Assign arenas$/, d)); await dialogClosed(20000);
+  }
+
   // ---------- quick test tournament: N existing players (random), N existing arenas (by era or random) ----------
   const shuffle = a => { a = [...a]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
   async function listLoaded(d) {
     const boxes = () => [...d.querySelectorAll('input[type=checkbox]')];
     let last = -1, since = Date.now();
-    await T.waitFor(() => { const n = boxes().length; if (n !== last) { last = n; since = Date.now(); } return Date.now() - since > 500; }, 12000, 50);
+    // wait for rows (an empty list that hasn't loaded yet isn't "empty"), then for the list to stop growing
+    await T.waitFor(() => { const n = boxes().length; if (n !== last) { last = n; since = Date.now(); } return n > 0 && Date.now() - since > 500; }, 12000, 50);
     return boxes();
   }
   // returns how many were added from the list; the rest (if any) go in by name on the Batch tab
@@ -492,5 +522,5 @@ TDP.mp = (() => {
     await dialogClosed();
   }
 
-  return { deleteTournament, addTestPlayers, addTestArenas, setArenaById, setGameArena, gameCard, openAssign, groupHead, goTab, menu, playerRows, selectPlayers, setLabels, bulk, setActive, readIfpaRanks, addFromQualifying, setSeeds, closeRound, startNextRound, publishRound, createBank, setBankArenas, reorderBank, assignBank, enterResults, addArenas, resolveTie, needBtn, needDialog, dialogClosed };
+  return { deleteTournament, roundArenas, addTestPlayers, addTestArenas, setArenaById, setGameArena, gameCard, openAssign, groupHead, goTab, menu, playerRows, selectPlayers, setLabels, bulk, setActive, readIfpaRanks, addFromQualifying, setSeeds, closeRound, startNextRound, publishRound, createBank, setBankArenas, reorderBank, assignBank, enterResults, addArenas, resolveTie, needBtn, needDialog, dialogClosed };
 })();
