@@ -185,7 +185,7 @@ TDP.data = (() => {
   }
   // every 15 s while the tab shows; in the background only when an automatic option is on (every 30 s - Chrome may
   // slow it to about once a minute), so a round started on a phone is still noticed
-  const autosOn = () => { const st = T.tstate[D.tid] || {}; return !!(st.auto || st.autoBanks || st.autoAssign); };
+  const autosOn = () => { const st = T.tstate[D.tid] || {}; return !!(st.auto || st.autoAssign); };
   let ticks = 0;
   function start() { stop(); timer = setInterval(() => { ticks++; if (!document.hidden || (autosOn() && ticks % 2 === 0)) refresh(); }, 15000); }
   function stop() { if (timer) clearInterval(timer); timer = null; }

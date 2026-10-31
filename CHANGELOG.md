@@ -2,6 +2,11 @@
 
 All notable changes, newest first. Versions follow [semantic versioning](https://semver.org/): new features bump the middle number, fixes the last.
 
+## 0.13.0 - 2026-10-31
+- **Any category (game time)**: a new choice in Matchplay's **Start next round → Limit arenas to…**. The round starts without Matchplay drawing arenas, then the extension gives every game its arena straight away (and publishes the round if "Publish round immediately" was ticked). Rules, most important first: no machine used by two groups at the same time (from each game's estimated time and its place in the group's order), nobody plays a game twice in a round, every game played equally across the night, groups finish at about the same time, eras mixed. A game a player already played is a last resort; when it can't be avoided it goes to the player with the fewest repeats so far. The choice is remembered per tournament and works with Auto close/start (and the background window). Separate from Assign banks, which stays.
+- **Banks are built once**, like finals: the qualifying **Rebuild banks every round** option is gone, and banks lock when the event starts.
+- **A machine goes down** (Deactivate on the Arenas tab): every bank holding it gets a replacement automatically - a working game not already in that bank, close in game time, same era if possible, in the fewest banks; placed so it isn't busy in another bank at that time. Only those banks change. Games of the current round still waiting on it move to the replacement. When it works again, the Banks tab offers **Put it back in its banks** (never on its own).
+
 ## 0.12.0 - 2026-10-31
 - Renamed to **TD Panel for Match Play**. Published on GitHub.
 - **Update available** notice: the extension checks GitHub Releases (at most every 6 hours) and the toolbar button

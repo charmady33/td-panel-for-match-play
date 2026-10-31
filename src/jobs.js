@@ -165,17 +165,74 @@ TDP.jobs = (() => {
     },
     async copyArenas(a) { const P = counter(a.names.length); await T.mp.addArenas(a.names, text => P.tick(text)); },
     async closeRound() { await T.mp.closeRound(); },
-    async startNextRound(a) { await T.mp.startNextRound({ publish: !(a && a.publish === false) }); await T.data.refresh(true); },
-    async publishRound() { await T.mp.publishRound(); },
-    // new game sets for the next round, written into the banks (Banks tab); worked out now, from the latest data
-    async rebuildBanks(a) {
+    async startNextRound(a) { await T.mp.startNextRound({ publish: !(a && a.publish === false), category: a && a.category }); await T.data.refresh(true); },
+    async publishRound(a) {
+      if (a && a.ifPending && !(await T.waitFor(() => T.findBtn(document.querySelector('main') || document, /^Publish$/), 4000))) return 'already published';
+      await T.mp.publishRound();
+    },
+    // "Any category (game time)": work out every game's arena for the round just started, then add the steps that
+    // set them (chunks of 8 games) and publish it
+    async smartPlan(a) {
+      let round = null, games = [];
+      for (let k = 0; k < 15 && !round; k++) {   // the new round can take a moment to show in the API
+        await T.data.refresh(true);
+        const D = T.data.D, r = D.rounds[D.rounds.length - 1];
+        if (r && String(r.status) !== 'completed') { games = await T.api.all(`/tournaments/${a.tid}/games?round=${r.roundId}`, 0); round = T.smart.roundToFill(D, games) ? r : null; }
+        if (!round) await T.sleep(1000);
+      }
+      if (!round) return 'every game already has an arena';
+      await note('Planning games by game time');
+      const { res } = await T.smart.make(T.data.D, games, round);
+      await T.saveT(a.tid, { smartLast: { roundId: round.roundId, at: Date.now(), notes: res.notes.slice(0, 20), mins: Math.round(Math.max(0, ...res.ends) / 60) } });
+      const steps = T.smart.fillSteps(a.tid, round.roundId, res.assign, a.publish);
+      job.steps.splice(job.i + 1, 0, ...steps); await save();
+      return `${res.assign.filter(x => !x.fixed).length} games planned · about ${Math.round(Math.max(0, ...res.ends) / 60)} min${res.notes.length ? ' · ' + res.notes.slice(0, 3).join('; ') : ''}`;
+    },
+    async smartAssign(a) {
+      const fresh = await T.api.all(`/tournaments/${a.tid}/games?round=${a.roundId}`, 0), has = new Set(fresh.filter(g => g.arenaId != null).map(g => g.gameId));
+      const P = counter(a.items.length);
+      for (const [i, x] of a.items.entries()) {
+        const what = `Group ${x.group} · Game ${x.index + 1} → ${x.name}`;
+        if (has.has(x.gameId) && !a.change) { P.tick(`${what} (already set)`); continue; }
+        P.to(i, what); await T.mp.setArenaById(x.gameId, x.arenaId, x.name); P.tick(what);
+      }
+    },
+    // a machine went down: its banks get a replacement (only those banks), then waiting games move to it
+    async downFix(a) {
       await T.data.refresh(true);
-      const D = T.data.D, st = T.tstate[a.tid] || {};
-      const players = (D.t.players || []).filter(p => !p.tournamentPlayer || p.tournamentPlayer.status !== 'inactive').length;
-      const n = Math.max((D.t.banks || []).filter(b => b.status !== 'inactive').length, Math.ceil(players / 4), 1);
-      const plan = T.bankplan.make(D, { n, size: D.t.gamesPerRound || 3, seed: Date.now() % 1e9, exclude: st.bankExclude || [], force: st.bankForce || [], extra: await T.bankplan.extras(D) });
-      await eachBank(plan.res.banks.map(b => ({ name: b.name, arenas: b.games.map(g => g.name) })), (b, tick) => T.mp.setBankArenas(b.name, b.arenas, tick), b => 2 * b.arenas.length + 1);
-      return `${plan.res.banks.length} banks rebuilt`;
+      const D = T.data.D, st = T.tstate[a.tid] || {}, extra = await T.bankplan.extras(D);
+      const changes = T.smart.downPlan(D, T.bankplan.estimates(D, st, extra), T.bankplan.estimates(D, st, extra, true));
+      const ok = changes.filter(c => !c.none);
+      await eachBank(ok.map(c => ({ name: c.bank, arenas: c.arenas })), (b, tick) => T.mp.setBankArenas(b.name, b.arenas, tick), b => 2 * b.arenas.length + 1);
+      const swaps = [...(st.downSwaps || []).filter(s => !ok.some(c => c.bank === s.bank && c.downId === s.downId)), ...ok.map(c => ({ bank: c.bank, downId: c.downId, down: c.down, replId: c.replId, repl: c.repl, at: Date.now() }))].slice(-40);
+      await T.saveT(a.tid, { downSwaps: swaps });
+      const r = T.data.currentRound();
+      if (r) {
+        const games = await T.api.all(`/tournaments/${a.tid}/games?round=${r.roundId}`, 0);
+        const move = T.smart.downGames(D, games, ok);
+        if (move.length) job.steps.splice(job.i + 1, 0, { tid: a.tid, page: 'matches', op: 'smartAssign', args: { tid: a.tid, roundId: r.roundId, items: move, change: true }, label: `Moving ${move.length} waiting game${move.length === 1 ? '' : 's'} off the down machine` });
+        await save();
+      }
+      const by = {}; ok.forEach(c => { (by[c.down] = by[c.down] || []).push(`${c.repl} in ${c.bank}`); });
+      const text = Object.entries(by).map(([d, l]) => `${d} is down: replaced by ${l.join(', ')}`).join(' · ');
+      const none = changes.filter(c => c.none).map(c => `${c.down} in ${c.bank}: no free game to use`);
+      if (text || none.length) T.panel.say([text, ...none].filter(Boolean).join(' · '), none.length ? 'err' : 'ok');
+      return [text, ...none].filter(Boolean).join(' · ') || 'nothing to replace';
+    },
+    // the machine is back: put it back where it was in its banks
+    async downRestore(a) {
+      await T.data.refresh(true);
+      const D = T.data.D, st = T.tstate[a.tid] || {}, am = T.data.arenaMap(D.t);
+      const mine = (st.downSwaps || []).filter(s => s.downId === a.downId);
+      const banks = [];
+      for (const s of mine) {
+        const b = (D.t.banks || []).find(x => x.name === s.bank && x.status !== 'inactive'); if (!b) continue;
+        const ids = b.arenaIds || []; if (!ids.includes(s.replId) || ids.includes(s.downId)) continue;
+        banks.push({ name: b.name, arenas: ids.map(id => (am[id === s.replId ? s.downId : id] || {}).name).filter(Boolean) });
+      }
+      await eachBank(banks, (b, tick) => T.mp.setBankArenas(b.name, b.arenas, tick), b => 2 * b.arenas.length + 1);
+      await T.saveT(a.tid, { downSwaps: (st.downSwaps || []).filter(s => s.downId !== a.downId) });
+      return banks.length ? `${mine[0].down} back in ${banks.map(b => b.name).join(', ')}` : 'nothing to put back';
     },
     // the newest round's waiting groups get banks (same choice as the Assign banks button's best option)
     async assignRound(a) {

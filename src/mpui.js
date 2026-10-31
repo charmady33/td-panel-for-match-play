@@ -146,6 +146,11 @@ TDP.mp = (() => {
     const b = T.findBtn(document, /^Start next round$/); if (!b) return false;
     T.click(b);
     const d = await needDialog();
+    if (opts.category != null) {   // Limit arenas to… ("-1" = Don't draw arenas)
+      const sel = await T.waitFor(() => d.querySelector('select#categoryId, select[name=categoryId]'), 3000);
+      if (!sel || ![...sel.options].some(o => o.value === String(opts.category))) { T.click(T.findBtn(d, 'Cancel')); fail('No "Limit arenas to…" choice in the Start round window.'); }
+      T.setVal(sel, String(opts.category)); await T.sleep(150);
+    }
     if (opts.publish === false) {
       const cb = [...d.querySelectorAll('input[type=checkbox]')].find(c => /Publish round immediately/i.test(T.cbLabel(c)));
       if (!cb) { T.click(T.findBtn(d, 'Cancel')); fail('No "Publish round immediately" option in the Start round window.'); }
@@ -377,6 +382,21 @@ TDP.mp = (() => {
     cands.sort((a, b) => T.txt(a).length - T.txt(b).length);
     return cands[0] || null;
   }
+  // one game by its id (Matches tab): the "Arena" button in its cell, or Details -> Change arena; arena chosen by id
+  async function setArenaById(gameId, arenaId, arenaName) {
+    const link = await T.waitFor(() => document.querySelector(`main a[href$="/matches/${gameId}"]`), 8000) || fail(`Game ${gameId} not found on the Matches tab.`);
+    const cell = link.closest('td') || link.parentElement;
+    const btn = [...cell.querySelectorAll('button')].find(b => /^(Arena|Assign arena)$/.test(T.txt(b)) && !b.closest('[data-tdp]'));
+    if (btn) T.click(btn);
+    else { link.click(); T.click(await needBtn(/^Change arena$/)); }
+    const d = await needDialog();
+    const sel = await T.waitFor(() => d.querySelector('select'), 4000) || fail('Arena list not found.');
+    const opt = [...sel.options].find(o => o.value === String(arenaId)) || [...sel.options].find(o => T.txt(o) === arenaName) || (T.click(T.findBtn(d, 'Cancel')), fail(`Arena "${arenaName}" is not in this tournament.`));
+    T.setVal(sel, opt.value);
+    T.click(await needBtn('Save', d));
+    await dialogClosed();
+    if (/\/matches\/\d+/.test(location.pathname)) { history.back(); await T.sleep(400); }
+  }
   async function setGameArena(names, arena) {
     const card = await T.waitFor(() => gameCard(names), 8000) || fail(`Game for ${names.join(', ')} not found on the Matches tab.`);
     const assign = T.findBtn(card, /^Assign arena$/);
@@ -418,5 +438,5 @@ TDP.mp = (() => {
     await dialogClosed();
   }
 
-  return { deleteTournament, setGameArena, gameCard, openAssign, groupHead, goTab, menu, playerRows, selectPlayers, setLabels, bulk, setActive, readIfpaRanks, addFromQualifying, setSeeds, closeRound, startNextRound, publishRound, createBank, setBankArenas, reorderBank, assignBank, enterResults, addArenas, resolveTie, needBtn, needDialog, dialogClosed };
+  return { deleteTournament, setArenaById, setGameArena, gameCard, openAssign, groupHead, goTab, menu, playerRows, selectPlayers, setLabels, bulk, setActive, readIfpaRanks, addFromQualifying, setSeeds, closeRound, startNextRound, publishRound, createBank, setBankArenas, reorderBank, assignBank, enterResults, addArenas, resolveTie, needBtn, needDialog, dialogClosed };
 })();

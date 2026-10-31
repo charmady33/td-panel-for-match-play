@@ -78,7 +78,7 @@
         try { const rs = rows(await api(`/tournaments/${t.tournamentId}/rounds`)).sort((a, b) => (a.index ?? a.roundId) - (b.index ?? b.roundId)); const r = rs[rs.length - 1]; if (r) roundOf.set(t.tournamentId, r.name || ''); } catch (e) { /* skip */ }
       }
       const st = await chrome.storage.local.get(null);
-      const auto = id => { const x = st['t:' + id] || {}; return x.auto || x.autoBanks || x.autoAssign; };
+      const auto = id => { const x = st['t:' + id] || {}; return x.auto || x.autoAssign; };
       const row = (t, sub) => `<div class="ev${sub ? ' sub' : ''}"><div class="top"><a href="#" data-go="${t.tournamentId}/" class="nm">${esc(t.name)}</a>${badge(t.status)}${auto(t.tournamentId) ? '<span class="b a" title="An automatic option is on - Chrome watches it in the background">Auto</span>' : ''}</div>
         ${roundOf.get(t.tournamentId) ? `<div class="s">${esc(roundOf.get(t.tournamentId))}</div>` : ''}
         <div class="lk">${[['', 'Overview'], ['matches', 'Matches'], ['players', 'Players'], ['standings', 'Standings']].map(([p, l]) => `<a href="#" data-go="${t.tournamentId}/${p}">${l}</a>`).join(' · ')}</div></div>`;

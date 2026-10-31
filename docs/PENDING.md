@@ -22,6 +22,7 @@ Reference: Clark's artifact "Pinball Tournament Bank Builder" — its
 - Test: 14 games × 2/bank, 1–12 banks, 200 arrangements each, plus pins/picks/↻ → zero in-bank repeats.
 
 ## 36. Every game played equally across qualifying
+**Superseded (Clark):** bank building does not consider plays so far (item 42); equal play lives in item 41.
 - Count actual plays per game this qualifying (from Matchplay games) + planned banks for the round.
 - No game gets another turn until all others caught up (counts differ by ≤ 1). Applies to repeats and hold-outs.
 - Priority: never twice in a bank > equal play > era spread / bank times / spacing / avoid earlier pairs.
@@ -55,3 +56,6 @@ Reference: Clark's artifact "Pinball Tournament Bank Builder" — its
 - Delete test tournaments: one real run hung (helper frame never started a step; recorder showed no menu opened for
   25 s, then the tab fallback also didn't move). A later run worked (all old test tournaments deleted). 0.11.2 added
   step limits, heartbeat, a 60 s watchdog and a Details log on "Update stopped" — if it happens again, read Details.
+
+# Built
+- 41 and 42 shipped in 0.13.0 (live-tested on test tournament #281201 "Game time test (extension)").

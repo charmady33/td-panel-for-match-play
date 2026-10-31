@@ -51,6 +51,7 @@ var TDP = window.TDP || (window.TDP = {});
     T.flag.swap();
     if (T.data.D.t) { T.inpage.render(); T.embed.render(); T.panel.render(); }
     T.deltest.render();   // (Organized page: no tournament open)
+    T.smart.decorate();   // Start next round window: our "Any category (game time)" choice
     if (T.jobs.get()) T.busy.render();
   };
   new MutationObserver(ms => {
@@ -66,7 +67,7 @@ var TDP = window.TDP || (window.TDP = {});
     if (D.isTD === false && T.settings.token) { T.panel.unmount(); return; }   // not your tournament: stay out of the way
     T.panel.mount(); T.panel.render();
     T.embed.render(); T.inpage.render();
-    autoTick().then(autoBanks).then(autoAssign).then(autoFill);
+    autoTick().then(autoAssign).then(autoFill).then(() => T.smart.downCheck());
   });
   T.jobs.on(() => { T.panel.render(); T.embed.render(); T.busy.render(); T.inpage.render(); T.deltest.render(); });
   // Matchplay doesn't push changes: when the API shows something new (a score from a phone, a new round…),
@@ -114,11 +115,13 @@ var TDP = window.TDP || (window.TDP = {});
       if (!go || !(T.tstate[tid] || {}).auto) return state('cancelled - will check again');
       const steps = [{ tid, page: 'matches', op: 'closeRound', label: `Closing ${r.name}` }];
       const stt = T.tstate[tid] || {}, banksOn = /bank/i.test(D.t.arenaAssignment || '');
-      const rebuild = banksOn && stt.autoBanks && !isFinals(D), assign = banksOn && stt.autoAssign;   // finals keep their banks
-      if (!last) {
-        // Rebuild (Banks tab) and Automatic assign (Matches tab) are separate; with assign on, the round starts
-        // unpublished, gets its banks, then goes live
-        if (rebuild) steps.push({ tid, page: 'banks', op: 'rebuildBanks', args: { tid }, label: 'Rebuilding banks for the next round' });
+      const smart = stt.smartArenas && !isFinals(D), assign = banksOn && stt.autoAssign && !smart;
+      if (!last && smart) {
+        // "Any category (game time)": start without drawing arenas, set every game's arena, then publish
+        steps.push({ tid, page: 'matches', op: 'startNextRound', args: { publish: false, category: '-1' }, label: 'Starting the next round (not published yet)' });
+        steps.push({ tid, page: 'matches', op: 'smartPlan', args: { tid, publish: true }, label: 'Working out the arenas by game time' });
+      } else if (!last) {
+        // Automatic assign (Matches tab): the round starts unpublished, gets its banks, then goes live
         steps.push({ tid, page: 'matches', op: 'startNextRound', args: { publish: !assign }, label: assign ? 'Starting the next round (not published yet)' : 'Starting the next round' });
         if (assign) {
           steps.push({ tid, page: 'matches', op: 'assignRound', args: { tid }, label: 'Assigning a bank to each group' });
@@ -135,9 +138,8 @@ var TDP = window.TDP || (window.TDP = {});
   let assignBusy = false;
   async function autoAssign() {
     const D = T.data.D, tid = D.tid, st = T.tstate[tid] || {};
-    // with Rebuild on as well, the rebuild task assigns after rebuilding (one task, never two at once)
-    if (!st.autoAssign || assignBusy || !D.t || !D.isTD || D.t.status !== 'started' || T.jobs.active()) return;
-    if (st.autoBanks && !isFinals(D)) { const c = T.bankplan.context(D); if (c.round && st.banksDoneRound !== c.round.roundId) return; }
+    // rounds started with "Any category (game time)" get their arenas from that instead
+    if (!st.autoAssign || (st.smartArenas && !isFinals(D)) || assignBusy || !D.t || !D.isTD || D.t.status !== 'started' || T.jobs.active()) return;
     const ctx = T.bankplan.context(D);
     if (!ctx.round || !ctx.groups.length || st.assignDoneRound === ctx.round.roundId) return;
     if (!(await lock(tid + ':assign'))) return;
@@ -172,25 +174,6 @@ var TDP = window.TDP || (window.TDP = {});
       await T.jobs.start(`Random results for ${r.name || 'this round'}`, [{ tid, page: 'matches', op: 'fillResults', args: { tid, roundId: r.roundId }, label: 'Entering random results' }]);
     } catch (e) { T.panel.say('Random results: ' + (e.message || e), 'err'); }
     finally { fillBusy = false; }
-  }
-
-  // ---------- automatic banks each round (Banks tab switch, default off) ----------
-  // "Rebuild banks every round" (Banks tab) when the round was started by hand: new banks, then assign them
-  let banksBusy = false;
-  async function autoBanks() {
-    const D = T.data.D, tid = D.tid, st = T.tstate[tid] || {};
-    if (!st.autoBanks || isFinals(D) || banksBusy || !D.t || !D.isTD || D.t.status !== 'started' || !/bank/i.test(D.t.arenaAssignment || '') || T.jobs.active()) return;
-    const ctx = T.bankplan.context(D);
-    if (!ctx.round || !ctx.groups.length || st.banksDoneRound === ctx.round.roundId) return;
-    if (!(await lock(tid + ':banks'))) return;
-    banksBusy = true;
-    try {
-      await T.saveT(tid, { banksDoneRound: ctx.round.roundId });   // once per round, even if the TD stops the task
-      const steps = [{ tid, page: 'banks', op: 'rebuildBanks', args: { tid }, label: 'Rebuilding banks' }];
-      if (st.autoAssign) steps.push({ tid, page: 'matches', op: 'assignRound', args: { tid }, label: 'Assigning a bank to each group' });
-      await T.jobs.start(`Rebuild banks for ${ctx.round.name}`, steps);
-    } catch (e) { T.panel.say('Rebuild banks: ' + (e.message || e), 'err'); }
-    finally { banksBusy = false; }
   }
 
   // ---------- opened by the background watcher (minimized window, no tab of this tournament was open) ----------

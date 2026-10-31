@@ -58,8 +58,8 @@ TDP.bankplan = (() => {
   }
   const SRC_NAME = { live: 'This event', qual: 'Qualifying', past: 'Matchplay IDs', hist: 'Past events' };
   const breakdownText = v => ['live', 'qual', 'past', 'hist'].filter(x => v && v[x]).map(x => `${SRC_NAME[x]} ${T.fmtDur(v[x].avg)} (${v[x].count}${v[x].dropped ? `, ${v[x].dropped} extreme left out` : ''})`).join(' · ') + ' - middle values, combined by game count';
-  function estimates(D, st, extra) {
-    const arenas = (D.t.arenas || []).filter(a => !a.tournamentArena || a.tournamentArena.status !== 'inactive');
+  function estimates(D, st, extra, all) {   // all: down (disabled) machines too
+    const arenas = (D.t.arenas || []).filter(a => all || !a.tournamentArena || a.tournamentArena.status !== 'inactive');
     const src = sources(D, st, extra);
     return arenas.map(a => {
       const era = T.banks.eraOf(a), v = src[lc(a.name)];

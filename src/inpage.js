@@ -193,7 +193,7 @@ TDP.inpage = (() => {
       const nb = (D.t.banks || []).filter(b => b.status !== 'inactive').length;
       bankRow = `<div class="cb gap" style="border-top:1px solid var(--line);flex-wrap:wrap;align-items:center">
         <button class="btn sm" data-act="assign" ${need && nb && !T.jobs.active() ? '' : 'disabled'}>Assign banks</button>
-        <label class="gap" title="Each new round, give every group a bank automatically${st.autoBanks ? ' (after the banks are rebuilt - Banks tab)' : ''}"><input type="checkbox" data-act="autoAssign" ${st.autoAssign ? 'checked' : ''}> <span class="lab">Automatic</span></label>
+        <label class="gap" title="Each new round, give every group a bank automatically${st.smartArenas ? ' (not while rounds use Any category (game time))' : ''}"><input type="checkbox" data-act="autoAssign" ${st.autoAssign ? 'checked' : ''}> <span class="lab">Automatic</span></label>
         <span class="small flex1">${!nb ? 'No banks yet - make them on the Banks tab.' : need ? `${waiting} group${waiting === 1 ? '' : 's'} in ${T.esc(ctx.round.name || 'this round')} need${waiting === 1 ? 's' : ''} a bank${st.autoAssign ? ' - assigning automatically' : ''}.` : sum.length ? `All ${sum.length} group${sum.length === 1 ? ' has' : 's have'} banks.` : 'Every group has its games.'}</span>
       </div>`;
     }

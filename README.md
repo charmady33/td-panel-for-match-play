@@ -55,6 +55,7 @@ Your settings, API token and saved tournament data stay as they are.
   - **Resolve ties page**: important ties are outlined, with the reason shown on each card
   - **Matches tab**:
     - the **Auto close round & start next round** checkbox and its status
+    - **Start next round → Limit arenas to… → Any category (game time)**: every game gets its arena right away - no machine shared at the same time, no game twice in a round, every game played equally, groups finishing together; a repeat of a game a player already had is a last resort and is spread over the players. Remembered per tournament; works with Auto close/start
     - finals groups with a tie for an advancing spot, or any tie in the final, are outlined
   - **Finals Players tab (each A/B/C finals)**: **Finals check-in**, shown once qualifying is completed
     - the qualifiers in seed order, plus 3 backups
@@ -69,6 +70,7 @@ Your settings, API token and saved tournament data stay as they are.
   - games are added to Matchplay in that order (using the bank's Re-order)
   - **Another arrangement** never repeats one already shown or created, and keeps bank times balanced
   - **⚙ Settings**: each game Use / Never / Always; time sources
+  - banks are built once and lock when the event starts. A machine you deactivate (Arenas tab) is replaced automatically in the banks that hold it - only those banks change - and waiting games move to the replacement; **Put … back in its banks** appears when it works again
 - **Arenas tab (in Matchplay)**:
   - **Display**: EM / SS / DMD / **LCD**. LCD comes from Matchplay's OPDB data (e.g. Ninja Eclipse); a menu per game overrides it, saved for that arena in every tournament. Bank Builder balances all four; tiebreaker draws count LCD as "New" with DMD
   - **This event**: running average game time; **Combined**: this event + qualifying + Matchplay IDs + ticked past events, weighted by games (what Bank Builder uses; hover for the breakdown)

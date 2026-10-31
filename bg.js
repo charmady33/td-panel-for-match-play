@@ -1,7 +1,7 @@
 /* global chrome */
 // Background watcher: runs while Chrome is open, even with no Matchplay tab.
 // About once a minute: your in-progress tournaments (official API, your own token). For one with an automatic
-// option on (Auto close/start, Rebuild banks every round, Assign banks · Automatic) that needs something done and
+// option on (Auto close/start, Assign banks · Automatic) that needs something done and
 // has no tab open, the tournament opens in its own minimized window; the extension there does the work (slowly,
 // Chrome slows hidden windows) and the window closes when it's done. A Chrome notification says what happened.
 // Also keeps the toolbar badge = number of your tournaments in progress.
@@ -64,7 +64,7 @@ async function tick() {
   const runs = await store.get('bg:runs', {});
   for (const t of started) {
     const tid = t.tournamentId, st = await store.get('t:' + tid, {});
-    if (!(st.auto || st.autoBanks || st.autoAssign)) continue;
+    if (!(st.auto || st.autoAssign)) continue;
     const run = runs[tid];
     if (run && run.windowId) {   // already working on it: give up waiting after 20 min and tell the TD
       const alive = await chrome.windows.get(run.windowId).then(() => true, () => false);
@@ -90,7 +90,7 @@ async function needs(tid, st) {
   const games = rows(await api(`/tournaments/${tid}/games?round=${r.roundId}`)).filter(g => !g.bye);
   if (!games.length) return null;
   const noBank = games.some(g => g.set !== 9999 && g.arenaId == null && g.bankId == null);
-  if ((st.autoBanks || st.autoAssign) && noBank && st.assignDoneRound !== r.roundId && st.banksDoneRound !== r.roundId)
+  if (st.autoAssign && !st.smartArenas && noBank && st.assignDoneRound !== r.roundId && st.banksDoneRound !== r.roundId)
     return { sig: `banks:${r.roundId}`, what: `${r.name || 'A new round'} needs banks` };
   if (st.auto && games.every(g => String(g.status) === 'completed'))
     return { sig: `close:${r.roundId}`, what: `${r.name || 'The round'} is done` };
