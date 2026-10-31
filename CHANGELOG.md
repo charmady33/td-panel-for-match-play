@@ -2,6 +2,9 @@
 
 All notable changes, newest first. Versions follow [semantic versioning](https://semver.org/): new features bump the middle number, fixes the last.
 
+## 0.18.2 - 2026-10-31
+- **Assign Bank/Order**: type a number and press Tab to go to the next player (Shift+Tab back). A box's list only shows the numbers still free. The bank dropdown shows each bank's games ("Bank 2 – Aztec, Cinema, Dune"), and the chosen bank's games are listed under it, one per row in bold.
+
 ## 0.18.1 - 2026-10-31
 - **Assign Bank/Order** order boxes: click a box for a 1-2-3-4 list, or just type the number (only 1…N is accepted, and it replaces what was there). The player gets that number and the others shift to make room (A=1 B=2 C=3 D=4, A types 4 → A=4 D=3 C=2 B=1). Once all but one have a number, the last fills itself. Clicking away keeps the number.
 

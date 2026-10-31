@@ -38,6 +38,17 @@ const bundle = order.map(f => fs.readFileSync(path.join(__dirname, '..', f), 'ut
   await page.keyboard.type('3'); console.log('C types 3 (D fills itself):', await ord());
   await box(0).click(); await page.keyboard.type('4'); console.log('A types 4 (others shift):', await ord());
   await box(1).click(); await page.locator('#tdp-bankorder .dh').click(); await page.waitForTimeout(100); console.log('B clicked then away (kept):', await ord(), '| list closed:', await page.evaluate(() => !document.getElementById('tdp-bankorder') || !document.getElementById('tdp-bankorder').shadowRoot.querySelector('.pm')));
+  // Tab: number then Tab moves to the next player's box; the list only shows free numbers
+  await page.evaluate(() => { const r = document.getElementById('tdp-bankorder'); r && r.shadowRoot.querySelector('[data-act=close]').click(); }); await page.evaluate(() => { window.__job = null; });
+  await page.evaluate(() => document.querySelector('[data-tdp=abtn]').click()); await page.waitForTimeout(300);
+  await box(0).click(); await page.keyboard.type('1'); await page.keyboard.press('Tab'); await page.waitForTimeout(150);
+  console.log('after 1 + Tab: focus on box', await page.evaluate(() => { const r = document.getElementById('tdp-bankorder').shadowRoot; return [...r.querySelectorAll('input[data-p]')].indexOf(r.activeElement); }), '| list:', await page.evaluate(() => [...document.getElementById('tdp-bankorder').shadowRoot.querySelectorAll('[data-pick]')].map(b => b.textContent).join('')));
+  await page.keyboard.type('3'); await page.keyboard.press('Tab'); await page.waitForTimeout(150); await page.keyboard.type('2');
+  console.log('typed 1,3,2 with Tab:', await ord());
+  // bank: games in the dropdown and listed under it
+  await page.evaluate(() => { const r = document.getElementById('tdp-bankorder').shadowRoot, s = r.querySelector('[data-f=bank]'); s.value = s.options[2].value; s.dispatchEvent(new Event('change', { bubbles: true })); });
+  console.log('bank option:', await page.evaluate(() => document.getElementById('tdp-bankorder').shadowRoot.querySelector('[data-f=bank]').options[2].text), '| listed:', await page.evaluate(() => [...document.getElementById('tdp-bankorder').shadowRoot.querySelectorAll('ol li b')].map(b => b.textContent).join(' / ')));
+  await page.screenshot({ path: process.argv[2] + '/bankorder.png' });
   console.log('save:', await page.evaluate(async () => { const r = document.getElementById('tdp-bankorder'); if (!r) return 'window closed by background click'; r.shadowRoot.querySelector('[data-act=save]').click(); await new Promise(x => setTimeout(x, 200)); return JSON.stringify(window.__job && window.__job.s.map(x => x.op + ' ' + JSON.stringify(x.args))); }));
   console.log('no order (still saves):', await page.evaluate(async () => { window.__job = null; document.querySelector('[data-tdp=abtn]').click(); await new Promise(x => setTimeout(x, 200)); const r = document.getElementById('tdp-bankorder').shadowRoot; r.querySelector('[data-act=save]').click(); await new Promise(x => setTimeout(x, 200)); return JSON.stringify(window.__job && window.__job.s.map(x => x.op)); }));
   console.log('status line:', await page.evaluate(() => (document.getElementById('tdp-auto') ? document.getElementById('tdp-auto').shadowRoot.textContent : 'none').replace(/\s+/g, ' ').slice(-200)));
