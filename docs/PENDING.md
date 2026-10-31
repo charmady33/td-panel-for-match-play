@@ -49,3 +49,4 @@ Reference: Clark's artifact "Pinball Tournament Bank Builder" — its
 - 37, 38, 43-47 shipped in 0.14.0.
 - 48-53 shipped in 0.15.0.
 - 54 shipped in 0.15.1.
+- 55-57 shipped in 0.16.0 (57 live-tested on test tournament #281230 "Quick test (extension)").

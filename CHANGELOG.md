@@ -2,6 +2,11 @@
 
 All notable changes, newest first. Versions follow [semantic versioning](https://semver.org/): new features bump the middle number, fixes the last.
 
+## 0.16.0 - 2026-10-31
+- **Quick test setup**: on Matchplay's Create new tournament page, picking **Test tournament** shows Players / Arenas / Arena mix (remembered). After Create tournament the extension adds that many of your existing players (random) - any shortfall as "Test Player N" (made once, reused next time) - and that many of your existing arenas, spread over EM / SS / DMD or random. Only for a new Test tournament.
+- **No more locked pages after an update**: a tab that was open while the extension was updated now lifts its cover and shows "TD Panel was updated - reload this page (F5) to carry on" (a running task continues after the reload). This was why Delete test tournaments looked stuck.
+- **Finals eligibility window**: the cut boxes line up, the grey notes are gone, and "must be bigger than the B cut" is only checked when you leave the box (or Enter / Apply) - not while you're typing.
+
 ## 0.15.1 - 2026-10-31
 - **Even round lengths** with Any category (game time): each round takes its share of each era (long modern games spread over the night instead of bunched into every other round), and every group aims at the same length (a long game paired with a short one). Every game is still played equally (within 1). Simulated on "test new games" (43 games, 12 groups × 2, 8 rounds): Max est. went from 21/34/21/34/29/26/29/26 to 26-29 every round.
 - The group **Est.** on the Matches tab says "(era guess)" when none of its games has a measured time yet.

@@ -1,7 +1,7 @@
 // TD Panel for Match Play - shared helpers. Every file adds to the one global namespace TDP.
 /* global chrome */
 var TDP = window.TDP || (window.TDP = {});
-TDP.VERSION = '0.15.1';
+TDP.VERSION = '0.16.0';
 
 // the hidden worker frame (worker.js): a copy of Matchplay inside the TD's tab that makes the changes
 TDP.isFrame = (() => { try { return window.top !== window && window.name === 'tdp-worker'; } catch (e) { return false; } })();
@@ -13,6 +13,12 @@ TDP.warn = (...a) => console.warn('[TD Panel]', ...a);
 
 // ---------- storage: chrome.storage.local, or localStorage when injected for testing ----------
 TDP.hasChrome = typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local;
+// the extension was updated/reloaded while this tab was open: this copy can't read or save any more (Chrome doesn't
+// put the new version into open tabs). main.js then lifts any cover and asks for a reload.
+TDP.dead = false;
+TDP.alive = () => { if (!TDP.hasChrome) return true; try { return !!(chrome.runtime && chrome.runtime.id); } catch (e) { return false; } };
+TDP.onDead = null;
+const deadCheck = e => { if (/context invalidated/i.test(String(e && e.message || e)) && TDP.onDead) TDP.onDead(); };
 TDP.store = {
   async get(key, def = null) {
     try {
@@ -24,7 +30,7 @@ TDP.store = {
     try {
       if (TDP.hasChrome) await chrome.storage.local.set({ [key]: val });
       else localStorage.setItem('tdp:' + key, JSON.stringify(val));
-    } catch (e) { TDP.warn('store.set', e); }
+    } catch (e) { deadCheck(e); if (!TDP.dead) TDP.warn('store.set', e); }
   },
   async del(key) {
     try { if (TDP.hasChrome) await chrome.storage.local.remove(key); else localStorage.removeItem('tdp:' + key); } catch (e) { /* ignore */ }

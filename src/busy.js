@@ -171,5 +171,5 @@ TDP.busy = (() => {
     render();
   }
 
-  return { render, freeze, still };
+  return { render, freeze, still, release: hideCover };
 })();

@@ -24,6 +24,22 @@ const bundle = order.map(f => fs.readFileSync(path.join(__dirname, '..', f), 'ut
   console.log('reopened window:', await page.evaluate(() => { const h = document.getElementById('tdp-elig-dlg'); return h ? h.shadowRoot.querySelector('.db').innerText.replace(/\n+/g, ' | ').slice(0, 700) : 'not open'; }));
   console.log('B cut box:', await page.evaluate(() => document.getElementById('tdp-elig-dlg').shadowRoot.querySelector('[data-cut=B]').value));
   await page.screenshot({ path: process.argv[2] + '/elig.png' });
+  // C cut: no error while typing 2…2000; an out-of-order value shows the error only after leaving the box
+  const R = 'document.getElementById("tdp-elig-dlg").shadowRoot';
+  await page.evaluate(`${R}.querySelector('[data-act=more]').click()`); await page.waitForTimeout(200);
+  await page.locator('#tdp-elig-dlg [data-cut=C]').click();
+  const errs = [];
+  for (const ch of '2000') { await page.keyboard.type(ch); await page.waitForTimeout(700); errs.push(await page.evaluate(`[...${R}.querySelectorAll('.callout.err')].some(e => e.style.display !== 'none' && e.innerText.trim())`)); }
+  console.log('error while typing 2,20,200,2000:', errs.join(','));
+  await page.keyboard.press('Tab'); await page.waitForTimeout(300);
+  console.log('after Tab (2000 > B):', await page.evaluate(`[...${R}.querySelectorAll('.callout.err')].some(e => e.style.display !== 'none' && e.innerText.trim())`));
+  await page.locator('#tdp-elig-dlg [data-cut=C]').fill('500'); await page.waitForTimeout(700);
+  const during = await page.evaluate(`[...${R}.querySelectorAll('.callout.err')].some(e => e.style.display !== 'none' && e.innerText.trim())`);
+  await page.keyboard.press('Tab'); await page.waitForTimeout(300);
+  console.log('500: while typing', during, '· after Tab', await page.evaluate(`(${R}.querySelector('.callout.err')||{}).innerText`));
+  const xs = await page.evaluate(`[...${R}.querySelectorAll('.cut input')].map(i => Math.round(i.getBoundingClientRect().left))`);
+  console.log('box left edges (should match):', xs.join(','));
+  await page.screenshot({ path: process.argv[2] + '/elig-c.png' });
   console.log('errors', errors);
   await browser.close();
 })();

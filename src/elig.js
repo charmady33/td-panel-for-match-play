@@ -89,7 +89,7 @@ TDP.elig = (() => {
 .dlg{background:var(--card);border-radius:8px;box-shadow:0 20px 40px rgba(0,0,0,.25);width:600px;max-width:100%;font-family:ui-sans-serif,system-ui,sans-serif;font-size:14px;color:var(--text)}
 .dh{padding:16px 20px 8px;font-size:18px;font-weight:500}.db{padding:4px 20px 16px;max-height:65vh;overflow:auto}
 .df{background:var(--head);padding:12px 20px;display:flex;justify-content:flex-end;gap:8px;border-radius:0 0 8px 8px;flex-wrap:wrap}
-.cut{display:flex;align-items:center;gap:8px;margin:6px 0}.cut input{width:110px}
+.cut{display:grid;grid-template-columns:56px 74px 110px 1fr;align-items:center;gap:8px;margin:6px 0}.cut input{width:110px;box-sizing:border-box}
 table{width:100%;border-collapse:collapse}td,th{padding:4px 6px;border-top:1px solid var(--line);text-align:left}`;
   // preset = the cuts typed before the window closed to load IFPA ranks (it reopens with them)
   function open(D, preset) {
@@ -97,7 +97,7 @@ table{width:100%;border-collapse:collapse}td,th{padding:4px 6px;border-top:1px s
     const cuts = {}; ds.forEach(d => { if (st[d.letter] && st[d.letter].cutoff) cuts[d.letter] = +st[d.letter].cutoff; });
     if (preset && preset.cuts) Object.assign(cuts, preset.cuts);
     cur = { cuts, shown: Math.max(1, (preset && preset.shown) || 0, ds.filter(d => cuts[d.letter]).length) };
-    if (!host) { host = document.createElement('div'); host.id = 'tdp-elig-dlg'; host.attachShadow({ mode: 'open' }); host.shadowRoot.addEventListener('click', onClick); host.shadowRoot.addEventListener('input', onInput); document.documentElement.appendChild(host); }
+    if (!host) { host = document.createElement('div'); host.id = 'tdp-elig-dlg'; host.attachShadow({ mode: 'open' }); host.shadowRoot.addEventListener('click', onClick); host.shadowRoot.addEventListener('input', onInput); host.shadowRoot.addEventListener('change', onInput); host.shadowRoot.addEventListener('focusout', e => { if (e.target.dataset && e.target.dataset.cut) { const next = e.relatedTarget; if (next && next.closest && next.closest('[data-act]')) return lite(); setTimeout(() => { if (!cur) return; draw(); const L = next && next.dataset && next.dataset.cut; if (L) { const i = host.shadowRoot.querySelector(`[data-cut="${L}"]`); if (i) i.focus(); } }, 0); } }); document.documentElement.appendChild(host); }
     draw();
   }
   function close() { if (host) host.remove(); host = null; cur = null; }
@@ -110,22 +110,30 @@ table{width:100%;border-collapse:collapse}td,th{padding:4px 6px;border-top:1px s
     const D = T.data.D, ds = divs(D).slice(1), ranks = Object.keys(T.finals.ranksOf(D)).length;
     const err = valid(ds), target = want(D, cur.cuts), groups = err ? [] : changes(D, target);
     const tally = {}; let none = 0; for (const [, l] of target) { if (l) tally[l] = (tally[l] || 0) + 1; else none++; }
-    const rows = ds.slice(0, cur.shown).map(d => `<div class="cut"><b style="width:56px">${d.letter} cut</b>IFPA rank <input type="number" min="1" data-cut="${d.letter}" value="${cur.cuts[d.letter] || ''}" placeholder="e.g. 1000"> or better can't play in ${d.letter}${d.letter !== ds[0].letter ? ' <span class="small">(empty = everyone can)</span>' : ''}${d.extra ? ` <span class="small">(no ${d.letter} cut line in Matchplay yet)</span>` : ''}</div>`).join('');
+    const rows = ds.slice(0, cur.shown).map(d => `<div class="cut"><b>${d.letter} cut</b><span>IFPA rank</span><input type="number" min="1" data-cut="${d.letter}" value="${cur.cuts[d.letter] || ''}" placeholder="e.g. 1000"><span>or better can't play in ${d.letter}</span></div>`).join('');
     const pm = T.data.playerMap(D.qual);
     const list = groups.flatMap(g => g.ids.map(id => `<tr><td>${T.esc((pm[id] || {}).name || id)}</td><td class="small">${T.finals.ranksOf(D)[id] || 'unranked'}</td><td>${T.esc(g.labels.filter(isEligLabel).join(', ') || 'no label')}</td></tr>`)).join('');
     host.shadowRoot.innerHTML = `<style>${CSS()}</style><div class="wrap${document.documentElement.classList.contains('dark') ? ' dark' : ''}"><div class="ov" data-act="bg"><div class="dlg">
       <div class="dh">Finals eligibility</div><div class="db">
         ${ranks ? `<div class="small mb">${ranks} players have an IFPA rank (read from Matchplay's IFPA rankings list). <button class="btn sm sec" data-act="ranks">Reload ranks</button></div>` : `<div class="callout warn">IFPA ranks aren't loaded yet. <button class="btn sm" data-act="ranks">Load IFPA ranks</button></div>`}
         ${rows}
+        <div class="callout err mt" data-f="err" style="display:none"></div>
         ${cur.shown < ds.length ? `<button class="btn sm sec" data-act="more">+ Add another cut (${ds[cur.shown].letter})</button>` : ''}
         ${err ? `<div class="callout err mt">${T.esc(err)}</div>` : `<div class="lab mt">Result</div><div class="small mb">${Object.entries(tally).sort().map(([l, n]) => `${T.esc(l)}: ${n}`).join(' · ') || 'Nobody ineligible'} · no label: ${none}</div>
           ${groups.length ? `<div class="small mb">${groups.reduce((s, g) => s + g.ids.length, 0)} player${groups.reduce((s, g) => s + g.ids.length, 0) === 1 ? '' : 's'} change:</div><table>${list}</table>` : '<div class="small">Labels already match these cuts.</div>'}`}
-      </div><div class="df"><button class="btn sec" data-act="close">Cancel</button><button class="btn" data-act="apply" ${err || !ranks ? 'disabled' : ''}>${groups.length ? `Apply to ${groups.reduce((s, g) => s + g.ids.length, 0)} players` : 'Save cuts'}</button></div></div></div></div>`;
+      </div><div class="df"><button class="btn sec" data-act="close">Cancel</button><button class="btn" data-act="apply" data-noranks="${ranks ? '' : 1}" ${err || !ranks ? 'disabled' : ''}>${groups.length ? `Apply to ${groups.reduce((s, g) => s + g.ids.length, 0)} players` : 'Save cuts'}</button></div></div></div></div>`;
   }
+  // leaving a box for a button: show the order check without redrawing (so the button's click still lands)
+  function lite() {
+    const err = valid(divs(T.data.D).slice(1)), box = host.shadowRoot.querySelector('[data-f=err]'), ap = host.shadowRoot.querySelector('[data-act=apply]');
+    if (box) { box.textContent = err || ''; box.style.display = err ? '' : 'none'; }
+    if (ap) ap.disabled = !!err || ap.dataset.noranks === '1';
+  }
+  // typing only stores the number; the order check and the result list follow when you leave the box (or Enter)
   function onInput(e) {
     const L = e.target.dataset && e.target.dataset.cut; if (!L) return;
     const v = parseInt(e.target.value, 10); if (v > 0) cur.cuts[L] = v; else delete cur.cuts[L];
-    clearTimeout(onInput.t); onInput.t = setTimeout(() => { const f = host && host.shadowRoot.activeElement, pos = f && f.selectionStart; draw(); const i = host && host.shadowRoot.querySelector(`[data-cut="${L}"]`); if (i) { i.focus(); try { i.setSelectionRange(pos, pos); } catch (x) { /* number inputs */ } } }, 400);
+    if (e.type === 'change' && host.shadowRoot.activeElement === e.target) { draw(); const i = host.shadowRoot.querySelector(`[data-cut="${L}"]`); if (i) i.focus(); }   // Enter
   }
   async function onClick(e) {
     const a = e.target.closest('[data-act]'); if (!a || !cur) return;
@@ -135,6 +143,7 @@ table{width:100%;border-collapse:collapse}td,th{padding:4px 6px;border-top:1px s
     if (act === 'more') { cur.shown++; return draw(); }
     if (act === 'ranks') { const keep = { what: 'elig', cuts: { ...cur.cuts }, shown: cur.shown }; close(); return T.jobs.start('Load IFPA ranks', [{ tid: qid, page: 'players', op: 'readRanks', args: { tid: qid }, label: "Reading Matchplay's IFPA Rankings" }], { after: keep }); }
     if (act === 'apply') {
+      if (valid(divs(D).slice(1))) return draw();   // out of order: show why (checked now, not while typing)
       const ds = divs(D).slice(1), st = { ...(qst(D).divs || {}) };
       ds.forEach(d => { st[d.letter] = { ...(st[d.letter] || {}), cutoff: cur.cuts[d.letter] || null, label: null }; });
       await T.saveT(qid, { divs: st });

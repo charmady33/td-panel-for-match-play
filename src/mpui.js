@@ -283,6 +283,60 @@ TDP.mp = (() => {
     await pickArenas(d, names, '', tick, 'This tournament');
   }
 
+  // ---------- quick test tournament: N existing players (random), N existing arenas (by era or random) ----------
+  const shuffle = a => { a = [...a]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+  async function listLoaded(d) {
+    const boxes = () => [...d.querySelectorAll('input[type=checkbox]')];
+    let last = -1, since = Date.now();
+    await T.waitFor(() => { const n = boxes().length; if (n !== last) { last = n; since = Date.now(); } return Date.now() - since > 500; }, 12000, 50);
+    return boxes();
+  }
+  // returns how many were added from the list; the rest (if any) go in by name on the Batch tab
+  async function addTestPlayers(n, tick = noTick) {
+    T.click(await needBtn(/^Add players$/, document.querySelector('main')));
+    let d = await needDialog();
+    const tab = T.findBtn(d, /^Existing players/); if (tab) T.click(tab);
+    const boxes = (await listLoaded(d)).filter(b => !b.disabled && !b.checked);
+    const names = boxes.map(b => T.cbFirst(b));
+    const pick = shuffle(boxes).slice(0, n);
+    for (const b of pick) { b.click(); await T.sleep(25); }
+    let added = 0;
+    if (pick.length) {
+      const btn = await T.waitFor(() => T.findBtn(d, /^Add \d+ players?$/), 4000) || fail('No "Add players" button in the list.');
+      added = +T.txt(btn).match(/\d+/)[0];
+      T.click(btn); await dialogClosed(15000); tick(`${added} existing players added`);
+    } else { T.click(T.findBtn(d, 'Close')); await dialogClosed(); }
+    const short = n - added;
+    if (short > 0) {
+      // "Test Player N": numbered after the ones you already have, so they're reused next time
+      const top = Math.max(0, ...names.map(x => +((x.match(/^Test Player (\d+)$/) || [])[1] || 0)));
+      T.click(await needBtn(/^Add players$/, document.querySelector('main')));
+      d = await needDialog();
+      T.click(await needBtn(/^Batch$/, d));
+      const ta = await T.waitFor(() => d.querySelector('textarea'), 4000) || fail('No Batch box in Add players.');
+      T.setVal(ta, Array.from({ length: short }, (_, i) => `Test Player ${top + i + 1}`).join('\n'));
+      await T.sleep(200);
+      T.click(await needBtn(/^Add players$/, d)); await dialogClosed(20000); tick(`${short} test players added by name`);
+    }
+    return { added, created: Math.max(0, short) };
+  }
+  async function addTestArenas(n, mix, tick = noTick) {
+    T.click(await needBtn(/^Add arenas$/, document.querySelector('main')));
+    const d = await needDialog();
+    const tab = T.findBtn(d, /^Existing arenas$/); if (tab) T.click(tab);
+    const rows = (await listLoaded(d)).filter(b => !b.disabled && !b.checked).map(b => { const name = T.cbFirst(b), m = T.cbLabel(b).slice(name.length).match(/\b(EM|SS|DMD)\b/); return { name, era: m ? m[1] : 'Other' }; });
+    let names;
+    if (mix === 'random') names = shuffle(rows).slice(0, n).map(r => r.name);
+    else {   // by era: take turns EM, SS, DMD (random within each)
+      const by = {}; shuffle(rows).forEach(r => (by[r.era] = by[r.era] || []).push(r));
+      const eras = ['EM', 'SS', 'DMD', 'Other'].filter(e => by[e]); names = [];
+      while (names.length < n && eras.some(e => by[e].length)) for (const e of eras) { if (names.length >= n) break; const r = by[e].shift(); if (r) names.push(r.name); }
+    }
+    if (!names.length) { T.click(T.findBtn(d, 'Close')); fail('No arenas in your Existing arenas list.'); }
+    await pickArenas(d, names, '', tick, 'This tournament');
+    return names.length;
+  }
+
   // ---------- Matches tab: enter one game's finishing order (test tournaments: random results) ----------
   // Finds the game's "Results" / "Enter results" button: the one in the box holding all its players, nearest the
   // column (or card) headed by its arena. In the dialog, tapping names in order sets 1st, 2nd…; Matchplay fills last.
@@ -438,5 +492,5 @@ TDP.mp = (() => {
     await dialogClosed();
   }
 
-  return { deleteTournament, setArenaById, setGameArena, gameCard, openAssign, groupHead, goTab, menu, playerRows, selectPlayers, setLabels, bulk, setActive, readIfpaRanks, addFromQualifying, setSeeds, closeRound, startNextRound, publishRound, createBank, setBankArenas, reorderBank, assignBank, enterResults, addArenas, resolveTie, needBtn, needDialog, dialogClosed };
+  return { deleteTournament, addTestPlayers, addTestArenas, setArenaById, setGameArena, gameCard, openAssign, groupHead, goTab, menu, playerRows, selectPlayers, setLabels, bulk, setActive, readIfpaRanks, addFromQualifying, setSeeds, closeRound, startNextRound, publishRound, createBank, setBankArenas, reorderBank, assignBank, enterResults, addArenas, resolveTie, needBtn, needDialog, dialogClosed };
 })();

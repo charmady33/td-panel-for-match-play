@@ -23,12 +23,28 @@ var TDP = window.TDP || (window.TDP = {});
 
   // the on/off switch (toolbar button): off = nothing on Matchplay's pages, no automatic options (a task already
   // running finishes, so Matchplay isn't left half-changed)
-  const off = () => !!T.settings.off;
+  const off = () => !!T.settings.off || T.dead;
   function teardown() {
     T.panel.unmount(); T.data.stop();
     document.querySelectorAll('[id^="tdp-"]').forEach(e => { if (!/^tdp-(worker|busy-card|cover|host)/.test(e.id)) e.remove(); });
     document.querySelectorAll('[data-tdp]').forEach(e => { if (e.closest('[id^="tdp-"]')) return; if (e.tagName === 'OPTION' || e.dataset.tdp === 'note' || e.dataset.tdpPlays || e.id === 'tdp-smart-hint' || e.dataset.tdp === 'timer') e.remove(); });
   }
+
+  // the extension was updated while this tab was open: never leave the page locked - lift the cover, stop this old
+  // copy, and ask for a reload (the saved task carries on after it)
+  function orphaned() {
+    if (T.dead) return; T.dead = true;
+    try { teardown(); } catch (e) { /* */ }
+    try { T.busy.release(); } catch (e) { /* */ }
+    if (T.worker) try { T.worker.close(); } catch (e) { /* */ }
+    const bar = document.createElement('div'); bar.id = 'tdp-dead';
+    bar.style.cssText = 'position:fixed;left:50%;top:12px;transform:translateX(-50%);z-index:2147483647;background:#fef3c7;color:#78350f;border:1px solid #fcd34d;border-radius:8px;padding:8px 14px;font:14px ui-sans-serif,system-ui,sans-serif;box-shadow:0 6px 20px rgba(0,0,0,.15);display:flex;gap:10px;align-items:center';
+    bar.innerHTML = '<span><b>TD Panel was updated</b> - reload this page (F5) to carry on. A task that was running continues after the reload.</span>';
+    const b = document.createElement('button'); b.textContent = 'Reload'; b.style.cssText = 'font:600 13px ui-sans-serif,system-ui,sans-serif;background:#4f46e5;color:#fff;border:0;border-radius:6px;padding:5px 12px;cursor:pointer'; b.onclick = () => location.reload();
+    bar.appendChild(b); document.body.appendChild(bar);
+  }
+  T.onDead = () => { if (!T.alive()) orphaned(); };
+  const deadTimer = setInterval(() => { if (!T.alive()) { clearInterval(deadTimer); orphaned(); } }, 3000);
 
   T.busy.render();   // mid-task reload: cover the page straight away
   if (!off()) bgRunner();
@@ -48,6 +64,7 @@ var TDP = window.TDP || (window.TDP = {});
     T.jobs.resume();   // a task in progress carries on straight away (it doesn't need the tournament data first)
     await T.data.setTournament(tid);
     T.embed.render();
+    T.quicktest.after(tid);   // just created with Quick test setup: add its players and arenas
   }
   onRoute();
   addEventListener('popstate', () => setTimeout(onRoute, 0));
@@ -62,6 +79,7 @@ var TDP = window.TDP || (window.TDP = {});
     T.flag.swap();
     if (T.data.D.t) { T.inpage.render(); T.embed.render(); T.panel.render(); }
     T.deltest.render();   // (Organized page: no tournament open)
+    T.quicktest.render();   // (Create new tournament page)
     T.smart.decorate();   // Start next round window: our "Any category (game time)" choice
     if (T.jobs.get()) T.busy.render();
   };

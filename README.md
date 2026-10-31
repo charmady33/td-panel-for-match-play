@@ -88,6 +88,7 @@ Your settings, API token and saved tournament data stay as they are.
   3. **Format notes**, ready to paste, with the Matchplay links
   4. **Submit**: link to IFPA and a checklist
   5. **Done**: until ticked, the Overview shows how many of IFPA's 45 days are left
+- **Create new tournament (Test)**: Quick test setup - how many players and arenas to add right after Create
 - **Toolbar button**: your events with links, an **on/off switch** for the whole extension, your API token, and Clear saved data for the open tournament
 
 - **Matches tab (bank tournaments)**: **Assign banks** gives each group of the new round one of your banks - games its players haven't played, avoiding any bank that shares 2+ games with one a player already had. Preview with **Another option**, then **Assign**. **Automatic** (off by default) does it for every new round without the preview. The bar then shows "Group 2 → Bank 4 · 11 of 12 new"

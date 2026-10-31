@@ -50,7 +50,7 @@ TDP.jobs = (() => {
   // the owner tab keeps an eye on its worker frame: finish up when it's done, take over if it stops responding
   let finishing = false;
   async function watchFrame() {
-    if (T.isFrame || !job || !mine() || job.done || job.error) return;
+    if (T.dead || T.isFrame || !job || !mine() || job.done || job.error) return;
     // this tab runs the steps itself: if nothing at all has happened for a minute, stop and say where it was
     if (job.runner === 'top') {
       if (!running && job.beat && Date.now() - job.beat > 60000) { job.error = `Nothing happened for a minute (${(job.sub && job.sub.text) || (job.steps[job.i] || {}).label || 'starting'}).`; await save(); }
@@ -163,6 +163,19 @@ TDP.jobs = (() => {
       const skipped = games.length - ready.length;
       return `${ready.length} game${ready.length === 1 ? '' : 's'} filled${skipped ? `, ${skipped} skipped (no arena yet - assign banks first)` : ''}`;
     },
+    // quick test setup: only ever on a Test tournament that hasn't started
+    async qtPlayers(a) {
+      const t = await T.data.loadTournament(a.tid, 0);
+      if (!t || t.test !== true || t.status !== 'planned') throw new Error('Quick test setup is only for a new Test tournament.');
+      const r = await T.mp.addTestPlayers(a.n, note);
+      return `${r.added} existing players${r.created ? ` + ${r.created} test players by name` : ''}`;
+    },
+    async qtArenas(a) {
+      const t = await T.data.loadTournament(a.tid, 0);
+      if (!t || t.test !== true || t.status !== 'planned') throw new Error('Quick test setup is only for a new Test tournament.');
+      const k = await T.mp.addTestArenas(a.n, a.mix, note);
+      return `${k} arenas added${k < a.n ? ` (only ${k} in your list)` : ''}`;
+    },
     async copyArenas(a) { const P = counter(a.names.length); await T.mp.addArenas(a.names, text => P.tick(text)); },
     // Matchplay may close the last round itself: read it fresh first; "already closed" is done, not an error
     async closeRound(a) {
@@ -271,7 +284,7 @@ TDP.jobs = (() => {
     if (running || !job || !runsHere()) return;
     running = true;
     try {
-      while (job && job.i < job.steps.length) {
+      while (job && job.i < job.steps.length && !T.dead) {
         const live = await T.store.get('job', null);   // stopped from another tab?
         if (!live || live.startedAt !== job.startedAt) { job = live; break; }
         const s = job.steps[job.i];
