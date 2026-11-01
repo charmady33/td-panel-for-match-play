@@ -60,6 +60,7 @@ Reference: Clark's artifact "Pinball Tournament Bank Builder" — its
 - 65 shipped in 0.18.3.
 - 66-67 shipped in 0.19.0.
 - 68 shipped in 0.19.1.
+- 84 shipped in 0.24.0 (item 39 "Pick past events" goes in the Game times window).
 - 80-83 shipped in 0.23.0.
 - 72-79 shipped in 0.22.0 (Results / Change player order boxes and the cutoff window checked against the real Match Play windows on test1 #281295; Set rank labels / Create playoffs drivers not run live).
 - 70-71 shipped in 0.21.0 (71 covers 35's era hold-out, "Not in any bank" + Include, and the in-bank repeat fix).

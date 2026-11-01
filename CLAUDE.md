@@ -1,11 +1,11 @@
 # TD Panel for Match Play — notes for Claude
 
 Chrome MV3 extension for pinball tournament directors on app.matchplay.events. Tools are built into Matchplay's own
-pages (no sidebar). Current version: **0.23.2** (see README.md for what each version added).
+pages (no sidebar). Current version: **0.24.0** (see README.md for what each version added).
 
 ## How the maintainer (Clark) wants to work
 - **Propose a plan first, then wait for "code it".** Don't change code until he says so. Number each proposed item
-  (the next free number is **84**; 35 and 39 are agreed and waiting — see docs/PENDING.md).
+  (the next free number is **85**; 35 and 39 are agreed and waiting — see docs/PENDING.md).
 - Edit files in place with targeted changes; don't rewrite whole files.
 - Explain in plain language; he's a TD, not a developer. Keep messages short and concrete.
 - Each release: bump `manifest.json` "version", `TDP.VERSION` in `src/util.js` and `package.json`; add the version at
@@ -54,7 +54,7 @@ pages (no sidebar). Current version: **0.23.2** (see README.md for what each ver
     check-in; `cutoffs.js` Manage cutoffs + IFPA rank cuts (labels via Matchplay's Set rank labels), TD/Scorekeeper labels,
     Create-page cutoffs/finals; `orderbox.js` 1-2-3-4 boxes (Results, Change player order, tie grid); `links.js` linked-events
     row above the tabs; PRIVACY.md + docs/store-listing.md for the Chrome Web Store; `bankbar.js` + `bankplan.js` + `banks.js` Bank Builder;
-    `arenatab.js` game times + categories; `timing.js` game timing rules; `ifpa.js` Submit to IFPA page;
+    `arenatab.js` game times + categories (Game times button after Add arenas); `timing.js` game timing rules; `ifpa.js` Submit to IFPA page;
     `smart.js` "Any category (game time)" round option (planner + Start round window) and down-machine bank fixes;
     `plays.js` Stats → Plays sub-tab; `timers.js` Matches group Est. + game timers, Stats Rounds Max est.; `quicktest.js` Quick test setup on Create new tournament; `rounds.js` "New rounds use" default + redo of rounds started elsewhere; `live.js` real-time socket for open tabs (bg.js has its own); `deltest.js` Delete test tournaments; `panel.js` header chip, toasts, token prompt; `main.js` wiring,
     one MutationObserver page watcher, auto close/start, auto banks/assign/fill, background-window runner.
@@ -91,7 +91,7 @@ pages (no sidebar). Current version: **0.23.2** (see README.md for what each ver
 
 ## Testing
 - `test/` — Playwright scripts that inject the bundle into mock Matchplay pages (API mocked with `page.route`), plus
-  unit scripts. Run with `node test/<file>.js [outDir]`. Useful ones: `flicker_ui.js` (tab switch: links row in every painted frame), `cutdrv_ui.js` (setCutoffs driver, empty + existing window), `v022_ui.js` (links row, Manage cutoffs, IFPA box, Results/order boxes, token), `cutoffs_unit.js`, `v021_ui.js` (bank preview era mix, Not in any bank, Include), `eramix_unit.js` (era share/spread), `v020_ui.js` (page data first; NOSTORE=1 = API fallback), `v019_ui.js` (down-machine window, bank clash Fix), `v016_ui.js` (New rounds use, redo, live events), `v0152_ui.js` (quick test box, update bar), `even_unit.js` (round lengths), `v015_ui.js` (timers, Max est., on/off), `v014_ui.js` (Plays tab, optional ties, vote Change…, results grid), `smart_unit.js` (game-time planner), `down_unit.js`
+  unit scripts. Run with `node test/<file>.js [outDir]`. Useful ones: `gt_ui.js` (Arenas tab Game times button/window), `flicker_ui.js` (tab switch: links row in every painted frame), `cutdrv_ui.js` (setCutoffs driver, empty + existing window), `v022_ui.js` (links row, Manage cutoffs, IFPA box, Results/order boxes, token), `cutoffs_unit.js`, `v021_ui.js` (bank preview era mix, Not in any bank, Include), `eramix_unit.js` (era share/spread), `v020_ui.js` (page data first; NOSTORE=1 = API fallback), `v019_ui.js` (down-machine window, bank clash Fix), `v016_ui.js` (New rounds use, redo, live events), `v0152_ui.js` (quick test box, update bar), `even_unit.js` (round lengths), `v015_ui.js` (timers, Max est., on/off), `v014_ui.js` (Plays tab, optional ties, vote Change…, results grid), `smart_unit.js` (game-time planner), `down_unit.js`
   (down machine in banks), `dup_unit.js` (bank duplicates),
   `sched_unit.js`, `gt.js` (bracket ties), `cascade.js` (finals standings ties), `embed_ui.js`
   (check-in; env CAP=1 / DONEJOB=1 / MOVEUP=1), `t6.js` (bank refresh via worker frame; PICK=1 picker),

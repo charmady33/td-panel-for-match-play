@@ -175,18 +175,21 @@ TDP.bankplan = (() => {
   }
   // past Matchplay tournaments by ID (same venue): per-arena times saved on this tournament
   async function loadPast(D, ids) {
-    const merged = {};
+    const merged = {}, info = [];
     for (const id of ids) {
       const t = await T.data.loadTournament(id, 3600e3), am = T.data.arenaMap(t);
       await T.logs.load(id, t && t.status === 'completed');
       const games = await T.api.all(`/tournaments/${id}/games`, 3600e3);
+      let n = 0;
       for (const [aid, v] of Object.entries(T.timing.arenaTimes(games))) {
         const k = lc((am[aid] || {}).name); if (!k) continue;
+        n += v.count;
         const m = merged[k] || (merged[k] = { count: 0, sum: 0, dropped: 0 }); m.count += v.count; m.sum += v.avg * v.count; m.dropped += v.dropped || 0;
       }
+      info.push({ id, name: (t && t.name) || ('#' + id), games: n });
     }
     const pastTimes = {}; for (const [k, m] of Object.entries(merged)) pastTimes[k] = { count: m.count, avg: m.sum / m.count, dropped: m.dropped };
-    await T.saveT(D.tid, { pastTimes, bankPast: ids.join(', ') });
+    await T.saveT(D.tid, { pastTimes, bankPast: ids.join(', '), pastInfo: info });
     return Object.keys(pastTimes).length;
   }
 

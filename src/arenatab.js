@@ -17,7 +17,7 @@ TDP.arenatab = (() => {
 
   function render(D) {
     const table = T.routePage() === 'arenas' && D && D.t && D.isTD ? document.querySelector('main table') : null;
-    if (!table) { document.querySelectorAll(`[${COL}]`).forEach(e => e.remove()); T.inpage.block('tdp-arena-times', null); return; }
+    if (!table) { document.querySelectorAll(`[${COL}]`).forEach(e => e.remove()); T.inpage.block('tdp-arena-times', null); const gb = document.getElementById('tdp-gtbtn'); if (gb) gb.remove(); return; }
     if (!extraBusy && (!extra || Date.now() - extraAt > 60e3)) refreshExtra(D).then(() => render(T.data.D));
     const st = T.tstate[D.tid] || {}, src = T.bankplan.sources(D, st, extra || {}), am = T.data.arenaMap(D.t);
     // header
@@ -63,25 +63,82 @@ TDP.arenatab = (() => {
       if (cells[1].dataset.k !== live) { cells[1].dataset.k = live; cells[1].innerHTML = live; }
       if (cells[2].dataset.k !== comb) { cells[2].dataset.k = comb; cells[2].innerHTML = comb; }
     }
-    // "Game times from" bar above the table
-    // outside the table's own box (Matchplay pins its select-all checkbox to that box): climb to the block that
-    // sits next to the Add / Add from qualifying / Actions row, and go right before it
-    let wrap = table;
-    while (wrap.parentElement && wrap.parentElement.tagName !== 'MAIN' && !T.findBtn(wrap.parentElement, /^Add from qualifying$|^Add…$|^Add\.\.\.$/)) wrap = wrap.parentElement;
-    const isFinals = D.qual && D.qual.tournamentId !== D.tid;
+    // item 84: one "Game times" button right after Matchplay's Add arenas (the old "Game times from" bar is gone)
+    T.inpage.block('tdp-arena-times', null);
+    button(D, st);
+  }
+  function button(D, st) {
+    const add = [...document.querySelectorAll('main button, main a')].find(b => /^Add arenas$/i.test(T.txt(b)) && !b.closest('[data-tdp]'));
+    let b = document.getElementById('tdp-gtbtn');
+    if (!add) { if (b) b.remove(); return; }
+    const ids = (st.bankPast || '').match(/\d+/g) || [];
+    const label = `Game times${ids.length ? ` · ${ids.length} ID${ids.length === 1 ? '' : 's'}` : ''}`;
+    const anchor = add.closest('span.inline-flex, span.rounded-md') || add;
+    if (!b) {
+      b = document.createElement('span'); b.id = 'tdp-gtbtn'; b.dataset.tdp = 'gtbtn';
+      b.innerHTML = '<button type="button"></button>';
+      b.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); openWin(T.data.D); });
+    }
+    // the same button look (and wrapper) as Matchplay's Add arenas, right after it
+    if (anchor !== add) b.className = anchor.className; else b.style.marginLeft = '8px';
+    const btn = b.firstElementChild; btn.className = add.className;
+    if (btn.textContent !== label) btn.textContent = label;
+    if (b.previousElementSibling !== anchor) anchor.after(b);
+  }
+
+  // ---------- the Game times window ----------
+  let host = null;
+  function openWin(D) {
+    if (!host) { host = document.createElement('div'); host.id = 'tdp-gt-dlg'; host.attachShadow({ mode: 'open' }); host.shadowRoot.addEventListener('click', onWin); document.documentElement.appendChild(host); }
+    drawWin(D);
+  }
+  function closeWin() { if (host) host.remove(); host = null; }
+  function drawWin(D, msg) {
+    if (!host) return;
+    const st = T.tstate[D.tid] || {}, isFinals = D.qual && D.qual.tournamentId !== D.tid;
     const live = Object.values(T.timing.arenaTimes(D.games)).reduce((s, x) => s + x.count, 0);
     const qn = extra && extra.qual ? Object.values(extra.qual).reduce((s, x) => s + x.count, 0) : 0;
-    const hn = (st.histUse || []).length;
-    const html = `<div class="card" style="margin:0 0 12px"><div class="cb gap" style="flex-wrap:wrap;align-items:center">
-      <span class="h">Game times from</span>
-      <span class="badge b-indigo">This event · ${live} games</span>
-      ${isFinals ? `<span class="badge b-indigo" title="Included automatically: this finals is linked to its qualifying">Qualifying · ${qn} games</span>` : ''}
-      ${st.pastTimes ? `<span class="badge b-indigo">Matchplay IDs · ${Object.values(st.pastTimes).reduce((s, x) => s + x.count, 0)} games</span>` : ''}
-      ${hn ? `<span class="badge b-gray" title="Ticked in Bank Builder ⚙ Settings">Past events · ${hn}</span>` : ''}
-      ${missingFromQual(D).length ? `<button class="btn sm" data-act="copyQual" title="${T.esc(missingFromQual(D).join(', '))}">Copy ${missingFromQual(D).length} arena${missingFromQual(D).length === 1 ? '' : 's'} from ${T.esc(D.qual.name || 'qualifying')}</button>` : ''}
-      <span class="gap" style="margin-left:auto"><input type="text" data-f="ids" placeholder="Other Matchplay IDs, e.g. 201234, 205678" value="${T.esc(st.bankPast || '')}" style="width:260px"><button class="btn sm sec" data-act="load">Load</button></span>
-    </div></div>`;
-    T.inpage.block('tdp-arena-times', wrap, 'before', html, onBar);
+    const hn = (st.histUse || []).length, miss = missingFromQual(D);
+    const info = st.pastInfo || [];
+    const rows = [`<li>This event · <b>${live}</b> games</li>`];
+    if (isFinals) rows.push(`<li>Qualifying (${T.esc(D.qual.name || '')}) · <b>${qn}</b> games <span class="small muted">- included automatically</span></li>`);
+    if (st.pastTimes) rows.push(`<li>Other Match Play IDs · <b>${Object.values(st.pastTimes).reduce((s, x) => s + x.count, 0)}</b> games</li>`);
+    if (hn) rows.push(`<li>Past events ticked in Bank Builder ⚙ Settings · <b>${hn}</b></li>`);
+    host.shadowRoot.innerHTML = `<style>${T.panel.CSS}
+:host{all:initial}.ov{position:fixed;inset:0;background:rgba(17,24,39,.5);z-index:2147483000;display:flex;align-items:flex-start;justify-content:center;padding:8vh 16px;overflow:auto}
+.dlg{background:var(--card);border-radius:8px;box-shadow:0 20px 40px rgba(0,0,0,.25);width:560px;max-width:100%;font-family:ui-sans-serif,system-ui,sans-serif;font-size:14px;color:var(--text)}
+.dh{padding:16px 20px 8px;font-size:18px;font-weight:500}.db{padding:4px 20px 16px}.df{background:var(--head);padding:12px 20px;display:flex;justify-content:flex-end;gap:8px;border-radius:0 0 8px 8px}
+ul{margin:6px 0 12px 18px;padding:0}li{margin:3px 0}</style>
+      <div class="wrap${document.documentElement.classList.contains('dark') ? ' dark' : ''}"><div class="ov" data-act="bg"><div class="dlg">
+      <div class="dh">Game times</div><div class="db">
+        <div class="lab">Where the times come from</div><ul>${rows.join('')}</ul>
+        <div class="lab">Other Match Play tournament IDs</div>
+        <div class="small muted mb">Past events at this venue give game times before this one has its own. Paste one or more IDs (the number in the event's address).</div>
+        <div class="gap"><input type="text" data-f="ids" value="${T.esc(st.bankPast || '')}" placeholder="e.g. 280233, 280541" style="flex:1;min-width:220px"><button class="btn sm" data-act="load">Load</button>${st.bankPast ? '<button class="btn sm sec" data-act="clear">Clear</button>' : ''}</div>
+        ${info.length ? `<ul>${info.map(x => `<li>#${x.id} ${T.esc(x.name)} · ${x.games} games</li>`).join('')}</ul>` : ''}
+        ${msg ? `<div class="callout ${msg.err ? 'err' : ''} mt">${T.esc(msg.text)}</div>` : ''}
+        ${miss.length ? `<div class="mt"><button class="btn sm sec" data-act="copyQual" title="${T.esc(miss.join(', '))}">Copy ${miss.length} arena${miss.length === 1 ? '' : 's'} from ${T.esc(D.qual.name || 'qualifying')}</button></div>` : ''}
+      </div><div class="df"><button class="btn" data-act="close">Done</button></div></div></div></div>`;
+  }
+  async function onWin(e) {
+    const a = e.target.closest('[data-act]'); if (!a) return;
+    if (a.dataset.act === 'bg' && e.target !== a) return;
+    const D = T.data.D, act = a.dataset.act;
+    if (act === 'bg' || act === 'close') return closeWin();
+    if (act === 'copyQual') {
+      const names = missingFromQual(D); closeWin();
+      if (names.length) await T.jobs.start(`Copy ${names.length} arenas from qualifying`, [{ tid: D.tid, page: 'arenas', op: 'copyArenas', args: { names }, label: `Adding ${names.length} arenas` }]);
+      return;
+    }
+    if (act === 'clear') { await T.saveT(D.tid, { pastTimes: null, bankPast: '', pastInfo: null }); drawWin(D, { text: 'Cleared the other Match Play IDs.' }); return render(T.data.D); }
+    if (act === 'load') {
+      const ids = ((host.shadowRoot.querySelector('[data-f=ids]').value.match(/\d+/g)) || []).map(Number).filter(id => id !== D.tid);
+      if (!ids.length) { await T.saveT(D.tid, { pastTimes: null, bankPast: '', pastInfo: null }); drawWin(D, { text: 'Cleared the other Match Play IDs.' }); return render(T.data.D); }
+      a.disabled = true; a.textContent = 'Loading…';
+      try { const k = await T.bankplan.loadPast(D, ids); drawWin(D, { text: `Loaded times for ${k} arenas from ${ids.length} tournament${ids.length === 1 ? '' : 's'}.` }); }
+      catch (err) { drawWin(D, { text: T.apiErrorText ? T.apiErrorText(err) : String(err), err: true }); }
+      render(T.data.D);
+    }
   }
 
   // a finals: the qualifying's active arenas this tournament doesn't have yet (Matchplay's own "Add from qualifying" can miss them)
@@ -90,24 +147,6 @@ TDP.arenatab = (() => {
     const have = new Set((D.t.arenas || []).map(a => lc(a.name)));
     return (D.qual.arenas || []).filter(a => !a.tournamentArena || a.tournamentArena.status !== 'inactive').map(a => a.name).filter(n => n && !have.has(lc(n)));
   }
-  async function onBar(e) {
-    if (e.type !== 'click') return;
-    if (e.target.closest('[data-act=copyQual]')) {
-      const D = T.data.D, names = missingFromQual(D);
-      if (names.length) await T.jobs.start(`Copy ${names.length} arenas from qualifying`, [{ tid: D.tid, page: 'arenas', op: 'copyArenas', args: { names }, label: `Adding ${names.length} arenas` }]);
-      return;
-    }
-    const a = e.target.closest('[data-act=load]'); if (!a) return;
-    const D = T.data.D, ids = (a.getRootNode().querySelector('[data-f=ids]').value.match(/\d+/g) || []).map(Number).filter(id => id !== D.tid);
-    a.disabled = true; a.textContent = 'Loading…';
-    try {
-      if (!ids.length) { await T.saveT(D.tid, { pastTimes: null, bankPast: '' }); T.panel.say('Cleared the other Matchplay IDs.', 'ok'); }
-      else { const k = await T.bankplan.loadPast(D, ids); T.panel.say(`Loaded times for ${k} arenas from ${ids.length} tournament${ids.length === 1 ? '' : 's'}.`, 'ok'); }
-    } catch (err) { T.panel.say(T.apiErrorText ? T.apiErrorText(err) : String(err), 'err'); }
-    a.disabled = false; a.textContent = 'Load';
-    render(T.data.D);
-  }
-
   // the Display menus live in Matchplay's own table
   document.addEventListener('change', async e => {
     const sel = e.target.closest && e.target.closest('select[data-tdp-cat]'); if (!sel) return;

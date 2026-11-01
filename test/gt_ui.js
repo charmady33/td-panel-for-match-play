@@ -1,0 +1,32 @@
+// Item 84: Arenas tab - one "Game times" button right after Add arenas; its window loads other Match Play IDs
+const { chromium } = require('playwright');
+const fs = require('fs'), path = require('path');
+const F = require('./fixtures');
+const order = JSON.parse(fs.readFileSync(path.join(__dirname, '../manifest.json'))).content_scripts.find(c => c.js.includes('src/main.js')).js;
+const bundle = order.map(f => fs.readFileSync(path.join(__dirname, '..', f), 'utf8')).join('\n');
+const out = process.argv[2] || '.';
+const q = F.qual;
+(async () => {
+  const browser = await chromium.launch(); const page = await browser.newPage({ viewport: { width: 1200, height: 800 } });
+  const errors = []; page.on('pageerror', e => errors.push(e.message));
+  await page.route('https://api.matchplay.events/**', route => { const u = new URL(route.request().url()), p = u.pathname, json = d => route.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(d) });
+    if (p === '/api/users/profile') return json({ data: F.me }); let m;
+    if ((m = p.match(/^\/api\/tournaments\/(\d+)$/))) return json({ data: { 280051: q, 280073: F.finalsA, 280074: F.finalsB, 270001: { ...q, tournamentId: 270001, name: 'Last month at the venue' } }[m[1]] });
+    if (p.match(/\/standings$/)) return json(F.standings); if (p.match(/\/rounds$/)) return json({ data: F.rounds }); if (p.match(/\/games$/)) return json({ data: F.games, meta: { last_page: 1 } }); return json({ data: [] }); });
+  const rows = q.arenas.slice(0, 4).map(a => `<tr><td><a href="/tournaments/280051/arenas/${a.arenaId}">${a.name}</a></td><td>EM</td><td>Active</td></tr>`).join('');
+  const HTML = `<!doctype html><html><head><meta charset=utf-8></head><body><main style="padding:24px"><a href="/tournaments/280051/edit">Edit</a><h1>test</h1><div style="display:flex;gap:8px"><span class="inline-flex rounded-md"><button class="addbtn">Add arenas</button></span><button class="actbtn">Actions</button></div><table><thead><tr><th>Name</th><th>Category</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table></main></body></html>`;
+  await page.route('https://app.matchplay.events/**', route => route.fulfill({ status: 200, contentType: 'text/html', body: HTML }));
+  await page.goto('https://app.matchplay.events/tournaments/280051/arenas');
+  await page.evaluate(() => localStorage.setItem('tdp:settings', JSON.stringify({ token: 't' })));
+  await page.addScriptTag({ content: bundle }); await page.waitForTimeout(5000);
+  console.log('button:', await page.evaluate(() => { const b = document.getElementById('tdp-gtbtn'); return b ? `"${b.textContent}" after: ${b.previousElementSibling && b.previousElementSibling.textContent} | button class copied: ${b.firstElementChild.className} | wrapper: ${b.className}` : 'none'; }), '| old bar gone:', await page.evaluate(() => !document.getElementById('tdp-arena-times')));
+  await page.evaluate(() => document.querySelector('#tdp-gtbtn button').click()); await page.waitForTimeout(300);
+  console.log('window:', await page.evaluate(() => document.getElementById('tdp-gt-dlg').shadowRoot.querySelector('.db').innerText.replace(/\n+/g, ' | ').slice(0, 300)));
+  await page.evaluate(() => { const r = document.getElementById('tdp-gt-dlg').shadowRoot; r.querySelector('[data-f=ids]').value = '270001'; r.querySelector('[data-act=load]').click(); });
+  await page.waitForTimeout(4000);
+  console.log('after Load:', await page.evaluate(() => document.getElementById('tdp-gt-dlg').shadowRoot.querySelector('.db').innerText.replace(/\n+/g, ' | ').slice(0, 400)));
+  await page.screenshot({ path: out + '/gametimes.png' });
+  await page.evaluate(() => document.getElementById('tdp-gt-dlg').shadowRoot.querySelector('[data-act=close]').click()); await page.waitForTimeout(500);
+  console.log('button now:', await page.evaluate(() => document.getElementById('tdp-gtbtn').textContent));
+  console.log('errors', errors); await browser.close();
+})();

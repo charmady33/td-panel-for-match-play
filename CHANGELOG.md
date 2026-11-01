@@ -2,6 +2,12 @@
 
 All notable changes, newest first. Versions follow [semantic versioning](https://semver.org/): new features bump the middle number, fixes the last.
 
+## 0.24.0 - 2026-11-01
+- Arenas tab (item 84): the "Game times from" bar (it had ended up at the very top of the page) is replaced by one
+  **Game times** button right after Matchplay's Add arenas, in the same button style ("Game times · 2 IDs" once loaded).
+  Its window shows where the times come from, takes other Match Play tournament IDs (Load / Clear, each with its name
+  and games), and on a finals has "Copy N arenas from qualifying".
+
 ## 0.23.2 - 2026-11-01
 - Fix: switching tabs of the same event (Overview → Players → Arenas) made the linked-events row (A Finals…) disappear
   for ~2 seconds. The finals list was emptied while it reloaded from the API; now it's kept until the new one is ready,

@@ -439,7 +439,7 @@ TDP.inpage = (() => {
     const D = T.data.D;
     const page0 = T.routePage();
     if (page0 !== lastPage) { lastPage = page0; if ((page0 === 'standings' || page0 === 'resolve-ties') && D.qual) T.data.refresh(true); }
-    if (!D.isTD || !D.t) { clearMarks(); ['tdp-links', 'tdp-ties-standings', 'tdp-elig', 'tdp-ties-resolve', 'tdp-auto', 'tdp-tb-reminder', 'tdp-bankbar', 'tdp-arena-times', 'tdp-ifpa-btn', 'tdp-busy-banner', 'tdp-elig-bar', 'tdp-cut-bar', 'tdp-plays'].forEach(id => { const e = document.getElementById(id); if (e) e.remove(); }); return; }
+    if (!D.isTD || !D.t) { clearMarks(); ['tdp-links', 'tdp-ties-standings', 'tdp-elig', 'tdp-ties-resolve', 'tdp-auto', 'tdp-tb-reminder', 'tdp-bankbar', 'tdp-arena-times', 'tdp-gtbtn', 'tdp-ifpa-btn', 'tdp-busy-banner', 'tdp-elig-bar', 'tdp-cut-bar', 'tdp-plays'].forEach(id => { const e = document.getElementById(id); if (e) e.remove(); }); return; }
     const page = T.routePage();
     try {
       reminder(D);
