@@ -42,6 +42,8 @@ const tabsOf = async tid => (await chrome.tabs.query({ url: `${APP}/tournaments/
 // ---------- new version on GitHub? (at most every 6 hours) ----------
 const newer = (a, b) => { const x = String(a).replace(/^v/, '').split('.').map(Number), y = String(b).replace(/^v/, '').split('.').map(Number); for (let i = 0; i < 3; i++) { if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0); } return false; };
 async function checkUpdate(force) {
+  // installed from the Chrome Web Store (item 80): Chrome updates it by itself - no GitHub update bar
+  if (chrome.runtime.getManifest().update_url) { await store.set('update', null); return; }
   const last = await store.get('bg:updateAt', 0);
   if (!force && Date.now() - last < 6 * 3600e3) return;
   await store.set('bg:updateAt', Date.now());

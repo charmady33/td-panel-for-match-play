@@ -25,8 +25,8 @@ const nav = (tid, cur) => `<div class="border-b border-gray-200 dark:border-gray
   await page.addScriptTag({ content: bundle }); await page.waitForTimeout(4000);
 
   // 78: links row under the tabs, Matchplay's tab classes; click -> same page on that event, same tab
-  console.log('links row:', await page.evaluate(() => { const r = document.getElementById('tdp-links'); return r ? [...r.querySelectorAll('a')].map(a => a.textContent + ' -> ' + a.getAttribute('href')).join(' | ') + ' | classes match: ' + r.querySelector('a').className.includes('border-b-2') : 'none'; }));
-  await page.evaluate(() => { window.__nav = []; addEventListener('popstate', () => window.__nav.push(location.pathname)); document.querySelector('#tdp-links a').click(); });
+  console.log('links row:', await page.evaluate(() => { const r = document.getElementById('tdp-links'); return r ? [...r.querySelectorAll('a')].map(a => a.textContent + (a.getAttribute('aria-current') ? ' [selected]' : ' -> ' + a.getAttribute('href'))).join(' | ') + ' | classes match: ' + r.querySelector('a').className.includes('border-b-2') + ' | above the tabs: ' + !!(r.nextElementSibling && r.nextElementSibling.querySelector('nav a[href="/tournaments/280051/players"]')) : 'none'; }));
+  await page.evaluate(() => { window.__nav = []; addEventListener('popstate', () => window.__nav.push(location.pathname)); document.querySelector('#tdp-links a[href]').click(); });
   await page.waitForTimeout(300);
   console.log('after click:', await page.evaluate(() => location.pathname + ' | popstate: ' + window.__nav.join(',')));
   await page.evaluate(() => { history.replaceState(null, '', '/tournaments/280051/players'); dispatchEvent(new PopStateEvent('popstate')); });
@@ -55,6 +55,17 @@ const nav = (tid, cur) => `<div class="border-b border-gray-200 dark:border-gray
   await page.evaluate(() => { document.querySelector('[data-tdp=ifpa-in]').value = '750'; [...document.querySelectorAll('[role=dialog] button')].find(b => b.textContent === 'Update').click(); document.querySelector('[role=dialog]').remove(); });
   await page.waitForTimeout(400);
   console.log('cuts after MP Update:', await page.evaluate(() => JSON.stringify(TDP.tstate[280051].divs.B)));
+
+  // 81: Matchplay's Create playoffs window (mocked): the cutoff line picker fills players and name
+  await page.evaluate(() => { const d = document.createElement('div'); d.setAttribute('role', 'dialog'); d.innerHTML = '<form><input id="name" value="Finals for test"><select id="format"><option value="group_bracket">Group</option></select><select id="playerLimit"><option value="4">4</option><option value="8">8</option><option value="16">16</option><option value="0">Other</option></select><button type="button">Create playoffs</button><button type="button">Cancel</button></form>'; document.body.appendChild(d); });
+  await page.waitForTimeout(500);
+  console.log('playoffs picker:', await page.evaluate(() => { const b = document.querySelector('[data-tdp=pocut]'); return b ? [...b.querySelectorAll('option')].map(o => (o.selected ? '*' : '') + o.textContent).join(' | ') + ' || name=' + document.querySelector('#name').value + ' players=' + document.querySelector('#playerLimit').value : 'none'; }));
+  await page.evaluate(() => { const s = document.querySelector('[data-po=pick]'); s.value = 'new'; s.dispatchEvent(new Event('change', { bubbles: true })); const a = document.querySelector('[data-po=above]'); a.value = '16'; a.dispatchEvent(new Event('input', { bubbles: true })); document.querySelector('[data-po=rank]').value = '5000'; });
+  await page.waitForTimeout(300);
+  console.log('new line:', await page.evaluate(() => 'name=' + document.querySelector('#name').value + ' players=' + document.querySelector('#playerLimit').value));
+  await page.evaluate(() => { window.__jobs = []; TDP.jobs.start = async (t, st) => { window.__job = { t, s: st }; window.__jobs.push(t + ': ' + st.map(x => x.op).join(',')); }; [...document.querySelectorAll('[role=dialog] button')].find(b => b.textContent === 'Create playoffs').click(); document.querySelector('[role=dialog]').remove(); });
+  await page.waitForTimeout(3500);
+  console.log('after Create playoffs:', await page.evaluate(() => JSON.stringify(window.__job && window.__job.s.map(x => x.op + (x.args.lines ? ' ' + x.args.lines.map(l => l.above + ':' + l.text).join('/') : '')))), '| C cut:', await page.evaluate(() => JSON.stringify(TDP.tstate[280051].divs.C)), '| all starts:', await page.evaluate(() => JSON.stringify(window.__jobs)));
 
   // 73: Matchplay's Results window (mocked): boxes column; typing sets the circles; circles update the boxes
   await page.evaluate(() => {

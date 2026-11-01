@@ -2,6 +2,15 @@
 
 All notable changes, newest first. Versions follow [semantic versioning](https://semver.org/): new features bump the middle number, fixes the last.
 
+## 0.23.0 - 2026-11-01
+- Create playoffs (item 81): Matchplay's Create playoffs window gets a "Cutoff line" choice - the first line without a
+  finals is picked and fills Number of players and a name ("B Finals"); "+ New cutoff line" (players above, text, IFPA
+  rank) adds the line to the cutoffs and labels players once the finals is created.
+- Linked events row (items 82, 83): now above Matchplay's tabs, and the qualifying event is always listed (selected when
+  you're on it). A linked event already open in another tab or window is shown there instead of changing this tab.
+- Chrome Web Store ready (item 80): no GitHub update bar when installed from the store (Chrome updates it); the unused
+  activeTab permission is gone; PRIVACY.md and docs/store-listing.md (listing text, permission reasons, data answers).
+
 ## 0.22.0 - 2026-11-01
 - Manage cutoffs (item 72): one window (Players tab bar, Standings tab) with every cutoff line - players above, line
   text and an IFPA rank cut for B, C… finals; Matchplay's own Manage cutoffs window gets an "IFPA rank" box too. Saving

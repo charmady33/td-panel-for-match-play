@@ -208,6 +208,7 @@ TDP.cutoffs = (() => {
   function decorate() {
     if (T.isFrame || T.settings.off || T.dead) return;
     const d = T.dialog(), D = T.data.D;
+    if (d && D) playoffDecor();
     if (!d || !D || !isQual(D) || !/Players above cutoff/.test(T.txt(d)) || !T.findBtn(d, 'Add another cutoff')) return;
     const cuts = cutsOf(D);
     cutBlocks(d).forEach((b, i) => {
@@ -287,6 +288,65 @@ TDP.cutoffs = (() => {
     await wait();
     try { await T.jobs.start('Cutoffs and finals', steps); } catch (e) { T.panel.say(e.message || String(e), 'err'); }
   }
+
+  // ---------- item 81: Matchplay's Create playoffs window - pick one of the cutoff lines, or add a new one ----------
+  let pcur = null;
+  function playoffDecor() {
+    const d = T.dialog(), D = T.data.D;
+    if (!d || !D || !isQual(D) || !d.querySelector('#playerLimit') || !d.querySelector('#format') || !T.findBtn(d, 'Create playoffs')) { if (!d) pcur = null; return; }
+    if (d.querySelector('[data-tdp=pocut]')) return;
+    const ds = T.finals.divisions(D), cuts = cutsOf(D), taken = new Set((D.finals || []).map(f => f.linkIndex));
+    const first = ds.findIndex((x, i) => !taken.has(i));
+    pcur = { d, ds, pick: first >= 0 ? first : 'new', name0: (d.querySelector('#name') || {}).value || '' };
+    const box = document.createElement('div'); box.dataset.tdp = 'pocut';
+    box.style.cssText = 'margin:0 0 12px;padding:10px;border:1px solid #c7d2fe;border-radius:8px;font-size:13px';
+    const opt = (x, i) => `<option value="${i}"${pcur.pick === i ? ' selected' : ''}>Cutoff ${i + 1}: ${T.esc(x.text || x.letter + ' cutoff')} · ${x.size} players${i && cuts[x.letter] ? ` · IFPA ≤ ${cuts[x.letter]}` : ''}${taken.has(i) ? ' (has a finals)' : ''}</option>`;
+    box.innerHTML = `<label style="display:block;font-weight:600;margin-bottom:4px">Cutoff line</label>
+      <select data-po="pick" style="width:100%;height:34px;border:1px solid #d1d5db;border-radius:6px;padding:0 8px">${ds.map(opt).join('')}<option value="new"${pcur.pick === 'new' ? ' selected' : ''}>+ New cutoff line</option></select>
+      <div data-po="new" style="display:${pcur.pick === 'new' ? 'flex' : 'none'};gap:8px;flex-wrap:wrap;margin-top:8px;align-items:end">
+        <label>Players above<br><input data-po="above" type="text" inputmode="numeric" value="8" style="width:80px;height:32px;border:1px solid #d1d5db;border-radius:6px;padding:0 6px"></label>
+        <label>Line text<br><input data-po="text" type="text" value="${T.letter(ds.length)} FINALS CUTOFF" style="width:170px;height:32px;border:1px solid #d1d5db;border-radius:6px;padding:0 6px"></label>
+        ${ds.length ? `<label>IFPA rank<br><input data-po="rank" type="text" inputmode="numeric" placeholder="e.g. 1000" style="width:90px;height:32px;border:1px solid #d1d5db;border-radius:6px;padding:0 6px"></label>` : ''}
+      </div><div style="color:#6b7280;margin-top:6px">TD Panel: fills in the number of players (and a name) from the line; a new line is added to the cutoffs when you create the playoffs.</div>`;
+    const form = d.querySelector('#name') && (d.querySelector('#name').closest('form') || d.querySelector('#name').parentElement.parentElement);
+    (form || d).prepend(box);
+    box.addEventListener('change', e => { if (e.target.dataset.po === 'pick') { pcur.pick = e.target.value === 'new' ? 'new' : +e.target.value; box.querySelector('[data-po=new]').style.display = pcur.pick === 'new' ? 'flex' : 'none'; fill(); } });
+    box.addEventListener('input', e => { if (e.target.dataset.po === 'above' || e.target.dataset.po === 'text') fill(); });
+    fill();
+  }
+  // the line's players -> Number of players; "B Finals" as the name while it's still Matchplay's default
+  function fill() {
+    if (!pcur) return;
+    const d = pcur.d, nm = d.querySelector('#name'), pl = d.querySelector('#playerLimit');
+    const isNew = pcur.pick === 'new', x = isNew ? null : pcur.ds[pcur.pick];
+    const n = isNew ? parseInt((d.querySelector('[data-po=above]') || {}).value, 10) : x.size;
+    const letter = isNew ? T.letter(pcur.ds.length) : x.letter;
+    if (pl && n > 0) {
+      const has = [...pl.options].some(o => o.value === String(n));
+      T.setVal(pl, has ? String(n) : '0');
+      if (!has) setTimeout(() => { const other = [...d.querySelectorAll('input')].find(i => !i.closest('[data-tdp]') && i !== nm && /number|text/.test(i.type)); if (other) T.setVal(other, String(n)); }, 150);
+    }
+    if (nm && (nm.value === pcur.name0 || /^[A-Z] Finals$/.test(nm.value))) { T.setVal(nm, `${letter} Finals`); pcur.name0 = nm.value; }
+  }
+  // Create playoffs with a new line: once Matchplay has made the finals, add the line (and its rank cut) and label
+  document.addEventListener('click', e => {
+    const b = e.target.closest && e.target.closest('button'); if (!b || !pcur || pcur.pick !== 'new' || T.txt(b) !== 'Create playoffs' || !b.closest('[role=dialog]')) return;
+    const d = pcur.d, D = T.data.D; if (!isQual(D)) return;
+    const above = Math.max(1, parseInt((d.querySelector('[data-po=above]') || {}).value, 10) || 8), text = (d.querySelector('[data-po=text]') || {}).value || '';
+    const rank = parseInt((d.querySelector('[data-po=rank]') || {}).value, 10) || null;
+    const lines = [...pcur.ds.map(x => ({ above: x.size, text: x.text || '' })), { above, text }];
+    const letter = T.letter(pcur.ds.length);
+    pcur = null;
+    (async () => {
+      await T.waitFor(() => !T.dialog(), 15000, 200);
+      const cuts = cutsOf(D); if (lines.length > 1) cuts[letter] = rank;
+      await saveCuts(D, cuts);
+      await T.sleep(800); await T.data.refresh(true);
+      const D2 = T.data.D, qid = D2.qual.tournamentId;
+      const steps = [{ tid: qid, page: 'overview', op: 'setCutoffs', args: { lines }, label: 'Adding the new cutoff line' }, ...(rank ? applySteps(D2) : [])];
+      try { await T.jobs.start('New cutoff line', steps); } catch (err) { T.panel.say(err.message || String(err), 'err'); }
+    })();
+  }, true);
 
   return { render, decorate, createRender, after, ranges, staffGroups, stripGroups, staffMap, open, applySteps };
 })();

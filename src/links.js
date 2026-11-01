@@ -1,5 +1,5 @@
-// Item 78: under Matchplay's tab bar (Overview | Players | …) a second row in Matchplay's own tab style with the events
-// linked to this one: on a qualifying event its finals; on a finals event the qualifying event and the other finals.
+// Items 78, 82, 83: above Matchplay's tab bar (Overview | Players | …) a row in Matchplay's own tab style with the
+// qualifying event and its finals (the one you're on underlined).
 // A click opens the same page there (same tab, in-app - no reload); if that event is open in another tab, that tab is
 // shown instead; a page the other event doesn't have -> its Overview.
 var TDP = window.TDP || (window.TDP = {});
@@ -30,18 +30,18 @@ TDP.links = (() => {
     const fam = !T.isFrame && D && D.t && D.tid === T.routeTid() ? family(D) : [];
     const bar = fam.length ? tabBar() : null;
     if (!bar) { if (old) old.remove(); return; }
-    const items = fam.filter(x => !(x.qual && x.tid === D.tid));   // a qualifying event lists only its finals
+    const items = fam;   // qualifying first, then its finals - the same row on every one of them (item 83)
     const html = items.map(x => x.tid === D.tid
       ? `<a class="${TAB} ${ON}" aria-current="page" data-tdp-tid="${x.tid}">${T.esc(x.qual ? 'Qualifying: ' + x.name : x.name)}</a>`
       : `<a class="${TAB} ${OFF}" href="/tournaments/${x.tid}${target(x, sub())}" data-tdp-tid="${x.tid}">${T.esc(x.qual ? 'Qualifying: ' + x.name : x.name)}</a>`).join('');
     const sig = html + '|' + location.pathname;
-    if (old && old.dataset.sig === sig && old.previousElementSibling === bar.wrap) return;
+    if (old && old.dataset.sig === sig && old.nextElementSibling === bar.wrap) return;
     const box = old || document.createElement('div');
     box.id = ID; box.dataset.tdp = 'links'; box.dataset.sig = sig;
-    box.className = bar.wrap.className.replace(/\bpt-\d+\b/, 'pt-2');   // same border line and padding as Matchplay's bar
+    box.className = bar.wrap.className;   // same border line and padding as Matchplay's bar
     box.innerHTML = `<nav class="${bar.nav.className}">${html}</nav>`;
     if (!old) box.addEventListener('click', onClick);
-    if (box.previousElementSibling !== bar.wrap) bar.wrap.after(box);
+    if (box.nextElementSibling !== bar.wrap) bar.wrap.before(box);   // above the tabs (item 82)
   }
   // the page you're on, as a path after /tournaments/{id} ("" = Overview)
   function sub() {
