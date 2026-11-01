@@ -18,7 +18,10 @@ TDP.inpage = (() => {
       r.innerHTML = `<style>${T.panel.CSS}:host{all:initial;display:block}.wrap{position:static;width:auto}</style><div class="wrap"></div>`;
       if (onEvent) { r.addEventListener('change', onEvent); r.addEventListener('click', onEvent); }
     }
-    const placed = where === 'before' ? anchor.previousElementSibling === host : anchor.nextElementSibling === host;
+    // already in the run of our own blocks right before (after) the anchor? then it stays - two blocks at the same spot
+    // must not keep swapping places (that redrew the Standings page non-stop and threw the scroll back to the top)
+    let placed = false;
+    for (let e = where === 'before' ? anchor.previousElementSibling : anchor.nextElementSibling; e && /^tdp-/.test(e.id || ''); e = where === 'before' ? e.previousElementSibling : e.nextElementSibling) if (e === host) { placed = true; break; }
     if (!placed) anchor.insertAdjacentElement(where === 'before' ? 'beforebegin' : 'afterend', host);
     const w = host.shadowRoot.querySelector('.wrap');
     w.classList.toggle('dark', document.documentElement.classList.contains('dark'));

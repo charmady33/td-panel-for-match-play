@@ -2,6 +2,11 @@
 
 All notable changes, newest first. Versions follow [semantic versioning](https://semver.org/): new features bump the middle number, fixes the last.
 
+## 0.24.1 - 2026-11-01
+- Fix: the Standings tab kept jumping back to the top when scrolling. The Cutoffs bar and the "Ties to break" box are
+  placed at the same spot and kept swapping places - redrawing non-stop (hundreds of times a second). Our blocks now
+  stay put once they're in place.
+
 ## 0.24.0 - 2026-11-01
 - Arenas tab (item 84): the "Game times from" bar (it had ended up at the very top of the page) is replaced by one
   **Game times** button right after Matchplay's Add arenas, in the same button style ("Game times · 2 IDs" once loaded).
