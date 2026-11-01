@@ -57,7 +57,9 @@ var TDP = window.TDP || (window.TDP = {});
     if (location.pathname === lastPath || T.sync.hopping()) return;   // (a soft refresh hops away and back - not a new page)
     const prevTid = lastPath ? Number((lastPath.match(/^\/tournaments\/(\d+)/) || [])[1]) : null;
     lastPath = location.pathname;
-    if (prevTid && prevTid === T.routeTid()) { T.data.refresh(true); return; }   // another tab of the same tournament: fresh details
+    // another tab of the same tournament: Matchplay's page data is already current (no API reload, nothing goes
+    // missing while it loads); without page data, fresh details from the API
+    if (prevTid && prevTid === T.routeTid()) { T.data.refresh(!(T.page && T.page.get(prevTid))); return; }
     const tid = T.routeTid();
     if (!tid) { T.panel.unmount(); T.data.setTournament(null); T.deltest.render(); T.jobs.resume(); return; }   // (a task can continue from any page)
     T.panel.mount(); T.panel.render();
@@ -72,7 +74,7 @@ var TDP = window.TDP || (window.TDP = {});
 
   // the page watcher: whenever Matchplay draws or changes its page - a new address (in-app navigation), our parts
   // put back where Matchplay redrew, the flag, and Matchplay's own toasts ("Round started"…) -> reload details
-  let drawTimer = null, toastTimer = null;
+  let drawTimer = null, toastTimer = null, microQ = false, microDraws = 0, frameReset = false;
   const draw = () => {
     drawTimer = null;
     if (off()) { if (T.jobs.get()) T.busy.render(); return; }
@@ -92,6 +94,9 @@ var TDP = window.TDP || (window.TDP = {});
       const tx = n.textContent || ''; if (tx.length > 200) continue;   // toasts are short
       if (/(Tournament|Round) (started|completed|published)|Round created/i.test(tx)) { clearTimeout(toastTimer); toastTimer = setTimeout(() => T.data.refresh(true), 800); }
     }
+    // our parts go back in before the browser paints (no flicker when Matchplay redraws a tab); at most a few times a
+    // frame - anything more waits for the usual short timer
+    if (microDraws < 3) { if (!microQ) { microQ = true; microDraws++; Promise.resolve().then(() => { microQ = false; if (drawTimer) { clearTimeout(drawTimer); } draw(); }); } if (!frameReset) { frameReset = true; requestAnimationFrame(() => { microDraws = 0; frameReset = false; }); setTimeout(() => { microDraws = 0; frameReset = false; }, 100); } return; }
     if (!drawTimer) drawTimer = setTimeout(draw, 60);
   }).observe(document.documentElement, { childList: true, subtree: true });
 

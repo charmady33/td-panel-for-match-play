@@ -2,6 +2,12 @@
 
 All notable changes, newest first. Versions follow [semantic versioning](https://semver.org/): new features bump the middle number, fixes the last.
 
+## 0.23.2 - 2026-11-01
+- Fix: switching tabs of the same event (Overview → Players → Arenas) made the linked-events row (A Finals…) disappear
+  for ~2 seconds. The finals list was emptied while it reloaded from the API; now it's kept until the new one is ready,
+  and a tab switch doesn't reload from the API at all when Matchplay's page data is there.
+- Less flicker: TD Panel's parts are put back before the browser paints when Matchplay redraws a tab.
+
 ## 0.23.1 - 2026-11-01
 - Fix: "Cutoffs and finals" on a new tournament stopped with "Couldn't find Add another cutoff" - Matchplay's cutoff
   window says **Add cutoff** while it has no lines yet. Both are handled now (also for the IFPA rank box), so the lines

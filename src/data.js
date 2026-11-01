@@ -35,11 +35,13 @@ TDP.data = (() => {
       D.qual = q ? await loadTournament(q.tournamentId, maxAge) : null;
     }
     const pl = ((D.qual && D.qual.linkedTournaments) || []).filter(l => l.linkType === 'playoff').sort((a, b) => (a.linkIndex || 0) - (b.linkIndex || 0));
-    D.finals = [];
+    // built aside and swapped in at the end: the finals never go missing while they load (no flicker of what uses them)
+    const finals = [];
     for (const l of pl) {
       const ft = l.tournamentId === D.tid ? D.t : await loadTournament(l.tournamentId, maxAge);
-      D.finals.push({ tid: l.tournamentId, linkIndex: l.linkIndex || 0, name: l.name, status: l.status, t: ft });
+      finals.push({ tid: l.tournamentId, linkIndex: l.linkIndex || 0, name: l.name, status: l.status, t: ft });
     }
+    D.finals = finals;
   }
 
   // the page's rounds and games (rounds whose games the page hasn't loaded keep what we had; loadGames gets them)
