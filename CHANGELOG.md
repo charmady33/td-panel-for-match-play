@@ -2,6 +2,11 @@
 
 All notable changes, newest first. Versions follow [semantic versioning](https://semver.org/): new features bump the middle number, fixes the last.
 
+## 0.24.2 - 2026-11-01
+- Fix: eligibility labels stopped with "Set rank labels: next step did not open". Matchplay replaces its window with a
+  new one for the "Set player labels" step; the extension kept looking in the old one. It now finds the new window
+  (and waits up to 45 s while Matchplay refreshes IFPA data).
+
 ## 0.24.1 - 2026-11-01
 - Fix: the Standings tab kept jumping back to the top when scrolling. The Cutoffs bar and the "Ties to break" box are
   placed at the same spot and kept swapping places - redrawing non-stop (hundreds of times a second). Our blocks now

@@ -557,9 +557,10 @@ TDP.mp = (() => {
     const cbs = [...d.querySelectorAll('input[type=checkbox]')];
     const tick = (cb, on) => { if (cb && cb.checked !== !!on) cb.click(); };
     tick(cbs[0], refresh); tick(cbs[1], only);
-    T.click(await needBtn('Continue', d)); await T.sleep(400);
-    const d2 = await needDialog();
-    const go = await T.waitFor(() => [...d2.querySelectorAll('button')].find(b => /^Update \d+ players?$/i.test(T.txt(b))), 15000) || fail('Set rank labels: next step did not open.');
+    T.click(await needBtn('Continue', d));
+    // Matchplay swaps in a new window for the next step (and may first fetch fresh IFPA data): look it up afresh
+    const go = await T.waitFor(() => { const x = T.dialog(); return x && [...x.querySelectorAll('button')].find(b => /^Update \d+ players?$/i.test(T.txt(b))); }, 45000) || fail('Set rank labels: next step did not open.');
+    const d2 = go.closest('[role=dialog]') || T.dialog();
     const n = +T.txt(go).match(/\d+/)[0];
     if (!n) { T.click(T.findBtn(d2, 'Cancel')); await dialogClosed(); return 0; }
     const input = d2.querySelector('input[type=text], input:not([type])') || fail('Set rank labels: label box not found.');

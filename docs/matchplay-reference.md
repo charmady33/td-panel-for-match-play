@@ -151,7 +151,8 @@ Both finals were run to the end. Their rounds are closed, but none of the tourna
 - **IFPA ranks:** the old "IFPA rankings" table is gone (2026-11). Players tab → Actions → **Set rank labels**: tabs IFPA /
   Rating Class / MP Rating; From IFPA rank (required), To IFPA rank (blank = no limit), checkboxes Refresh IFPA data / Only
   update players without labels → Continue → "Set player labels" (label box, colors lime/sky/purple/orange/rose/gray/trans/
-  pride as role=radio) → "Update N players". Ranks themselves aren't in the page data.
+  pride as role=radio) → "Update N players" - step 2 is a NEW dialog element (re-query it). Ranks themselves aren't in the
+  page data. Step 2 opened in ~1 s on #281322 (42 players), with or without Refresh IFPA data.
 - **Manage cutoffs** (Overview → Cutoff lines): per line "Cutoff N  Remove", Players above cutoff (− [input] +), Label
   text, Color (red/green/fuchsia/orange); **Add cutoff** while empty, then Add another cutoff; Update / Cancel. A new line
   starts as 4 players / "FINALS CUTOFF".
