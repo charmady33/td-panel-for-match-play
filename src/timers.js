@@ -71,13 +71,13 @@ TDP.timers = (() => {
     const now = Date.now();
     for (const el of document.querySelectorAll('[data-tdp="timer"].tdp-gt')) {
       const s = +el.dataset.start, e = +el.dataset.end;
-      const html = !s && el.dataset.done ? `<span style="color:#6b7280">✓${+el.dataset.dur ? ' ' + fmt(+el.dataset.dur) : ''}</span>` : !s ? '<span style="color:#9ca3af">waiting</span>' : e ? `<span style="color:#6b7280">✓ ${fmt(e - s)}</span>` : `<span style="color:#4f46e5">⏱ ${fmt(now - s)}</span>`;
+      const html = !s && el.dataset.done ? `<span style="color:#6b7280">✓${+el.dataset.dur ? ' ' + fmt(+el.dataset.dur) : ''}</span>` : !s ? '<span style="color:#9ca3af">waiting</span>' : e ? `<span style="color:#6b7280">✓ ${fmt(e - s)}</span>` : `<span style="color:#4f46e5">${fmt(now - s)}</span>`;
       if (el.dataset.h !== html) { el.dataset.h = html; el.innerHTML = html; }
     }
     for (const el of document.querySelectorAll('[data-tdp="timer"].tdp-ge')) {
-      const s = +el.dataset.start, e = +el.dataset.end, est = +el.dataset.est;
-      const run = s ? (e || now) - s : 0, over = est && run > est * 1000;
-      const html = `${est ? `<span title="Estimated when the round started (game times added up) - doesn't change${el.dataset.guess ? '. No game times yet for these games: era guess (EM 9, SS 12, DMD 17 min)' : ''}">Est. ${mins(est)}${el.dataset.guess ? ' <span style="color:#9ca3af">(era guess)</span>' : ''}</span>` : '<span style="color:#9ca3af">Est. –</span>'}${s ? ` · <span style="color:${over ? '#b45309' : e ? '#6b7280' : '#4f46e5'}">${e ? '✓ ' : ''}${fmt(run)}</span>` : ''}`;
+      const est = +el.dataset.est;
+      // just the estimate (item 74): "Est. 26 min"
+      const html = est ? `<span title="Estimated when the round started (game times added up) - doesn't change">Est. ${mins(est)}</span>` : '<span style="color:#9ca3af">Est. –</span>';
       if (el.dataset.h !== html) { el.dataset.h = html; el.innerHTML = html; }
     }
   }

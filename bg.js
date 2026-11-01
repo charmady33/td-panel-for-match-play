@@ -65,9 +65,11 @@ async function tick() {
   chrome.action.setBadgeText({ text: started.length ? String(started.length) : '' });
   chrome.action.setBadgeBackgroundColor({ color: '#4f46e5' });
   const runs = await store.get('bg:runs', {});
-  for (const t of started) {
+  // (item 72: events with IFPA rank cuts are watched for new players too - also before they start)
+  let planned = []; try { planned = rows(await api(`/tournaments?owner=${u.userId}&status=planned&limit=50`)); } catch (e) { /* next time */ }
+  for (const t of [...started, ...planned]) {
     const tid = t.tournamentId, st = await store.get('t:' + tid, {});
-    if (!(st.auto || st.autoAssign || st.roundType || st.smartArenas)) continue;
+    if (!(st.auto || st.autoAssign || st.roundType || st.smartArenas || labelsOn(st))) continue;
     const run = runs[tid];
     if (run && run.windowId) {   // already working on it: give up waiting after 20 min and tell the TD
       const alive = await chrome.windows.get(run.windowId).then(() => true, () => false);
@@ -87,7 +89,13 @@ async function tick() {
 }
 
 // does this tournament need the automatic options right now?
+const labelsOn = st => Array.isArray(st.knownPlayers) && Object.values(st.divs || {}).some(v => v && +v.cutoff > 0);
 async function needs(tid, st) {
+  // players added on another device (the phone app…): the tournament's page gives them their labels
+  if (labelsOn(st)) {
+    const ids = ((one(await api(`/tournaments/${tid}?includePlayers=1`)) || {}).players || []).map(p => p.playerId);
+    if (ids.some(id => !st.knownPlayers.includes(id))) return { sig: `players:${ids.length}`, what: 'New players need their eligibility labels' };
+  }
   const rounds = rows(await api(`/tournaments/${tid}/rounds`)).sort((a, b) => (a.index ?? a.roundId) - (b.index ?? b.roundId));
   const r = rounds[rounds.length - 1]; if (!r || String(r.status) === 'completed') return null;
   const games = rows(await api(`/tournaments/${tid}/games?round=${r.roundId}`)).filter(g => !g.bye);
@@ -113,6 +121,21 @@ chrome.notifications.onClicked.addListener(id => {
   const tid = id.split(':')[1], w = noteWin[tid];
   if (w) chrome.windows.update(w, { focused: true, state: 'normal' }).catch(() => {});
   else chrome.tabs.create({ url: `${APP}/tournaments/${tid}/matches` });
+});
+
+// item 78: a linked-event link was clicked - that event already open in another tab? show that tab on the same page
+chrome.runtime.onMessage.addListener((m, sender, reply) => {
+  if (!m || m.type !== 'tdp-show-tournament') return;
+  (async () => {
+    const tabs = await chrome.tabs.query({ url: `${APP}/tournaments/${m.tid}*` });
+    const t = tabs.find(x => x.id !== (sender.tab && sender.tab.id) && !/#tdp-bg/.test(x.url || '') && new RegExp(`/tournaments/${m.tid}(/|$|\\?|#)`).test(x.url || ''));
+    if (!t) return reply(false);
+    await chrome.tabs.update(t.id, { active: true });
+    await chrome.windows.update(t.windowId, { focused: true }).catch(() => {});
+    chrome.tabs.sendMessage(t.id, { type: 'tdp-go', path: m.path }).catch(() => chrome.tabs.update(t.id, { url: APP + m.path }));
+    reply(true);
+  })().catch(() => reply(false));
+  return true;
 });
 
 // the minimized window reports back when it's finished

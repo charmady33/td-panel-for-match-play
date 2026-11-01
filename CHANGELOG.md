@@ -2,6 +2,26 @@
 
 All notable changes, newest first. Versions follow [semantic versioning](https://semver.org/): new features bump the middle number, fixes the last.
 
+## 0.22.0 - 2026-11-01
+- Manage cutoffs (item 72): one window (Players tab bar, Standings tab) with every cutoff line - players above, line
+  text and an IFPA rank cut for B, C… finals; Matchplay's own Manage cutoffs window gets an "IFPA rank" box too. Saving
+  labels everyone with Matchplay's own **Set rank labels** (its IFPA data, refreshed): ranks 1-1000 "B/C Ineligible",
+  1001-3000 "C Ineligible"… New players - from any device, the phone app included - get theirs automatically (the
+  background watcher opens its window when no tab is open). Matchplay's old IFPA rankings table is gone, so the old
+  eligibility window and "Load IFPA ranks" are replaced.
+- Number boxes (items 73, 75): 1, 2, 3, 4 boxes in Matchplay's Results window (between the names and the circles - they
+  follow each other), in Matchplay's Change player order window (box, gray P1…, name - typing moves the player; Clear
+  goes back), and in the tiebreaker results grid. Last place fills itself; Tab moves on; nothing is saved until Save.
+- Matches tab (item 74): groups show just "Est. 26 min"; game timers without the clock icon.
+- API token setup (item 77): a full-width section with every step, a wide box, show/hide, and a check ("Connected as …");
+  the toolbar button has the same steps and check.
+- Linked events (item 78): a row under Matchplay's tabs, in its tab style - finals on a qualifying event; qualifying and
+  the other finals on a finals event. Same page there, same tab (or the tab where it's already open); else Overview.
+- TD / Scorekeeper labels (item 76): organizer and managers = TD, scorekeepers = Scorekeeper (never both), by Match Play
+  account, only for players in the event; kept with eligibility labels; ignored for standings and eligibility.
+- Create new tournament (items 72, 79): "Cutoffs and finals" - lines, IFPA ranks, and finals (name, format) created right
+  after Create tournament with Matchplay's own Manage cutoffs and Create playoffs.
+
 ## 0.21.0 - 2026-10-31
 - No more automatic Refresh clicks (item 70): Match Play's page updates itself, so the groups no longer redraw a few
   seconds after the page loads. Only without page data (API fallback) does a change the page should show make it

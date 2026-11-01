@@ -64,7 +64,8 @@ var TDP = window.TDP || (window.TDP = {});
     T.jobs.resume();   // a task in progress carries on straight away (it doesn't need the tournament data first)
     await T.data.setTournament(tid);
     T.embed.render();
-    T.quicktest.after(tid);   // just created with Quick test setup: add its players and arenas
+    await T.quicktest.after(tid);   // just created with Quick test setup: add its players and arenas
+    if (T.cutoffs) T.cutoffs.after(tid);   // just created with cutoffs / finals set up
   }
   onRoute();
   addEventListener('popstate', () => setTimeout(onRoute, 0));
@@ -80,6 +81,7 @@ var TDP = window.TDP || (window.TDP = {});
     if (T.data.D.t) { T.inpage.render(); T.embed.render(); T.panel.render(); }
     T.deltest.render();   // (Organized page: no tournament open)
     T.quicktest.render();   // (Create new tournament page)
+    if (T.cutoffs) { T.cutoffs.createRender(); T.cutoffs.decorate(); }
     T.smart.decorate();   // Start next round window: our "Any category (game time)" choice
     if (T.jobs.get()) T.busy.render();
   };

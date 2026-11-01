@@ -148,7 +148,19 @@ Both finals were run to the end. Their rounds are closed, but none of the tourna
   - Each row's player link is `/tournaments/{id}/players/{playerId}`, which gives an exact id match.
 - **Set label replaces** a player's labels; it does not add to them. Pass the full list: existing labels plus the new one.
 - **Label color swatches** are `[role=radio]` elements named lime, sky, purple, orange, rose, gray, trans and pride.
-- **IFPA ranks:** Players tab → **IFPA rankings** button opens a table (Name / Wom. Rank / Rank).
+- **IFPA ranks:** the old "IFPA rankings" table is gone (2026-11). Players tab → Actions → **Set rank labels**: tabs IFPA /
+  Rating Class / MP Rating; From IFPA rank (required), To IFPA rank (blank = no limit), checkboxes Refresh IFPA data / Only
+  update players without labels → Continue → "Set player labels" (label box, colors lime/sky/purple/orange/rose/gray/trans/
+  pride as role=radio) → "Update N players". Ranks themselves aren't in the page data.
+- **Manage cutoffs** (Overview → Cutoff lines): per line "Cutoff N  Remove", Players above cutoff (− [input] +), Label
+  text, Color (red/green/fuchsia/orange); Add another cutoff; Update / Cancel.
+- **Manage playoffs** (More… → /playoffs) → **Create playoffs**: #name, #format (bracket, double_bracket, group_bracket,
+  golf_bracket, bowling, ladder, amazingrace, group_matchplay), #playerLimit (4…32, 0 = other).
+- **Results window**: names column (flex-1, rows `.cursor-pointer.truncate`) then one `div.w-10` column per place with a
+  `div.h-10` cell per player: `.rounded-full` circle, or an SVG check when picked (clicking the check takes it off).
+- **Change player order**: `ul > li > button` (div P1 + div.flex-1 name + Seed line); click a player, then a row's
+  "Move to player N" (inserts). Store: `scorekeepers[tid]` = {id: {userId, role: scorekeeper|manager}}; tournament
+  `managers` = userIds; player `claimedBy` = userId.
   - The app's internal `/api/tournaments/{id}/players/ifpa-rankings` refuses API tokens.
   - The official API only has ranks for claimed players (`/users/{id}?includeIfpa=1`).
   - So the extension reads Matchplay's own table instead.

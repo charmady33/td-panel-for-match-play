@@ -87,6 +87,27 @@ TDP.jobs = (() => {
     async deactivate(a) { await T.mp.bulk(a.ids, 'Deactivate'); },
     async activate(a) { await T.mp.bulk(a.ids, 'Activate'); },
     async seeds(a) { await T.mp.setSeeds(a.names); },
+    // item 72: Matchplay's own Set rank labels for each IFPA rank range (only = players without labels: new ones)
+    async eligApply(a) {
+      const P = counter(a.ranges.length); let n = 0;
+      for (const [i, r] of a.ranges.entries()) {
+        P.to(i, `${r.label}: IFPA rank ${r.from}-${r.to}`);
+        n += await T.mp.rankLabels({ ...r, only: !!a.only, refresh: i === 0 });
+        P.tick(`${r.label} done`);
+      }
+      return `${n} player${n === 1 ? '' : 's'} labeled`;
+    },
+    // item 76: TD / Scorekeeper labels, worked out from Matchplay's data right now
+    async staffLabels(a) {
+      await T.data.refresh(true);
+      const D = T.data.D, t = D.tid === a.tid ? D.t : null;
+      const groups = T.cutoffs.staffGroups(t);
+      if (!groups.length) return 'TD and Scorekeeper labels already right';
+      const P = counter(groups.length);
+      for (const g of groups) { P.to(P.done, `${g.labels.join(', ') || 'no label'} · ${g.ids.length} player${g.ids.length === 1 ? '' : 's'}`); await T.mp.setLabels(g.ids, g.labels, g.color); P.tick(); }
+    },
+    async setCutoffs(a) { await T.mp.setCutoffs(a.lines); },
+    async createPlayoff(a) { await T.mp.createPlayoff(a); return `${a.name} created`; },
     async readRanks(a) {
       const byName = await T.mp.readIfpaRanks(), ranks = {};
       const t = await T.data.loadTournament(a.tid, 0);

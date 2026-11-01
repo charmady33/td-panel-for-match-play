@@ -439,7 +439,7 @@ TDP.inpage = (() => {
     const D = T.data.D;
     const page0 = T.routePage();
     if (page0 !== lastPage) { lastPage = page0; if ((page0 === 'standings' || page0 === 'resolve-ties') && D.qual) T.data.refresh(true); }
-    if (!D.isTD || !D.t) { clearMarks(); ['tdp-ties-standings', 'tdp-elig', 'tdp-ties-resolve', 'tdp-auto', 'tdp-tb-reminder', 'tdp-bankbar', 'tdp-arena-times', 'tdp-ifpa-btn', 'tdp-busy-banner', 'tdp-elig-bar', 'tdp-plays'].forEach(id => { const e = document.getElementById(id); if (e) e.remove(); }); return; }
+    if (!D.isTD || !D.t) { clearMarks(); ['tdp-links', 'tdp-ties-standings', 'tdp-elig', 'tdp-ties-resolve', 'tdp-auto', 'tdp-tb-reminder', 'tdp-bankbar', 'tdp-arena-times', 'tdp-ifpa-btn', 'tdp-busy-banner', 'tdp-elig-bar', 'tdp-cut-bar', 'tdp-plays'].forEach(id => { const e = document.getElementById(id); if (e) e.remove(); }); return; }
     const page = T.routePage();
     try {
       reminder(D);
@@ -448,10 +448,11 @@ TDP.inpage = (() => {
       if (page === 'matches') matches(D); else block('tdp-auto', null);
       if (T.bankbar) T.bankbar.render(D);
       if (T.arenatab) T.arenatab.render(D);
-      if (T.elig) T.elig.render(D);
+      if (T.cutoffs) T.cutoffs.render(D);
       if (T.ifpa) T.ifpa.render(D);
       if (T.plays) T.plays.render(D);
       if (T.timers) T.timers.render(D);
+      if (T.links) T.links.render(D);
     } catch (e) { T.warn('inpage', e); }
   }
   // Matchplay's "Manual" button in the standings Ties column: show our resolved-tie window instead of its info box

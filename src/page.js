@@ -3,7 +3,7 @@
 (() => {
   if (window.__tdpPage) return;
   window.__tdpPage = 1;
-  const SLICES = ['tournaments', 'players', 'tournamentPlayers', 'arenas', 'tournamentArenas', 'banks', 'rounds', 'games', 'standings', 'tournamentStandings', 'linkedTournaments', 'bootData'];
+  const SLICES = ['scorekeepers', 'tournaments', 'players', 'tournamentPlayers', 'arenas', 'tournamentArenas', 'banks', 'rounds', 'games', 'standings', 'tournamentStandings', 'linkedTournaments', 'bootData'];
   let store = null, last = {}, lastTid = null, timer = null;
 
   function findStore() {
@@ -43,10 +43,11 @@
     const games = vals(g('games').games).filter(x => x && x.tournamentId === id);
     const sids = (g('tournamentStandings').tournamentStandings || {})[id], sm = g('standings').standings || {};
     const standings = Array.isArray(sids) && sids.length ? sids.map(pid => sm[`${id}-${pid}`]).filter(Boolean) : null;
+    const skm = (g('scorekeepers').scorekeepers || {})[id];
     const boot = g('bootData').bootData || {};
     return {
       tid: id, at: Date.now(),
-      t: { ...t, players, arenas, banks, linkedTournaments: links },
+      t: { ...t, players, arenas, banks, linkedTournaments: links, ...(skm ? { scorekeepers: Object.values(skm) } : {}) },
       playersKnown: !!pids, arenasKnown: !!aids, linksKnown,
       rounds, games, standings,
       me: boot.currentUserId ? { userId: boot.currentUserId, name: [boot.firstName, boot.lastName].filter(Boolean).join(' ') } : null,

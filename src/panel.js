@@ -126,27 +126,51 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--pri);vertical-ali
     if (el.dataset.h !== html) { el.dataset.h = html; el.shadowRoot.innerHTML = html; }
   }
 
-  // ---------- first run: no API token yet ----------
+  // ---------- first run: no API token yet (item 77: a full-width section with every step) ----------
+  let tokMsg = null;
   function tokenPrompt(show) {
     const main = document.querySelector('main');
     const anchor = show && main ? [...main.children].find(e => !/^tdp-/.test(e.id || '')) : null;
-    T.inpage.block('tdp-token', anchor, 'before', anchor ? `<div class="card" style="margin:8px 16px"><div class="cb gap" style="align-items:center;flex-wrap:wrap">
-      <b>TD Panel for Match Play</b><span class="small flex1">Paste your Matchplay API token to switch on the TD tools. <a class="link" href="https://app.matchplay.events/account/tokens" target="_blank" rel="noopener">Create an API token ↗</a> - name it anything (e.g. TD Panel), copy it, paste it here. It's kept only in this browser; change it later with the extension's toolbar button.</span>
-      <input type="password" data-f="tok" placeholder="API token" style="width:240px"><button class="btn sm" data-act="saveToken">Save</button></div></div>` : '', onTokenEvent);
+    const step = (n, html) => `<li style="display:flex;gap:10px;align-items:flex-start;margin:6px 0"><span style="flex:none;width:22px;height:22px;border-radius:50%;background:var(--pri);color:#fff;font-size:12px;font-weight:600;display:flex;align-items:center;justify-content:center">${n}</span><span>${html}</span></li>`;
+    T.inpage.block('tdp-token', anchor, 'before', anchor ? `<div class="card" style="margin:8px 0 16px;border:1px solid var(--prib)"><div class="cb">
+      <div class="h" style="font-size:16px">Connect TD Panel to Match Play</div>
+      <div class="small mt">TD Panel reads your events with your own Match Play API token (read-only). It never changes anything through the token - changes are made with Match Play's own buttons, after you confirm.</div>
+      <ol style="list-style:none;margin:12px 0 8px;padding:0;font-size:14px">
+        ${step(1, `<a class="btn sm" href="https://app.matchplay.events/account/tokens" target="_blank" rel="noopener" style="text-decoration:none">Open Match Play API tokens ↗</a> <span class="small">(opens in a new tab)</span>`)}
+        ${step(2, 'Click <b>Create token</b> and give it any name, e.g. <b>TD Panel</b>.')}
+        ${step(3, 'Copy the token - Match Play shows it only once.')}
+        ${step(4, 'Paste it here and click <b>Save</b>.')}
+      </ol>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input type="password" data-f="tok" placeholder="Paste your API token here" autocomplete="off" style="flex:1;min-width:260px;max-width:640px;font-size:14px;padding:8px 10px">
+        <button class="btn sec sm" data-act="peek" title="Show / hide what you pasted">👁</button><button class="btn" data-act="saveToken">Save</button></div>
+      ${tokMsg ? `<div class="callout ${tokMsg.ok ? 'ok' : 'err'} mt">${T.esc(tokMsg.text)}</div>` : ''}
+      <div class="small muted mt">Kept only in this browser and sent only to Match Play. Change or remove it any time with the extension's toolbar button.</div>
+    </div></div>` : '', onTokenEvent);
   }
   async function onTokenEvent(e) {
-    if (e.type !== 'click' || !e.target.closest('[data-act=saveToken]')) return;
-    const v = e.target.getRootNode().querySelector('[data-f=tok]').value.trim(); if (!v) return;
-    await T.saveSettings({ token: v }); T.api.clear(); T.data.D.me = null; tokenPrompt(false);
-    await T.data.refresh(true);
-    say(T.data.D.error ? T.data.D.error : 'Token saved.', T.data.D.error ? 'err' : 'ok');
+    if (e.type !== 'click') return;
+    const r = e.target.getRootNode(), inp = r.querySelector('[data-f=tok]');
+    if (e.target.closest('[data-act=peek]')) { inp.type = inp.type === 'password' ? 'text' : 'password'; return; }
+    if (!e.target.closest('[data-act=saveToken]')) return;
+    const v = inp.value.trim(); if (!v) { tokMsg = { text: 'Paste your token first.' }; return tokenPrompt(true); }
+    await T.saveSettings({ token: v }); T.api.clear(); T.data.D.me = null;
+    try {
+      const me = T.data.unwrap(await T.api.get('/users/profile', 0, true));
+      tokMsg = null; tokenPrompt(false);
+      say(`Connected as ${me && me.name ? me.name : 'you'} ✓`, 'ok');
+      await T.data.refresh(true);
+    } catch (err) {
+      const m = String(err && err.message || err);
+      tokMsg = { text: m === 'BAD_TOKEN' ? "Match Play didn't accept this token - check you copied all of it (or create a new one)." : `Couldn't check the token right now (${T.apiErrorText(err)}). It's saved; it will be tried again.` };
+      tokenPrompt(true);
+    }
   }
 
   // ---------- render ----------
   function render() {
     if (!root) return;
     const d = D();
-    const tdPage = !!document.querySelector(`a[href="/tournaments/${d.tid}/edit"]`);
+    const tdPage = !!document.querySelector(`a[href="/tournaments/${d.tid}/edit"]`) || d.isTD === true;
     tokenPrompt(!T.settings.token && tdPage);
     chip(d);
     const w = root.querySelector('.wrap'); w.classList.toggle('dark', isDark());

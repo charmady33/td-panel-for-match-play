@@ -88,9 +88,22 @@ TDP.ties = (() => {
   function resultsHtml(game, order, n, finish, nameOf, pre, placeName) {
     const f = Array.from({ length: n }, (_, i) => (finish || [])[i] ?? null);
     return `<div class="res"><div class="rt">Results for ${T.esc(game || 'the tiebreaker')}</div>
-      <table class="rg"><tr><th></th>${f.map((_, i) => `<th>${placeName ? placeName(i) : sup(i + 1)}</th>`).join('')}</tr>
-      ${order.map(id => `<tr><td><button class="rn" data-act="${pre}Name" data-p="${id}">${T.esc(nameOf(id))}</button></td>${f.map((x, i) => `<td><button class="dot${x === id ? ' on' : ''}" data-act="${pre}Dot" data-p="${id}" data-i="${i}" title="${T.esc(nameOf(id))}: ${T.ord(i + 1)}"></button></td>`).join('')}</tr>`).join('')}</table>
-      <div class="small" style="margin-top:6px">Tap names or circles to enter results.</div></div>`;
+      <table class="rg"><tr><th></th><th></th>${f.map((_, i) => `<th>${placeName ? placeName(i) : sup(i + 1)}</th>`).join('')}</tr>
+      ${order.map(id => `<tr><td><button class="rn" data-act="${pre}Name" data-p="${id}">${T.esc(nameOf(id))}</button></td><td><input class="ob" data-ob-pre="${pre}" data-p="${id}" data-n="${n}" value="${f.indexOf(id) >= 0 ? f.indexOf(id) + 1 : ''}"></td>${f.map((x, i) => `<td><button class="dot${x === id ? ' on' : ''}" data-act="${pre}Dot" data-p="${id}" data-i="${i}" title="${T.esc(nameOf(id))}: ${T.ord(i + 1)}"></button></td>`).join('')}</tr>`).join('')}</table>
+      <div class="small" style="margin-top:6px">Type 1, 2, 3… in the boxes (Tab to the next), or tap names or circles.</div></div>`;
+  }
+  // the 1, 2, 3… boxes (item 73): a number moves that player to that place; the others shift (orderbox.js)
+  function wireBoxes() {
+    if (!host || !T.orderbox) return;
+    for (const inp of host.shadowRoot.querySelectorAll('input.ob')) {
+      const pre = inp.dataset.obPre, id = inp.dataset.p, n = +inp.dataset.n;
+      const row = () => [...host.shadowRoot.querySelectorAll(`input.ob[data-ob-pre="${pre}"]`)];
+      T.orderbox.attach(inp, {
+        n, value: () => inp.value,
+        free: () => { const used = new Set(row().filter(x => x !== inp).map(x => +x.value).filter(Boolean)); return [...Array(n)].map((_, k) => k + 1).filter(k => !used.has(k)); },
+        pick: v => { const k = row().indexOf(inp); onClick({ target: { closest: () => ({ dataset: { act: pre + 'Box', p: id, v } }) } }).then(() => { const nx = row()[k + 1]; if (nx && !nx.value) nx.focus(); }); },
+      });
+    }
   }
   // tap a name: next free place (tap again: clear it); tap a circle: that place. Last place fills itself.
   function placeIt(finish, ids, id, i) {
@@ -152,7 +165,7 @@ tr.out td{opacity:.5}
 .game{font-size:16px;font-weight:600}
 .res{margin:8px 0}.rt{font-size:16px;font-weight:500;margin-bottom:6px}
 table.rg{width:auto;border-collapse:collapse}table.rg th{font-size:12px;font-weight:500;text-align:center;padding:2px 10px;border:0;text-transform:none;letter-spacing:0;background:none;color:var(--text)}
-table.rg td{border:0;padding:4px 10px;text-align:center}table.rg td:first-child{text-align:left;padding-left:0}
+table.rg td{border:0;padding:4px 10px;text-align:center}input.ob{width:36px;height:28px;box-sizing:border-box;text-align:center;border:1px solid #a5b4fc;border-radius:6px;font:600 13px ui-sans-serif,system-ui,sans-serif;padding:0;margin:0}table.rg td:first-child{text-align:left;padding-left:0}
 .rn{background:none;border:0;font:inherit;color:var(--text);cursor:pointer;padding:2px 0;text-align:left}
 .dot{width:24px;height:24px;border-radius:9999px;border:0;background:#c7d2fe;cursor:pointer;display:inline-block}
 .dot.on{background:#4f46e5;box-shadow:inset 0 0 0 5px #c7d2fe}
@@ -253,6 +266,7 @@ table.rg td{border:0;padding:4px 10px;text-align:center}table.rg td:first-child{
       foot = `<button class="btn sec" data-act="restart">Start over</button><button class="btn" data-act="apply" title="${complete(finish, ids.length) ? 'Save to Matchplay' : 'Not every place is filled in: closes and keeps what you entered'}">Save</button>`;
     }
     host.shadowRoot.innerHTML = `<style>${CSS()}</style><div class="wrap${document.documentElement.classList.contains('dark') ? ' dark' : ''}"><div class="ov" data-act="bg"><div class="dlg">${head}<div class="db">${body}</div><div class="df">${foot}</div></div></div></div>`;
+    wireBoxes();
   }
 
   async function onClick(e) {
@@ -273,6 +287,7 @@ table.rg td{border:0;padding:4px 10px;text-align:center}table.rg td:first-child{
       if (act === 'choose') { const rec = store(D)[cur.key]; await save(D, cur.key, { status: 'playing', game: rec.drawn[+a.dataset.i].name, order: shuffle(ids), finish: [], tdSet: !!rec.drawn[+a.dataset.i].byTD }); }
       if (act === 'own') await save(D, cur.key, { ...base, status: 'vote', method: 'ifpa', drawn: [], tdSet: true });
       if (act === 'rm') { const rec = store(D)[cur.key]; await save(D, cur.key, { drawn: rec.drawn.filter((_, i) => i !== +a.dataset.i) }); }
+      if (act === 'Box') { const rec = store(D)[cur.key]; await save(D, cur.key, { finish: T.orderbox.toFinish(rec.finish, ids, +a.dataset.p, +a.dataset.v) }); }
       if (act === 'Name' || act === 'Dot') { const rec = store(D)[cur.key]; await save(D, cur.key, { finish: placeIt(rec.finish, ids, +a.dataset.p, act === 'Dot' ? +a.dataset.i : null) }); }
       if (act === 'randPick') { const rec = store(D)[cur.key]; if (!rec.drawn.length) return; const g = rec.drawn[Math.floor(Math.random() * rec.drawn.length)]; await save(D, cur.key, { status: 'playing', game: g.name, order: shuffle(ids), finish: [], randomPick: true, tdSet: !!g.byTD }); }
       if (act === 'fin') { const rec = store(D)[cur.key]; await save(D, cur.key, { finish: [...(rec.finish || []), +a.dataset.p] }); }
@@ -361,6 +376,7 @@ table.rg td{border:0;padding:4px 10px;text-align:center}table.rg td:first-child{
       foot = `<button class="btn sec" data-act="gRestart">Start over</button><button class="btn" data-act="gDone">Save</button>`;
     }
     host.shadowRoot.innerHTML = `<style>${CSS()}</style><div class="wrap${document.documentElement.classList.contains('dark') ? ' dark' : ''}"><div class="ov" data-act="bg"><div class="dlg"><div class="dh">${T.esc(gt.groupName || 'Group ' + gt.group)} · tie<span class="badge b-rose">${gt.kind === 'final' ? 'Final' : 'Advancing spot'}</span></div><div class="db">${body}</div><div class="df">${foot}</div></div></div></div>`;
+    wireBoxes();
   }
   async function gClick(act, a) {
     const D = T.data.D, gt = gcur.gt, key = gcur.key, rec = gStore(D)[key] || {};
@@ -384,6 +400,7 @@ table.rg td{border:0;padding:4px 10px;text-align:center}table.rg td:first-child{
     if (act === 'gChoose') await gSave(D, key, { status: 'playing', game: rec.drawn[+a.dataset.i].name, order: shuffle(gt.ids), finish: [] });
     if (act === 'gOwn') { if (gcur.mp) { gcur.drawn = []; gcur.tdSet = true; return gDraw(); } await gSave(D, key, { ...base, status: 'vote', method: 'ifpa', drawn: [], tdSet: true }); }
     if (act === 'grm') { if (gcur.mp) { gcur.drawn = gcur.drawn.filter((_, i) => i !== +a.dataset.i); return gDraw(); } await gSave(D, key, { drawn: (rec.drawn || []).filter((_, i) => i !== +a.dataset.i) }); }
+    if (act === 'gBox') await gSave(D, key, { finish: T.orderbox.toFinish(rec.finish, gt.ids, +a.dataset.p, +a.dataset.v) });
     if (act === 'gName' || act === 'gDot') await gSave(D, key, { finish: placeIt(rec.finish, gt.ids, +a.dataset.p, act === 'gDot' ? +a.dataset.i : null) });
     if (act === 'gRandPick') { if (!(rec.drawn || []).length) return; const g = rec.drawn[Math.floor(Math.random() * rec.drawn.length)]; await gSave(D, key, { status: 'playing', game: g.name, order: shuffle(gt.ids), finish: [] }); }
     if (act === 'gFin') await gSave(D, key, { finish: [...(rec.finish || []), +a.dataset.p] });

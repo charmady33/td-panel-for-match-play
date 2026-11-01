@@ -34,8 +34,14 @@ body.off #events,body.off h2{opacity:.45}
   <hr>
   <label class="sw"><input type="checkbox" id="on"> <span><b id="onTxt">TD Panel is on</b><br><span class="s">Off: nothing is added to Matchplay's pages and no automatic options run, in every tab. Your settings are kept.</span></span></label>
   <label for="tok">Matchplay API token</label>
-  <input id="tok" type="password" placeholder="Paste your token" autocomplete="off">
-  <div class="s" style="margin-top:4px"><a href="https://app.matchplay.events/account/tokens" target="_blank" rel="noopener">Create an API token ↗</a> - name it anything (e.g. TD Panel), copy it, paste it here. Kept only in this browser; used to read data (changes are made with Matchplay's own buttons).</div>
+  <ol class="s" style="margin:4px 0 6px 18px;padding:0">
+    <li><a href="https://app.matchplay.events/account/tokens" target="_blank" rel="noopener">Open Match Play API tokens ↗</a></li>
+    <li>Click <b>Create token</b>, name it anything (e.g. TD Panel).</li>
+    <li>Copy the token (Match Play shows it only once).</li>
+    <li>Paste it below and click Save.</li>
+  </ol>
+  <div class="row" style="margin-top:0"><input id="tok" type="password" placeholder="Paste your token" autocomplete="off" style="flex:1"><button class="sec" id="peek" title="Show / hide">👁</button></div>
+  <div class="s" style="margin-top:4px">Kept only in this browser and sent only to Match Play; read-only (changes are made with Match Play's own buttons).</div>
   <div class="row"><button id="save">Save</button><span class="s" id="msg"></span></div>
   <hr>
   <div class="s" id="tinfo">Open one of your tournaments to clear its saved data.</div>

@@ -41,6 +41,13 @@ Your settings, API token and saved tournament data stay as they are.
 ## What it does
 - **Inside Matchplay's pages**:
   - **USA flag** replaces Matchplay's pride flag next to the Match Play logo
+  - **Linked events row** under the tabs (qualifying ↔ its finals) in Matchplay's tab style - same page, same tab
+  - **Manage cutoffs** (Players and Standings tabs, Matchplay's own cutoff window, and Create new tournament): players
+    above each line plus an **IFPA rank** cut for B, C… finals; eligibility labels ("B/C Ineligible", "C Ineligible") are
+    set with Matchplay's own Set rank labels and kept up to date as players are added (phone app included);
+    **TD** / **Scorekeeper** labels (never both; they don't affect standings or eligibility); finals can be created
+    from Create new tournament
+  - **1, 2, 3, 4 boxes** in Matchplay's Results and Change player order windows and the tiebreaker grid
   - **Standings tab (qualifying)**:
     - a "Ties to break before finals" box lists each unresolved tie that matters, and why
     - tied players are highlighted in Matchplay's table

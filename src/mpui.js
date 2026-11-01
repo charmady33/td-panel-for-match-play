@@ -543,5 +543,67 @@ TDP.mp = (() => {
     await dialogClosed();
   }
 
-  return { deleteTournament, setPlayerOrder, roundArenas, addTestPlayers, addTestArenas, setArenaById, setGameArena, gameCard, openAssign, groupHead, goTab, menu, playerRows, selectPlayers, setLabels, bulk, setActive, readIfpaRanks, addFromQualifying, setSeeds, closeRound, startNextRound, publishRound, createBank, setBankArenas, reorderBank, assignBank, enterResults, addArenas, resolveTie, needBtn, needDialog, dialogClosed };
+  // ---------- item 72: Matchplay's own "Set rank labels" (Players tab -> Actions) ----------
+  // label every player ranked from..to (IFPA, Matchplay's own data); only = only players without labels yet.
+  // Returns how many players Matchplay updated (0 = none in that range).
+  async function rankLabels({ from, to, label, color, only, refresh }) {
+    await waitPlayers();
+    await menu('Actions', 'Set rank labels');
+    const d = await needDialog();
+    const tab = [...d.querySelectorAll('button')].find(b => T.txt(b) === 'IFPA'); if (tab) { T.click(tab); await T.sleep(150); }
+    const boxes = [...d.querySelectorAll('input[type=text], input:not([type])')];
+    if (boxes.length < 2) fail('Set rank labels: rank boxes not found.');
+    T.setVal(boxes[0], String(from)); T.setVal(boxes[1], to ? String(to) : '');
+    const cbs = [...d.querySelectorAll('input[type=checkbox]')];
+    const tick = (cb, on) => { if (cb && cb.checked !== !!on) cb.click(); };
+    tick(cbs[0], refresh); tick(cbs[1], only);
+    T.click(await needBtn('Continue', d)); await T.sleep(400);
+    const d2 = await needDialog();
+    const go = await T.waitFor(() => [...d2.querySelectorAll('button')].find(b => /^Update \d+ players?$/i.test(T.txt(b))), 15000) || fail('Set rank labels: next step did not open.');
+    const n = +T.txt(go).match(/\d+/)[0];
+    if (!n) { T.click(T.findBtn(d2, 'Cancel')); await dialogClosed(); return 0; }
+    const input = d2.querySelector('input[type=text], input:not([type])') || fail('Set rank labels: label box not found.');
+    T.setVal(input, label);
+    pickColor(d2, color);
+    T.click(go);
+    await dialogClosed(20000);
+    return n;
+  }
+  // ---------- Overview -> Cutoff lines -> Manage cutoffs ----------
+  // lines: [{ above, text, color }] - Matchplay's window is made to match (lines added / removed as needed)
+  async function setCutoffs(lines) {
+    T.click(await needBtn('Manage cutoffs'));
+    const d = await needDialog();
+    const blocks = () => [...d.querySelectorAll('div')].filter(x => /^Cutoff \d+/.test(T.txt(x.firstElementChild || x)) && x.querySelector('input'));
+    const top = () => { const all = blocks(); return all.filter(b => !all.some(o => o !== b && b.contains(o))); };
+    for (let k = 0; k < 12 && top().length < lines.length; k++) { T.click(await needBtn('Add another cutoff', d)); await T.sleep(200); }
+    for (let k = 0; k < 12 && top().length > lines.length; k++) { const b = top()[top().length - 1]; const rm = [...b.querySelectorAll('button')].find(x => T.txt(x) === 'Remove'); if (!rm) break; T.click(rm); await T.sleep(200); }
+    top().forEach((b, i) => {
+      const L = lines[i]; if (!L) return;
+      const ins = [...b.querySelectorAll('input[type=text], input:not([type])')].filter(x => !x.dataset.tdp);
+      if (ins[0]) T.setVal(ins[0], String(L.above));
+      if (ins[1] && L.text != null) T.setVal(ins[1], L.text);
+      if (L.color) { const c = [...b.querySelectorAll('button, [role=radio]')].find(x => T.txt(x).toLowerCase() === String(L.color).toLowerCase()); if (c) T.click(c); }
+    });
+    T.click(await needBtn(/^Update$/, d));
+    await dialogClosed();
+  }
+  // ---------- More -> Manage playoffs -> Create playoffs ----------
+  async function createPlayoff({ name, format, limit }) {
+    T.click(await needBtn('Create playoffs'));
+    const d = await needDialog();
+    const nm = d.querySelector('#name') || fail('Create playoffs: name box not found.');
+    T.setVal(nm, name);
+    const fm = d.querySelector('#format'); if (fm && format) T.setVal(fm, format);
+    const pl = d.querySelector('#playerLimit');
+    if (pl && limit) {
+      const has = [...pl.options].some(o => o.value === String(limit));
+      T.setVal(pl, has ? String(limit) : '0');
+      if (!has) { await T.sleep(200); const other = [...d.querySelectorAll('input[type=number], input[type=text]')].find(x => x !== nm); if (other) T.setVal(other, String(limit)); }
+    }
+    T.click(await needBtn('Create playoffs', d));
+    await dialogClosed(15000);
+  }
+
+  return { rankLabels, setCutoffs, createPlayoff, deleteTournament, setPlayerOrder, roundArenas, addTestPlayers, addTestArenas, setArenaById, setGameArena, gameCard, openAssign, groupHead, goTab, menu, playerRows, selectPlayers, setLabels, bulk, setActive, readIfpaRanks, addFromQualifying, setSeeds, closeRound, startNextRound, publishRound, createBank, setBankArenas, reorderBank, assignBank, enterResults, addArenas, resolveTie, needBtn, needDialog, dialogClosed };
 })();

@@ -23,10 +23,13 @@
     showOn($('on').checked);
     chrome.runtime.sendMessage({ type: 'tdp-onoff' }).catch(() => {});
   });
+  $('peek').addEventListener('click', () => { $('tok').type = $('tok').type === 'password' ? 'text' : 'password'; });
   $('save').addEventListener('click', async () => {
     const cur = (await chrome.storage.local.get('settings')).settings || {};
     await chrome.storage.local.set({ settings: { ...cur, token: $('tok').value.trim() } });
-    $('msg').textContent = 'Saved. Open tournament pages update straight away.';
+    $('msg').textContent = 'Checking…';
+    try { const j = await api('/users/profile'), me = j && j.data && !Array.isArray(j.data) ? j.data : j; $('msg').textContent = `Connected as ${(me && me.name) || 'you'} ✓`; }
+    catch (e) { $('msg').textContent = e.message === 'BAD_TOKEN' ? "Match Play didn't accept this token - check you copied all of it." : e.message === 'NO_TOKEN' ? 'Token removed.' : `Saved, but couldn't check it right now (${e.message}).`; }
     loadEvents();
   });
 

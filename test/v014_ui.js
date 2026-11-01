@@ -61,6 +61,14 @@ const out = process.argv[2] || '.';
   console.log('drawn:', vote.before.join(' / '), '→', vote.after.join(' / '));
   console.log(vote.title, '| grid after 1 tap:', vote.grid, '| full:', vote.grid2, '| Save enabled:', vote.save, '| tdSet:', vote.rec && vote.rec.tdSet);
   await page.screenshot({ path: out + '/results-grid.png' });
+  // item 73: the number boxes in the tie grid - typing 1 in the last player's box moves them to 1st, the rest shift
+  console.log('tie boxes:', await page.evaluate(async () => {
+    const S = () => document.getElementById('tdp-tb').shadowRoot, w = () => new Promise(r => setTimeout(r, 250));
+    const box = () => [...S().querySelectorAll('input.ob')];
+    const before = box().map(i => i.value || '_').join('');
+    const last = box()[box().length - 1]; last.focus(); last.dispatchEvent(new KeyboardEvent('keydown', { key: '1', bubbles: true })); await w(); await w();
+    return before + ' -> ' + box().map(i => i.value || '_').join('');
+  }));
   console.log('errors', errors);
   await browser.close();
 })();
