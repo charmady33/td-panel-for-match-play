@@ -209,7 +209,7 @@ TDP.cutoffs = (() => {
     if (T.isFrame || T.settings.off || T.dead) return;
     const d = T.dialog(), D = T.data.D;
     if (d && D) playoffDecor();
-    if (!d || !D || !isQual(D) || !/Players above cutoff/.test(T.txt(d)) || !T.findBtn(d, 'Add another cutoff')) return;
+    if (!d || !D || !isQual(D) || !/Players above cutoff/.test(T.txt(d)) || !T.findBtn(d, /^Add (another )?cutoff$/i)) return;
     const cuts = cutsOf(D);
     cutBlocks(d).forEach((b, i) => {
       if (!i || b.querySelector('[data-tdp=ifpa]')) return;

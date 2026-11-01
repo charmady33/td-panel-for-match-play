@@ -153,7 +153,8 @@ Both finals were run to the end. Their rounds are closed, but none of the tourna
   update players without labels → Continue → "Set player labels" (label box, colors lime/sky/purple/orange/rose/gray/trans/
   pride as role=radio) → "Update N players". Ranks themselves aren't in the page data.
 - **Manage cutoffs** (Overview → Cutoff lines): per line "Cutoff N  Remove", Players above cutoff (− [input] +), Label
-  text, Color (red/green/fuchsia/orange); Add another cutoff; Update / Cancel.
+  text, Color (red/green/fuchsia/orange); **Add cutoff** while empty, then Add another cutoff; Update / Cancel. A new line
+  starts as 4 players / "FINALS CUTOFF".
 - **Manage playoffs** (More… → /playoffs) → **Create playoffs**: #name, #format (bracket, double_bracket, group_bracket,
   golf_bracket, bowling, ladder, amazingrace, group_matchplay), #playerLimit (4…32, 0 = other).
 - **Results window**: names column (flex-1, rows `.cursor-pointer.truncate`) then one `div.w-10` column per place with a

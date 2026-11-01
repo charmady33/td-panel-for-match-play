@@ -2,6 +2,11 @@
 
 All notable changes, newest first. Versions follow [semantic versioning](https://semver.org/): new features bump the middle number, fixes the last.
 
+## 0.23.1 - 2026-11-01
+- Fix: "Cutoffs and finals" on a new tournament stopped with "Couldn't find Add another cutoff" - Matchplay's cutoff
+  window says **Add cutoff** while it has no lines yet. Both are handled now (also for the IFPA rank box), so the lines
+  and then the finals are created. Create playoffs' "Other player count" box no longer picks up TD Panel's own boxes.
+
 ## 0.23.0 - 2026-11-01
 - Create playoffs (item 81): Matchplay's Create playoffs window gets a "Cutoff line" choice - the first line without a
   finals is picked and fills Number of players and a name ("B Finals"); "+ New cutoff line" (players above, text, IFPA

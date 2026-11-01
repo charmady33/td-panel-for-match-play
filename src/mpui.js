@@ -576,7 +576,7 @@ TDP.mp = (() => {
     const d = await needDialog();
     const blocks = () => [...d.querySelectorAll('div')].filter(x => /^Cutoff \d+/.test(T.txt(x.firstElementChild || x)) && x.querySelector('input'));
     const top = () => { const all = blocks(); return all.filter(b => !all.some(o => o !== b && b.contains(o))); };
-    for (let k = 0; k < 12 && top().length < lines.length; k++) { T.click(await needBtn('Add another cutoff', d)); await T.sleep(200); }
+    for (let k = 0; k < 12 && top().length < lines.length; k++) { T.click(await needBtn(/^Add (another )?cutoff$/i, d)); await T.sleep(200); }   // ("Add cutoff" while there are none yet)
     for (let k = 0; k < 12 && top().length > lines.length; k++) { const b = top()[top().length - 1]; const rm = [...b.querySelectorAll('button')].find(x => T.txt(x) === 'Remove'); if (!rm) break; T.click(rm); await T.sleep(200); }
     top().forEach((b, i) => {
       const L = lines[i]; if (!L) return;
@@ -599,7 +599,7 @@ TDP.mp = (() => {
     if (pl && limit) {
       const has = [...pl.options].some(o => o.value === String(limit));
       T.setVal(pl, has ? String(limit) : '0');
-      if (!has) { await T.sleep(200); const other = [...d.querySelectorAll('input[type=number], input[type=text]')].find(x => x !== nm); if (other) T.setVal(other, String(limit)); }
+      if (!has) { const other = await T.waitFor(() => [...d.querySelectorAll('input[type=number], input[type=text]')].find(x => x !== nm && !x.closest('[data-tdp]')), 2000); if (other) T.setVal(other, String(limit)); }   // ("Other player count")
     }
     T.click(await needBtn('Create playoffs', d));
     await dialogClosed(15000);

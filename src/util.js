@@ -1,7 +1,7 @@
 // TD Panel for Match Play - shared helpers. Every file adds to the one global namespace TDP.
 /* global chrome */
 var TDP = window.TDP || (window.TDP = {});
-TDP.VERSION = '0.23.0';
+TDP.VERSION = '0.23.1';
 
 // the hidden worker frame (worker.js): a copy of Matchplay inside the TD's tab that makes the changes
 TDP.isFrame = (() => { try { return window.top !== window && window.name === 'tdp-worker'; } catch (e) { return false; } })();
