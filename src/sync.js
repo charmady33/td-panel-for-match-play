@@ -3,13 +3,15 @@
 //  - its own Refresh button, where the page has one (Matches, Standings)
 //  - otherwise a quick in-app hop: the address switches to another route and straight back (no page load), so
 //    Matchplay re-opens the tournament and fetches it - behind a still copy of the screen, so nothing flickers
-// Also: when the API shows something changed (a score from a phone, a new round…), the page is updated by itself,
+// Match Play's page updates itself through its own real-time feed, so this is only used without page data (API
+// fallback, item 70): when the API shows a change the page should show - never in the first 20 s after a page load -
 // unless the TD is busy with it (a dialog open, typing, clicked in the last few seconds).
 var TDP = window.TDP || (window.TDP = {});
 
 TDP.sync = (() => {
   const T = TDP;
   let hopping = false, lastInput = 0, lastAuto = 0;
+  const loadedAt = Date.now();
 
   ['pointerdown', 'keydown', 'wheel', 'touchstart'].forEach(ev => addEventListener(ev, e => { if (e.isTrusted) lastInput = Date.now(); }, true));
 
@@ -56,7 +58,7 @@ TDP.sync = (() => {
     return false;
   }
   async function auto() {
-    if (T.isFrame || !T.routeTid() || Date.now() - lastAuto < 10000 || busyHere()) return;
+    if (T.isFrame || !T.routeTid() || Date.now() - loadedAt < 20000 || Date.now() - lastAuto < 10000 || busyHere()) return;
     lastAuto = Date.now();
     await soft();
   }

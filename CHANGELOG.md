@@ -2,6 +2,19 @@
 
 All notable changes, newest first. Versions follow [semantic versioning](https://semver.org/): new features bump the middle number, fixes the last.
 
+## 0.21.0 - 2026-10-31
+- No more automatic Refresh clicks (item 70): Match Play's page updates itself, so the groups no longer redraw a few
+  seconds after the page loads. Only without page data (API fallback) does a change the page should show make it
+  fetch again - never in the first 20 s after a load, and compared in a fixed order so the same data never looks changed.
+- Bank Builder era percentage (item 71): each era gets bank spots strictly by its share of the active games (no boost
+  for rare eras); within an era the longest games are left out. Each era is spread evenly over the banks (counts
+  differ by at most one), and bank times are evened out within that.
+- Bank preview: the era mix (lineup % next to the banks), and a "Not in any bank" list with why each game was left out
+  and an **Include** button (in for this build; the longest game of the same era comes out, shown) plus Clear includes.
+  "Never use" games are listed too and can be included once.
+- A machine is never twice in the same bank, even when games have to repeat (too few games).
+- Down machine: the best-fit replacement prefers the same era as the game that went down.
+
 ## 0.20.0 - 2026-10-31
 - Reads Match Play's own page data first (item 69): the tournament, players, arenas, banks, rounds and games the page
   already loaded. Everything the extension adds (Assign Bank/Order, timers, Est., tie notes, bank bar, Matches bar…)

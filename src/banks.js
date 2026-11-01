@@ -35,36 +35,54 @@ TDP.banks = (() => {
     return () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
   }
 
-  // more games than slots: first give every era up to one game per bank (so banks can mix eras), then share
-  // the rest by each era's size; within an era the longest games are held out first
+  // more games than slots: each era gets spots strictly by its share of the games (item 71) - rounding goes to the
+  // biggest leftover fractions; within an era the longest games are left out. A game the TD forces in (Settings
+  // "always", or Include in the preview) bumps the longest kept game of its own era (else the longest overall).
   function eraBalancedSubset(pool, slots, forced, numBanks, usage) {
     const byEra = {};
     pool.forEach(g => (byEra[g.era] = byEra[g.era] || []).push(g));
-    const eras = Object.keys(byEra).sort((a, b) => byEra[a].length - byEra[b].length);   // rarest first
-    const quota = eras.map(() => 0);
-    let rem = slots;
-    eras.forEach((e, i) => { const q = Math.min(byEra[e].length, numBanks, rem); quota[i] = q; rem -= q; });
-    if (rem > 0) {
-      const left = eras.map((e, i) => byEra[e].length - quota[i]), tot = left.reduce((a, b) => a + b, 0) || 1;
-      const ideal = left.map(l => l * rem / tot), add = ideal.map(Math.floor);
-      let r2 = rem - add.reduce((a, b) => a + b, 0);
-      eras.map((e, i) => ({ i, f: ideal[i] - add[i] })).sort((a, b) => b.f - a.f).forEach(c => { if (r2 > 0 && add[c.i] < left[c.i]) { add[c.i]++; r2--; } });
-      add.forEach((a, i) => { quota[i] += a; });
-    }
+    const eras = Object.keys(byEra).sort((a, b) => byEra[b].length - byEra[a].length || (a < b ? -1 : 1));
+    const ideal = eras.map(e => byEra[e].length * slots / pool.length), quota = ideal.map(Math.floor);
+    let rem = slots - quota.reduce((a, b) => a + b, 0);
+    eras.map((e, i) => ({ i, f: ideal[i] - quota[i] })).sort((a, b) => b.f - a.f || byEra[eras[b.i]].length - byEra[eras[a.i]].length)
+      .forEach(c => { if (rem > 0 && quota[c.i] < byEra[eras[c.i]].length) { quota[c.i]++; rem--; } });
     let kept = [], dropped = [];
+    const plan = {};
     eras.forEach((e, i) => {
-      // games used least in earlier rounds first (rotation), then the shortest
-      const s = [...byEra[e]].sort((a, b) => (forced.has(b.arenaId) - forced.has(a.arenaId)) || ((usage.get(nk(a)) || 0) - (usage.get(nk(b)) || 0)) || a.sec - b.sec);
+      // (add mode only: games already in the existing banks last - `usage`), then the shortest
+      const s = [...byEra[e]].sort((a, b) => ((usage.get(nk(a)) || 0) - (usage.get(nk(b)) || 0)) || a.sec - b.sec);
       kept.push(...s.slice(0, quota[i])); dropped.push(...s.slice(quota[i]));
+      plan[e] = { games: byEra[e].length, spots: quota[i] };
     });
-    // forced games that still fell out bump the longest unforced kept game
+    const bumped = [];
     for (const g of dropped.filter(x => forced.has(x.arenaId))) {
-      const victims = kept.filter(x => !forced.has(x.arenaId)).sort((a, b) => b.sec - a.sec);
-      if (!victims.length) break;
-      kept = kept.filter(x => x !== victims[0]).concat(g); dropped = dropped.filter(x => x !== g).concat(victims[0]);
+      const free = kept.filter(x => !forced.has(x.arenaId)).sort((a, b) => b.sec - a.sec);
+      const v = free.find(x => x.era === g.era) || free[0];
+      if (!v) break;
+      kept = kept.filter(x => x !== v).concat(g); dropped = dropped.filter(x => x !== g).concat(v);
+      if (v.era !== g.era) { plan[g.era].spots++; plan[v.era].spots--; }
+      bumped.push({ in: g.name, out: v.name, sameEra: v.era === g.era });
     }
-    return { kept, dropped: dropped.sort((a, b) => b.sec - a.sec) };
+    return { kept, dropped: dropped.sort((a, b) => b.sec - a.sec), plan, bumped };
   }
+
+  // how many of each era every bank gets: each era spread as evenly as possible (counts differ by at most one
+  // between banks), every bank exactly `size` games
+  function eraTargets(entries, numBanks, size, rng) {
+    const cnt = {}; entries.forEach(g => { cnt[g.era] = (cnt[g.era] || 0) + 1; });
+    const eras = Object.keys(cnt).sort((a, b) => (cnt[b] % numBanks) - (cnt[a] % numBanks) || (a < b ? -1 : 1));
+    const T0 = Array.from({ length: numBanks }, () => ({}));
+    eras.forEach(e => T0.forEach(t => { t[e] = Math.floor(cnt[e] / numBanks); }));
+    const need = T0.map(t => size - Object.values(t).reduce((a, b) => a + b, 0));
+    for (const e of eras) {
+      let extra = cnt[e] % numBanks;
+      const order = [...Array(numBanks).keys()].sort((a, b) => need[b] - need[a] || (rng ? rng() - 0.5 : a - b));
+      for (const i of order) { if (!extra) break; if (need[i] > 0) { T0[i][e]++; need[i]--; extra--; } }
+      if (extra) return null;   // can't be done exactly (shouldn't happen) - no era rule then
+    }
+    return need.every(x => x === 0) ? T0 : null;
+  }
+  const eraCount = (b, e) => b.reduce((t, g) => t + (g.era === e ? 1 : 0), 0);
 
   // games: [{arenaId, name, era, sec}]  ->  { banks: [{games, total, era}], dropped, repeats }
   function build(games, numBanks, size, opts = {}) {
@@ -73,8 +91,8 @@ TDP.banks = (() => {
     const avoid = opts.avoid || new Map(), usage = opts.usage || new Map();   // from earlier rounds' banks
     let pool = games.filter(g => !exclude.has(g.arenaId));
     const slots = numBanks * size;
-    let dropped = [], repeats = [];
-    if (pool.length > slots) ({ kept: pool, dropped } = eraBalancedSubset(pool, slots, forced, numBanks, usage));
+    let dropped = [], repeats = [], plan = null, bumped = [];
+    if (pool.length > slots) ({ kept: pool, dropped, plan, bumped } = eraBalancedSubset(pool, slots, forced, numBanks, usage));
     const entries = pool.map(g => ({ ...g }));
     if (entries.length < slots) {   // too few games: shortest ones repeat (never twice in one bank)
       const cands = [...pool].sort((a, b) => a.sec - b.sec);
@@ -84,7 +102,8 @@ TDP.banks = (() => {
       repeats = Object.keys(copies).map(Number);
       if (entries.length < slots) throw new Error(`Not enough games: ${pool.length} games can't fill ${numBanks} banks of ${size}.`);
     }
-    // greedy: longest game first, into the bank where it adds the least (time + era clash)
+    // each bank's era mix (item 71), then greedy: longest game first, into the bank where it adds the least time
+    const targets = eraTargets(entries, numBanks, size, rng);
     const order = [...entries];
     if (rng) for (let i = order.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [order[i], order[j]] = [order[j], order[i]]; }
     order.sort((a, b) => b.sec - a.sec);
@@ -93,14 +112,18 @@ TDP.banks = (() => {
       let best = [], bestScore = Infinity;
       banks.forEach((b, i) => {
         if (b.length >= size || b.some(g => g.arenaId === e.arenaId)) return;
+        if (targets && eraCount(b, e.era) >= targets[i][e.era]) return;
         const sc = sumSec(b) + (bankEra([...b, e]) - bankEra(b)) + (bankPairs([...b, e], avoid) - bankPairs(b, avoid));
         if (sc < bestScore - 1e-6) { bestScore = sc; best = [i]; } else if (Math.abs(sc - bestScore) <= 1e-6) best.push(i);
       });
+      if (!best.length) best = banks.map((b, i) => i).filter(i => banks[i].length < size && !banks[i].some(g => g.arenaId === e.arenaId));
       if (!best.length) best = banks.map((b, i) => i).filter(i => banks[i].length < size);
       banks[rng && best.length > 1 ? best[Math.floor(rng() * best.length)] : best[0]].push(e);
     }
-    improve(banks, avoid);
-    return { banks: banks.map(gs => ({ games: gs, total: sumSec(gs), eraCost: bankEra(gs), repeatPairs: bankPairs(gs, avoid) / PAIR_PENALTY })), dropped, repeats };
+    improve(banks, avoid, entries, numBanks);
+    fixDups(banks);   // a machine twice in a bank is worse than an uneven era spread
+    if (!plan) { plan = {}; entries.forEach(g => { const p = plan[g.era] = plan[g.era] || { games: 0, spots: 0 }; p.spots++; if (!g.repeat) p.games++; }); }
+    return { banks: banks.map(gs => ({ games: gs, total: sumSec(gs), eraCost: bankEra(gs), repeatPairs: bankPairs(gs, avoid) / PAIR_PENALTY })), dropped, repeats, plan, bumped };
   }
 
   // cost of a whole layout: how far each bank's total is from the mean (seconds) + era clashes
@@ -108,9 +131,29 @@ TDP.banks = (() => {
     const totals = banks.map(sumSec), mean = totals.reduce((a, b) => a + b, 0) / banks.length;
     return totals.reduce((s, t) => s + Math.abs(t - mean), 0) + banks.reduce((s, b) => s + bankEra(b) + bankPairs(b, avoid), 0);
   }
-  // pairwise swaps between banks while they lower the cost
-  function improve(banks, avoid) {
+  // a bank holding the same machine twice (only possible with repeats): swap one copy with a game from another bank
+  function fixDups(banks) {
+    const dupAt = b => b.findIndex((g, k) => b.some((x, j) => j < k && x.arenaId === g.arenaId));
+    for (let pass = 0; pass < 50; pass++) {
+      const a = banks.findIndex(b => dupAt(b) >= 0); if (a < 0) return;
+      const i = dupAt(banks[a]), x = banks[a][i]; let done = false;
+      for (let b = 0; b < banks.length && !done; b++) {
+        if (b === a) continue;
+        for (let j = 0; j < banks[b].length && !done; j++) {
+          const y = banks[b][j];
+          if (banks[a].some((g, k) => k !== i && g.arenaId === y.arenaId) || banks[b].some((g, k) => k !== j && g.arenaId === x.arenaId)) continue;
+          banks[a][i] = y; banks[b][j] = x; done = true;
+        }
+      }
+      if (!done) return;
+    }
+  }
+  // pairwise swaps between banks while they lower the cost; a swap may not break the era spread (item 71: every
+  // era's count in a bank stays within one of the others)
+  function improve(banks, avoid, entries, numBanks) {
     let cur = cost(banks, avoid);
+    const lim = {}; if (entries) { const c = {}; entries.forEach(g => { c[g.era] = (c[g.era] || 0) + 1; }); for (const [e, n] of Object.entries(c)) lim[e] = [Math.floor(n / numBanks), Math.ceil(n / numBanks)]; }
+    const okEra = b => Object.entries(lim).every(([e, [lo, hi]]) => { const k = eraCount(b, e); return k >= lo && k <= hi; });
     for (let iter = 0; iter < 40; iter++) {
       let gained = false;
       for (let a = 0; a < banks.length; a++) for (let b = a + 1; b < banks.length; b++)
@@ -119,6 +162,7 @@ TDP.banks = (() => {
           if (x.arenaId === y.arenaId) continue;
           if (banks[a].some((g, k) => k !== i && g.arenaId === y.arenaId) || banks[b].some((g, k) => k !== j && g.arenaId === x.arenaId)) continue;
           banks[a][i] = y; banks[b][j] = x;
+          if (x.era !== y.era && entries && (!okEra(banks[a]) || !okEra(banks[b]))) { banks[a][i] = x; banks[b][j] = y; continue; }
           const c = cost(banks, avoid);
           if (c < cur - 1) { cur = c; gained = true; } else { banks[a][i] = x; banks[b][j] = y; }
         }
@@ -277,5 +321,5 @@ TDP.banks = (() => {
     });
   }
 
-  return { build, estimates, eraOf, cost, historyMaps, assignGroups, rankAssignments, pairKey, schedule, timeline, ERA_ORDER, ERA_DEFAULT_SEC };
+  return { build, estimates, eraOf, cost, eraTargets, historyMaps, assignGroups, rankAssignments, pairKey, schedule, timeline, ERA_ORDER, ERA_DEFAULT_SEC };
 })();

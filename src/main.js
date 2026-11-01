@@ -115,9 +115,9 @@ var TDP = window.TDP || (window.TDP = {});
     if (j && j.error && j.i > 0 && refreshedFor !== j.startedAt && j.owner === T.tabId && j.steps.slice(0, j.i).some(s => s.tid === T.routeTid())) { refreshedFor = j.startedAt; setTimeout(() => T.sync.soft(), 300); }
   });
   T.jobs.on(() => { if (off()) { T.busy.render(); return; } T.panel.render(); T.embed.render(); T.busy.render(); T.inpage.render(); T.deltest.render(); });
-  // Matchplay doesn't push changes: when the API shows something new (a score from a phone, a new round…),
-  // Matchplay's page fetches again in place - unless the TD is busy with it
-  T.data.onChange(() => { if (!off()) T.sync.auto(); });
+  // Match Play's page updates itself (its own real-time feed): no Refresh clicks while we read its data (item 70).
+  // Only without page data (API fallback) does a change Match Play's page should show make it fetch again
+  T.data.onChange(D => { if (!off() && !(T.page && T.page.get(D.tid))) T.sync.auto(); });
   // a setting changed (here or in another tab): redraw everything that shows settings
   let sharedTimer = null;
   let lastToken = T.settings.token, wasOff = off();

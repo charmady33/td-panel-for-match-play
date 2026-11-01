@@ -1,11 +1,11 @@
 # TD Panel for Match Play — notes for Claude
 
 Chrome MV3 extension for pinball tournament directors on app.matchplay.events. Tools are built into Matchplay's own
-pages (no sidebar). Current version: **0.20.0** (see README.md for what each version added).
+pages (no sidebar). Current version: **0.21.0** (see README.md for what each version added).
 
 ## How the maintainer (Clark) wants to work
 - **Propose a plan first, then wait for "code it".** Don't change code until he says so. Number each proposed item
-  (the next free number is **70**; 35 and 39 are agreed and waiting — see docs/PENDING.md).
+  (the next free number is **72**; 35 and 39 are agreed and waiting — see docs/PENDING.md).
 - Edit files in place with targeted changes; don't rewrite whole files.
 - Explain in plain language; he's a TD, not a developer. Keep messages short and concrete.
 - Each release: bump `manifest.json` "version", `TDP.VERSION` in `src/util.js` and `package.json`; add the version at
@@ -46,7 +46,8 @@ pages (no sidebar). Current version: **0.20.0** (see README.md for what each ver
     tab itself behind a frozen screen (`busy.js`). Steps: `{tid, page, op, args, label}`; ops are in jobs.js.
     Each step has a 150 s limit; a heartbeat every 5 s; `note()` records sub-steps shown in the progress card.
   - `mpui.js` drivers for Matchplay's UI (labels, players, banks, rounds, results, arenas, delete…).
-  - `sync.js` refreshes Matchplay's page in place (its Refresh button, or an in-app route hop) — no reloads.
+  - `sync.js` refreshes Matchplay's page in place (its Refresh button, or an in-app route hop) — no reloads. Automatic
+    use only without page data (item 70); tasks still use `soft()`.
   - `finals.js` divisions from cut lines, eligibility, plan/backups, ties that matter (cut/boundary/bye/pick),
     straddles, bracket group ties (incl. Matchplay's own tiebreaker games, set 9999).
   - `ties.js` tiebreaker windows; `inpage.js` Standings / Matches / reminders / group buttons; `embed.js` finals
@@ -88,7 +89,7 @@ pages (no sidebar). Current version: **0.20.0** (see README.md for what each ver
 
 ## Testing
 - `test/` — Playwright scripts that inject the bundle into mock Matchplay pages (API mocked with `page.route`), plus
-  unit scripts. Run with `node test/<file>.js [outDir]`. Useful ones: `v020_ui.js` (page data first; NOSTORE=1 = API fallback), `v019_ui.js` (down-machine window, bank clash Fix), `v016_ui.js` (New rounds use, redo, live events), `v0152_ui.js` (quick test box, update bar), `even_unit.js` (round lengths), `v015_ui.js` (timers, Max est., on/off), `v014_ui.js` (Plays tab, optional ties, vote Change…, results grid), `smart_unit.js` (game-time planner), `down_unit.js`
+  unit scripts. Run with `node test/<file>.js [outDir]`. Useful ones: `v021_ui.js` (bank preview era mix, Not in any bank, Include), `eramix_unit.js` (era share/spread), `v020_ui.js` (page data first; NOSTORE=1 = API fallback), `v019_ui.js` (down-machine window, bank clash Fix), `v016_ui.js` (New rounds use, redo, live events), `v0152_ui.js` (quick test box, update bar), `even_unit.js` (round lengths), `v015_ui.js` (timers, Max est., on/off), `v014_ui.js` (Plays tab, optional ties, vote Change…, results grid), `smart_unit.js` (game-time planner), `down_unit.js`
   (down machine in banks), `dup_unit.js` (bank duplicates),
   `sched_unit.js`, `gt.js` (bracket ties), `cascade.js` (finals standings ties), `embed_ui.js`
   (check-in; env CAP=1 / DONEJOB=1 / MOVEUP=1), `t6.js` (bank refresh via worker frame; PICK=1 picker),

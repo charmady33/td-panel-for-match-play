@@ -187,8 +187,10 @@ TDP.data = (() => {
   let sig = null;
   const changeListeners = new Set();
   function noteChange() {
-    const s = JSON.stringify([D.tid, D.t && D.t.status, (D.t && D.t.players || []).map(p => [p.playerId, (p.tournamentPlayer || {}).status]),
-      D.rounds.map(r => [r.roundId, r.status]), D.games.filter(g => !doneRounds.has(g.roundId) || g.status !== 'completed').map(g => [g.gameId, g.status, g.arenaId, (g.suggestions || []).length, g.resultPositions || g.resultPoints || null])]);
+    // only what Matchplay's page shows, in a fixed order (the same data never looks changed - item 70)
+    const by = k => (a, b) => a[k] - b[k];
+    const s = JSON.stringify([D.tid, D.t && D.t.status, [...(D.t && D.t.players || [])].sort(by('playerId')).map(p => [p.playerId, (p.tournamentPlayer || {}).status]),
+      [...D.rounds].sort(by('roundId')).map(r => [r.roundId, r.status]), D.games.filter(g => String(g.status) !== 'completed' || !doneRounds.has(g.roundId)).sort(by('gameId')).map(g => [g.gameId, g.status, g.arenaId, (g.suggestions || []).length, T.timing.hasScore(g) ? (g.resultPositions || []).join() : ''])]);
     const prev = sig; sig = s;
     if (prev && prev !== s && JSON.parse(prev)[0] === D.tid) changeListeners.forEach(f => { try { f(D); } catch (e) { T.warn(e); } });
   }

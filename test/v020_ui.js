@@ -58,9 +58,11 @@ const NOSTORE = process.env.NOSTORE === '1';
   if (!NOSTORE) {
     // Match Play's page changes: group 2 gets a bank -> the button goes, no API call
     const before = calls.length;
+    await page.evaluate(() => { window.__soft = 0; const o = TDP.sync.soft; TDP.sync.soft = (...x) => { window.__soft++; return o(...x); }; });
     await page.evaluate(() => window.__store.set(s => ({ ...s, games: { games: Object.fromEntries(Object.values(s.games.games).map(g => [g.gameId, g.set === 1 ? { ...g, bankId: 901, arenaId: 1 } : g])) } })));
     await page.waitForFunction(() => !document.querySelector('[data-tdp=abtn]'), null, { timeout: 3000 }).then(() => console.log('page change: button gone straight away OK'), () => console.log('page change: button still there FAIL'));
     console.log('API calls for that change:', calls.length - before);
+    console.log('Refresh clicks for page changes (item 70, expect 0):', await page.evaluate(() => window.__soft));
     // a new round appears on the page (e.g. started on a phone)
     await page.evaluate(() => window.__store.set(s => ({ ...s, rounds: { rounds: { ...s.rounds.rounds, 4: { roundId: 4, tournamentId: 280051, name: 'Round 4', index: 3, status: 'started', createdAt: new Date().toISOString() } } } })));
     await page.waitForTimeout(600);
