@@ -15,8 +15,9 @@ TDP.links = (() => {
   // the event's family: [{tid, name, t}] in Matchplay's order (qualifying first)
   function family(D) {
     if (!D.qual) return [];
-    const out = [{ tid: D.qual.tournamentId, name: D.qual.name || 'Qualifying', t: D.qual, qual: true }];
-    for (const f of D.finals || []) out.push({ tid: f.tid, name: f.name || (f.t && f.t.name) || 'Finals', t: f.t });
+    // item 99: short names - the page header already shows the full one
+    const out = [{ tid: D.qual.tournamentId, name: 'Qualifying', t: D.qual, qual: true }];
+    (D.finals || []).forEach((f, i) => { const m = String(f.name || (f.t && f.t.name) || '').match(/^\s*([A-Z])\s+Finals?\b/i); out.push({ tid: f.tid, name: `${m ? m[1].toUpperCase() : 'ABCDEFGHIJ'[i] || i + 1} Finals`, t: f.t }); });
     return out.length > 1 ? out : [];
   }
   function tabBar() {
@@ -32,8 +33,8 @@ TDP.links = (() => {
     if (!bar) { if (old) old.remove(); return; }
     const items = fam;   // qualifying first, then its finals - the same row on every one of them (item 83)
     const html = items.map(x => x.tid === D.tid
-      ? `<a class="${TAB} ${ON}" aria-current="page" data-tdp-tid="${x.tid}">${T.esc(x.qual ? 'Qualifying: ' + x.name : x.name)}</a>`
-      : `<a class="${TAB} ${OFF}" href="/tournaments/${x.tid}${target(x, sub())}" data-tdp-tid="${x.tid}">${T.esc(x.qual ? 'Qualifying: ' + x.name : x.name)}</a>`).join('');
+      ? `<a class="${TAB} ${ON}" aria-current="page" data-tdp-tid="${x.tid}">${T.esc(x.name)}</a>`
+      : `<a class="${TAB} ${OFF}" href="/tournaments/${x.tid}${target(x, sub())}" data-tdp-tid="${x.tid}">${T.esc(x.name)}</a>`).join('');
     const sig = html + '|' + location.pathname;
     if (old && old.dataset.sig === sig && old.nextElementSibling === bar.wrap) return;
     const box = old || document.createElement('div');

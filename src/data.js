@@ -85,7 +85,7 @@ TDP.data = (() => {
     for (const [id, v] of Object.entries(times)) { const n = ((am[id] || {}).name || '').toLowerCase(); if (n) arenas[n] = { count: v.count, avg: v.avg }; }
     if (!Object.keys(arenas).length) return;
     const hist = await T.store.get('hist', {});
-    hist[D.tid] = { name: D.t.name, date: D.t.startUtc || null, at: Date.now(), arenas };
+    hist[D.tid] = { name: D.t.name, date: D.t.startUtc || null, at: Date.now(), arenas, p4: true };
     await T.store.set('hist', hist);
   }
 

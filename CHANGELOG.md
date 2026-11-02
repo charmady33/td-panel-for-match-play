@@ -2,6 +2,11 @@
 
 All notable changes, newest first. Versions follow [semantic versioning](https://semver.org/): new features bump the middle number, fixes the last.
 
+## 0.26.0 - 2026-11-02
+- Finals get game times right away, even before the qualifying starts: the qualifying's location is used when the finals has none, and the qualifying's Match Play IDs come along (item 97).
+- Game times are 4-player times: a 2-player game counts ×2, 3-player ×4/3, 1-player ×4. Estimates stay 4-player. Times saved earlier are loaded again this way (item 98).
+- The linked-events row reads Qualifying | A Finals | B Finals (item 99).
+
 ## 0.25.1 - 2026-11-02
 - Completed tournaments are left alone: no automatic labels (eligibility, TD/Scorekeeper), no automatic down-machine fixes, arena copies or turning games on/off in them. Buttons you click yourself still work.
 

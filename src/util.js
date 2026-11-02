@@ -1,7 +1,7 @@
 // TD Panel for Match Play - shared helpers. Every file adds to the one global namespace TDP.
 /* global chrome */
 var TDP = window.TDP || (window.TDP = {});
-TDP.VERSION = '0.25.1';
+TDP.VERSION = '0.26.0';
 // a completed tournament: nothing is changed in it by itself (labels, players, games, banks, arenas)
 TDP.isDone = t => !!t && String(t.status) === 'completed';
 

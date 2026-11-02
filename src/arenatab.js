@@ -139,16 +139,24 @@ ul{margin:6px 0 12px 18px;padding:0}li{margin:3px 0}</style>
   }
   // item 89: the TD's own finished events at this event's location are used by themselves (newest 10, last 12 months)
   let locDone = {};
+  // item 97: a finals uses its qualifying's location when it has none, and gets the qualifying's Match Play IDs too -
+  // even before the qualifying starts
   async function autoLocal(D) {
-    if (!D || !D.t || !D.t.locationId || locDone[D.tid] || !T.settings.token) return;
+    if (!D || !D.t || locDone[D.tid] || !T.settings.token) return;
     locDone[D.tid] = true;
+    const fin = D.qual && D.qual.tournamentId !== D.tid, loc = D.t.locationId || (fin && D.qual.locationId);
     try {
+      let st = T.tstate[D.tid] || {};
+      if (st.pastTimes && !st.past4 && idsOf(st).length) { await T.bankplan.loadPast(D, idsOf(st)); st = T.tstate[D.tid] || {}; render(T.data.D); drawWin(T.data.D); }   // saved before item 98: again as 4-player times
+      let fromQ = [];
+      if (fin) { const qs = T.tstate[D.qual.tournamentId] || await T.loadT(D.qual.tournamentId); fromQ = idsOf(qs || {}).filter(id => id !== D.tid); }
+      if (!loc && !fromQ.length) return;
       const me = D.me || T.data.unwrap(await T.api.get('/users/profile', 3600e3)); if (!me || !me.userId) return;
       const list = T.data.arr(await T.api.get(`/tournaments?owner=${me.userId}&status=completed&limit=100`, 3600e3));
       const year = Date.now() - 365 * 864e5;
-      const ids = list.filter(t => t.locationId === D.t.locationId && t.tournamentId !== D.tid && (!D.qual || t.tournamentId !== D.qual.tournamentId) && (Date.parse(t.startUtc || t.completedAt || '') || 0) > year)
+      const ids = !loc ? [] : list.filter(t => t.locationId === loc && t.tournamentId !== D.tid && (!D.qual || t.tournamentId !== D.qual.tournamentId) && (Date.parse(t.startUtc || t.completedAt || '') || 0) > year)
         .sort((a, b) => (Date.parse(b.startUtc || '') || 0) - (Date.parse(a.startUtc || '') || 0)).slice(0, 10).map(t => t.tournamentId);
-      const st = T.tstate[D.tid] || {}, have = idsOf(st), add = ids.filter(id => !have.includes(id) && !(st.locSkip || []).includes(id));
+      st = T.tstate[D.tid] || {}; const have = idsOf(st), add = [...new Set([...fromQ, ...ids])].filter(id => !have.includes(id) && !(st.locSkip || []).includes(id));
       if (!add.length) return;
       await T.bankplan.loadPast(D, [...have, ...add]);
       await T.saveT(D.tid, { locAuto: [...new Set([...(st.locAuto || []), ...add])] });

@@ -216,7 +216,7 @@ TDP.bankplan = (() => {
       info.push({ id, name: (t && t.name) || ('#' + id), games: n });
     }
     const pastTimes = {}; for (const [k, m] of Object.entries(merged)) pastTimes[k] = { count: m.count, avg: m.sum / m.count, dropped: m.dropped };
-    await T.saveT(D.tid, { pastTimes, bankPast: ids.join(', '), pastInfo: info });
+    await T.saveT(D.tid, { pastTimes, bankPast: ids.join(', '), pastInfo: info, past4: true });   // (past4: 4-player times, item 98)
     return Object.keys(pastTimes).length;
   }
 

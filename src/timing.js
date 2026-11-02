@@ -84,7 +84,9 @@ TDP.timing = (() => {
     return st != null && en != null && en > st ? en - st : null;
   }
 
-  // per-arena averages from a list of games (one tournament)
+  // item 98: every time is a 4-player game's time - 2 players x2, 3 players x4/3, 1 player x4
+  const to4 = g => { const n = (g.playerIds || []).filter(p => p != null).length; return n > 0 && n < 4 ? 4 / n : 1; };
+  // per-arena averages from a list of games (one tournament), as 4-player times
   function arenaTimes(games) {
     const byRound = {};
     for (const g of games) (byRound[g.roundId] = byRound[g.roundId] || []).push(g);
@@ -92,8 +94,8 @@ TDP.timing = (() => {
     for (const g of games) {
       if (g.bye || isTiebreak(g) || g.arenaId == null || !doneish(g)) continue;
       const ms = gameLen(g, byRound[g.roundId]);
-      if (ms == null || ms < GAME_MIN_MS || ms > GAME_MAX_MS) continue;
-      (lists[g.arenaId] = lists[g.arenaId] || []).push(ms);
+      if (ms == null || ms < GAME_MIN_MS || ms > GAME_MAX_MS) continue;   // (the real time played decides what counts)
+      (lists[g.arenaId] = lists[g.arenaId] || []).push(ms * to4(g));
     }
     // the middle value (median), leaving out any game more than 3x that game's median (a game left open, etc.)
     const med = l => { const x = [...l].sort((a, b) => a - b), m = x.length >> 1; return x.length % 2 ? x[m] : (x[m - 1] + x[m]) / 2; };
@@ -118,5 +120,5 @@ TDP.timing = (() => {
     });
   }
 
-  return { logEnd, ts, isDone, hasScore, isTiebreak, suggestState, noteSuggestions, fullSeen, doneish, gEnd, realStart, gameLen, arenaTimes, roundTimes, GAME_MIN_MS, GAME_MAX_MS };
+  return { logEnd, ts, isDone, hasScore, isTiebreak, suggestState, noteSuggestions, fullSeen, doneish, gEnd, realStart, gameLen, to4, arenaTimes, roundTimes, GAME_MIN_MS, GAME_MAX_MS };
 })();
