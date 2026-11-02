@@ -2,6 +2,9 @@
 
 All notable changes, newest first. Versions follow [semantic versioning](https://semver.org/): new features bump the middle number, fixes the last.
 
+## 0.25.1 - 2026-11-02
+- Completed tournaments are left alone: no automatic labels (eligibility, TD/Scorekeeper), no automatic down-machine fixes, arena copies or turning games on/off in them. Buttons you click yourself still work.
+
 ## 0.25.0 - 2026-11-02
 - Submit to IFPA (items 85, 86): finals with byes use the TGP guide's **Effective Rounds** (rounds the winner is expected
   to play) × games × group bonus - e.g. 12 players, 4 with byes, 3 games: 2.5 rounds = 15 meaningful games, matching

@@ -365,7 +365,7 @@ TDP.smart = (() => {
     if (!seen) return false;   // first look: nothing changed yet
     const changed = Object.keys(now).filter(id => id in seen && seen[id] !== now[id]);
     if (!changed.length) return false;
-    const fam = [{ tid: D.qual.tournamentId, t: D.qual }, ...(D.finals || []).map(f => ({ tid: f.tid, t: f.t }))].filter(x => x.tid !== D.tid && x.t);
+    const fam = [{ tid: D.qual.tournamentId, t: D.qual }, ...(D.finals || []).map(f => ({ tid: f.tid, t: f.t }))].filter(x => x.tid !== D.tid && x.t && !T.isDone(x.t));   // (completed events are left alone)
     const steps = [];
     for (const id of changed) {
       const active = !!now[id], name = ((D.t.arenas || []).find(a => String(a.arenaId) === id) || {}).name || 'A game';
@@ -392,7 +392,7 @@ TDP.smart = (() => {
   async function downCheck() {
     const D = T.data.D;
     // (item 91: before the event starts too; item 96: with or without banks)
-    if (T.isFrame || downBusy || !D || !D.t || !D.isTD || T.jobs.active()) return;
+    if (T.isFrame || downBusy || !D || !D.t || !D.isTD || T.isDone(D.t) || T.jobs.active()) return;   // (completed: nothing changes by itself)
     if (D.tid === T.routeTid() && await famSync(D)) return;   // (the window follows once that's done)
     if (D.tid === T.routeTid() && await famArenas(D)) return;
     const am = T.data.arenaMap(D.t), usesBanks = /bank/i.test(D.t.arenaAssignment || '');

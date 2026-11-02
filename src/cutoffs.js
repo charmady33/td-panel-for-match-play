@@ -91,7 +91,7 @@ TDP.cutoffs = (() => {
   // ---------- new players (any device) and TD / Scorekeeper changes: labels by themselves ----------
   let autoAt = 0;
   async function auto(D) {
-    if (!D || !D.t || !D.isTD || D.tid !== T.routeTid() || T.jobs.active() || Date.now() - autoAt < 15000) return;
+    if (!D || !D.t || !D.isTD || T.isDone(D.t) || D.tid !== T.routeTid() || T.jobs.active() || Date.now() - autoAt < 15000) return;
     const st = T.tstate[D.tid] || {}, ids = (D.t.players || []).map(p => p.playerId);
     const steps = [];
     if (isQual(D)) {
