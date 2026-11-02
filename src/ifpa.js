@@ -32,6 +32,15 @@ TDP.ifpa = (() => {
   const state = F => (T.tstate[F.qid] || {}).ifpa || {};
   const saveState = (F, patch) => T.saveT(F.qid, { ifpa: { ...state(F), ...patch } });
 
+  // item 100: a lower finals is open when no IFPA rank cutoff is set for its letter and no qualifying player has an
+  // "… Ineligible" label with that letter
+  function openDiv(F, X) {
+    const L = (String(X.label).match(/^([A-Z])\b/i) || [])[1]; if (!L) return false;
+    const div = (((T.tstate[F.qid] || {}).divs) || {})[L.toUpperCase()];
+    if (div && +div.cutoff > 0) return false;
+    return !(F.qual.players || []).some(p => T.finals.lettersOf(p).has(L.toUpperCase()));
+  }
+
   // ---------- data ----------
   async function load(t) {
     const id = t.tournamentId, age = done(t) ? 864e5 : 0;
@@ -183,7 +192,7 @@ TDP.ifpa = (() => {
       if (counts) { if (q.mg == null) unknown = true; else total += q.mg; }
       parts.push({ label: `${A.label} · ${TYPE_NAME[A.t.type] || A.t.type}`, ...f[0], counts: true, note: 'Effective rounds - the rounds the winner is expected to play (IFPA TGP guide)' });
       if (f[0].mg == null) unknown = true; else total += f[0].mg;
-      Fs.slice(1).forEach((x, i) => parts.push({ label: `${x.label} · ${TYPE_NAME[x.t.type] || x.t.type}`, ...f[i + 1], counts: false, note: 'Lower division: doesn\'t change places or add to TGP (places come from A finals + qualifying)' }));
+      Fs.slice(1).forEach((x, i) => parts.push({ label: `${x.label} · ${TYPE_NAME[x.t.type] || x.t.type}`, ...f[i + 1], counts: false, note: x.open ? 'Lower division: doesn\'t add to TGP' : 'Lower division: doesn\'t change places or add to TGP (places come from A finals + qualifying)' }));
     } else {
       parts.push({ label: TYPE_NAME[Q.t.type] || Q.t.type, ...q, counts: true, note: '' });
       if (best) warns.push('Best-game style events need a finals with direct play for at least 10% of players, and a cut of at least half the field.');
@@ -211,6 +220,7 @@ TDP.ifpa = (() => {
       L.push(`Qualifying: ${desc(Q, q)}${mgTxt(q)}. Top ${sizes[0]} to finals${Fs.length > 1 ? Fs.slice(1).map((f, i) => `, next ${sizes[i + 1]} to ${f.label}`).join('') : ''}.`);
       L.push(`Finals: ${desc(Fs[0], G.parts[1])}${mgTxt(G.parts[1])}.`);
     } else L.push(`${desc(Q, q)}${mgTxt(q)}.`);
+    Fs.filter(f => f.open).forEach(f => L.push(`${f.label.replace(/finals$/, 'Finals')} had no restrictions (open to every player who qualified for it).`));
     L.push(`Total: ${mg} meaningful games.`);
     const tb = Object.values((T.tstate[F.qid] || {}).tb || {}).some(x => x && x.method && (x.status === 'done' || x.final));
     if (tb) L.push('Qualifying ties broken with played tiebreaker games.');
@@ -284,7 +294,9 @@ ol.todo{padding-left:0;list-style:none}ol.todo li{display:flex;gap:8px;align-ite
     try {
       const Q = await load(F.qual), Fs = [];
       for (const [i, f] of F.finals.entries()) { const X = await load(f.t); X.label = `${(f.t.name || '').match(/\b([A-Z]) Finals\b/i) ? RegExp.$1.toUpperCase() : T.letter(i)} finals`; Fs.push(X); }
-      cur.Q = Q; cur.Fs = Fs; cur.R = results(Q, Fs.slice(0, 1)); cur.G = grade(Q, Fs);   // places: A finals + qualifying only (item 86, like Matchplay's IFPA Results)
+      // places: A finals + qualifying (item 86), plus B, C… finals in order while they're open to everyone (item 100)
+      let k = 1; while (k < Fs.length && openDiv(F, Fs[k])) Fs[k++].open = true;
+      cur.Q = Q; cur.Fs = Fs; cur.R = results(Q, Fs.slice(0, k)); cur.G = grade(Q, Fs);
     } catch (e) { cur.err = T.apiErrorText ? T.apiErrorText(e) : String(e); }
     cur.loading = false; draw();
   }
@@ -357,5 +369,5 @@ ol.todo{padding-left:0;list-style:none}ol.todo li{display:flex;gap:8px;align-ite
     if (el.dataset.f === 'done') { await saveState(cur.F, { submittedAt: el.checked ? Date.now() : null }); if (T.inpage.render) T.inpage.render(); return draw(); }
   }
 
-  return { render, open, close, results, mgOf, grade, notes, family };
+  return { render, open, close, results, mgOf, grade, notes, family, openDiv };
 })();

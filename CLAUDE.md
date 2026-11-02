@@ -1,11 +1,11 @@
 # TD Panel for Match Play — notes for Claude
 
 Chrome MV3 extension for pinball tournament directors on app.matchplay.events. Tools are built into Matchplay's own
-pages (no sidebar). Current version: **0.26.0** (see README.md for what each version added).
+pages (no sidebar). Current version: **0.27.0** (see README.md for what each version added).
 
 ## How the maintainer (Clark) wants to work
 - **Propose a plan first, then wait for "code it".** Don't change code until he says so. Number each proposed item
-  (the next free number is **100**; 35 is agreed and waiting — see docs/PENDING.md).
+  (the next free number is **101**; 35 is agreed and waiting — see docs/PENDING.md).
 - Edit files in place with targeted changes; don't rewrite whole files.
 - Explain in plain language; he's a TD, not a developer. Keep messages short and concrete.
 - Each release: bump `manifest.json` "version", `TDP.VERSION` in `src/util.js` and `package.json`; add the version at
