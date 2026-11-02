@@ -143,16 +143,20 @@ TDP.ifpa = (() => {
     } else if (!R.length && type !== 'amazingrace' && !/best_game|golf|bowling|ladder/.test(type)) {
       out.flags.push(`No played games found in ${t.name || 'this tournament'}. Type the number in.`);
     } else if (type === 'group_bracket') {
-      // shortest path to the title: from the latest round anyone joined, to the final
+      // item 85, IFPA TGP guide "Common Playoff Structures (including byes)": Effective Rounds = the rounds the winner is
+      // expected to play, every player in a round being equally likely to win. Going back from the final: the chance the
+      // winner played round r = chance for round r+1 × (players who came up from round r) ÷ (players in round r+1).
       const first = {}; R.forEach(x => x.players.forEach(p => { if (first[p] == null) first[p] = x.idx; }));
-      const starts = Object.values(first), latest = starts.length ? Math.max(...starts) : 0;
-      const path = R.filter(x => x.idx >= latest), full = R;
-      out.mg = n1(path.reduce((s, x) => s + x.gpg * x.mult, 0));
-      const fullMg = n1(full.reduce((s, x) => s + x.gpg * x.mult, 0));
-      out.bye = latest > 0;
-      out.byes = Object.values(first).filter(v => v === latest).length;
-      out.math.push(`${path.length} round${path.length === 1 ? '' : 's'} × ${path[0] ? path[0].gpg : 0} games${path[0] && path[0].mult !== 1 ? ' ' + multName(path[0].mult) : ''} = ${out.mg}${out.bye ? ' (bye path)' : ''}`);
-      if (out.bye) { out.math.push(`without byes it would be ${fullMg}`); out.flags.push('Finals with byes are a deviation: IFPA asks you to contact them (ifpapinball@gmail.com) so the event is graded right. The bye path is used here.'); }
+      const fresh = x => [...x.players].filter(p => first[p] === x.idx).length;
+      const pr = new Array(R.length).fill(0); pr[R.length - 1] = 1;
+      for (let k = R.length - 2; k >= 0; k--) { const nx = R[k + 1], up = nx.players.size - fresh(nx); pr[k] = nx.players.size ? pr[k + 1] * up / nx.players.size : 0; }
+      const evr = pr.reduce((s, v) => s + v, 0);
+      out.mg = n1(R.reduce((s, x, k) => s + pr[k] * x.gpg * x.mult, 0));
+      const late = R.slice(1).reduce((s, x) => s + fresh(x), 0);
+      out.bye = late > 0; out.byes = late; out.evr = Math.round(evr * 100) / 100;
+      const g0 = R[0] || {};
+      out.math.push(`Effective rounds ${out.evr}${out.bye ? ` (${late} player${late === 1 ? '' : 's'} with byes)` : ''} × ${g0.gpg || 0} games${g0.mult && g0.mult !== 1 ? ' ' + multName(g0.mult) : ''} = ${out.mg}`);
+      if (out.bye) out.math.push(`by round: ${R.map((x, k) => `${x.r.name || 'round ' + (k + 1)} ${x.players.size} players, played by the winner ${Math.round(pr[k] * 100)}%`).join(' · ')}`);
     } else if (type === 'amazingrace') {
       out.mg = Math.max(0, players - 1); out.math.push(`${players} players − 1 = ${out.mg}`);
     } else if (type === 'ladder' || type === 'golf_bracket') {
@@ -177,9 +181,9 @@ TDP.ifpa = (() => {
       parts.push({ label: `Qualifying · ${TYPE_NAME[Q.t.type] || Q.t.type}`, ...q, counts, note: counts ? `${field} → ${aSize} in A finals (${Math.round(cut * 100)}% cut): counts` : `${field} → ${aSize} in A finals is less than a 50% cut: qualifying is seeding only and doesn't count` });
       if (!counts) warns.push('Qualifying cut is under 50%, so qualifying games don\'t count toward TGP.');
       if (counts) { if (q.mg == null) unknown = true; else total += q.mg; }
-      parts.push({ label: `${A.label} · ${TYPE_NAME[A.t.type] || A.t.type}`, ...f[0], counts: true, note: 'The winner\'s (shortest) path through the finals' });
+      parts.push({ label: `${A.label} · ${TYPE_NAME[A.t.type] || A.t.type}`, ...f[0], counts: true, note: 'Effective rounds - the rounds the winner is expected to play (IFPA TGP guide)' });
       if (f[0].mg == null) unknown = true; else total += f[0].mg;
-      Fs.slice(1).forEach((x, i) => parts.push({ label: `${x.label} · ${TYPE_NAME[x.t.type] || x.t.type}`, ...f[i + 1], counts: false, note: 'Lower division: places are in the results, games don\'t add to TGP' }));
+      Fs.slice(1).forEach((x, i) => parts.push({ label: `${x.label} · ${TYPE_NAME[x.t.type] || x.t.type}`, ...f[i + 1], counts: false, note: 'Lower division: doesn\'t change places or add to TGP (places come from A finals + qualifying)' }));
     } else {
       parts.push({ label: TYPE_NAME[Q.t.type] || Q.t.type, ...q, counts: true, note: '' });
       if (best) warns.push('Best-game style events need a finals with direct play for at least 10% of players, and a cut of at least half the field.');
@@ -196,12 +200,12 @@ TDP.ifpa = (() => {
       const R = p.R || [], size = R.length ? R[0].size : 0, gpg = R.length ? R[0].gpg : X.t.gamesPerRound;
       if (DIRECT.has(X.t.type)) return `${p.players} players, ${R.length} round${R.length === 1 ? '' : 's'} of ${gpg}-game ${size ? size + '-player ' : ''}${(TYPE_NAME[X.t.type] || '').toLowerCase()}`;
       if (X.t.type === 'group_bracket') {
-        const adv = R.length > 1 && R[0].groups ? Math.round((R[1].players.size - (p.byes || 0)) / R[0].groups) : 2;
+        const adv = R.length > 1 && R[0].groups ? Math.round((R[1].players.size - (p.byes || 0)) / R[0].groups) : 2;   // (byes = players who joined after round 1)
         return `${size ? size + '-player groups, ' : ''}${gpg} games/round${p.bye ? `. Seeds 1-${p.byes} had byes to round 2` : ''}; top ${adv} per group advance`;
       }
       return `${p.players} players, ${(TYPE_NAME[X.t.type] || X.t.type).toLowerCase()}`;
     };
-    const mgTxt = p => p.counts && p.mg != null ? ` (${p.mg} MG${p.bye ? ' bye path' : ''})` : '';
+    const mgTxt = p => p.counts && p.mg != null ? ` (${p.mg} MG${p.evr != null && p.bye ? `, ${p.evr} effective rounds` : ''})` : '';
     if (Fs.length) {
       const sizes = Fs.map(f => (f.standings.filter(r => r.gamesPlayed !== 0).length || f.standings.length));
       L.push(`Qualifying: ${desc(Q, q)}${mgTxt(q)}. Top ${sizes[0]} to finals${Fs.length > 1 ? Fs.slice(1).map((f, i) => `, next ${sizes[i + 1]} to ${f.label}`).join('') : ''}.`);
@@ -280,7 +284,7 @@ ol.todo{padding-left:0;list-style:none}ol.todo li{display:flex;gap:8px;align-ite
     try {
       const Q = await load(F.qual), Fs = [];
       for (const [i, f] of F.finals.entries()) { const X = await load(f.t); X.label = `${(f.t.name || '').match(/\b([A-Z]) Finals\b/i) ? RegExp.$1.toUpperCase() : T.letter(i)} finals`; Fs.push(X); }
-      cur.Q = Q; cur.Fs = Fs; cur.R = results(Q, Fs); cur.G = grade(Q, Fs);
+      cur.Q = Q; cur.Fs = Fs; cur.R = results(Q, Fs.slice(0, 1)); cur.G = grade(Q, Fs);   // places: A finals + qualifying only (item 86, like Matchplay's IFPA Results)
     } catch (e) { cur.err = T.apiErrorText ? T.apiErrorText(e) : String(e); }
     cur.loading = false; draw();
   }
@@ -300,7 +304,7 @@ ol.todo{padding-left:0;list-style:none}ol.todo li{display:flex;gap:8px;align-ite
     else {
       if (!F.ready) body += `<div class="chk warn">! <span>${F.all.filter(t => !done(t)).map(t => T.esc(t.name)).join(', ')} ${F.all.filter(t => !done(t)).length === 1 ? 'is' : 'are'} not completed yet. Results go to IFPA once, for the whole event: complete ${F.all.filter(t => !done(t)).length === 1 ? 'it' : 'them'} first.</span></div>`;
       // checks
-      const probs = cur.R.checks.filter(c => c.kind !== 'ok').concat(cur.G.parts.some(p => p.bye) ? [{ kind: 'warn', text: 'Your finals had byes: IFPA asks you to email ifpapinball@gmail.com so the event is graded right (the bye path is in your notes).' }] : []);
+      const probs = cur.R.checks.filter(c => c.kind !== 'ok').concat([]);
       body += `<h3>Checks</h3>${probs.length ? probs.map(c => `<div class="chk ${c.kind}">${c.kind === 'err' ? '✕' : '!'} <span>${T.esc(c.text)}</span></div>`).join('') : '<div class="chk ok">✓ <span>Ready to submit.</span></div>'}`;
       // results
       body += `<h3>Results</h3><div class="small mb">Finals places first${cur.Fs.length > 1 ? ' (A, then the other divisions)' : ''}, then everyone else by qualifying position. Tied players share a place and the next place is skipped. Format: place,name,IFPA number.</div>

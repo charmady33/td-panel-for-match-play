@@ -100,6 +100,33 @@ TDP.bankplan = (() => {
   // A game a player hasn't played: good. A game they have played: bad, worse each time.
   // A bank sharing 2+ games with a bank (group's games in a round) the player already had: very bad.
   const NEW_GAME = -10, REPEAT = 40, SIMILAR = 3000;
+  // item 88: banks being played right now in the other finals (same games = the same bank): sorted game names -> label.
+  // Refreshed in the background (at most every 10 s); assignOptions and the Assign Bank/Order window leave them out.
+  let busyAt = 0, busyTid = null, busyMap = new Map(), busyRun = null;
+  const bankSig = names => names.map(n => String(n).toLowerCase()).sort().join('|');
+  async function siblingBusy(D) {
+    if (!D || !D.qual || D.qual.tournamentId === D.tid) return busyMap = new Map();
+    if (busyTid === D.tid && Date.now() - busyAt < 10e3) return busyMap;
+    if (busyRun) return busyRun;
+    busyRun = (async () => {
+      const out = new Map();
+      for (const f of (D.finals || []).filter(x => x.tid !== D.tid && x.t)) {
+        try {
+          const rs = T.data.arr(T.data.unwrap(await T.api.get(`/tournaments/${f.tid}/rounds`, 8e3)));
+          const r = rs.filter(x => String(x.status) !== 'completed').sort((a, b) => (b.index ?? b.roundId) - (a.index ?? a.roundId))[0]; if (!r) continue;
+          const gs = await T.api.all(`/tournaments/${f.tid}/games?round=${r.roundId}`, 8e3), am = T.data.arenaMap(f.t);
+          for (const b of f.t.banks || []) {
+            const mine = gs.filter(g => g.bankId === b.bankId && !g.bye);
+            if (!mine.length || mine.every(g => T.timing.isDone(g))) continue;
+            out.set(bankSig((b.arenaIds || []).map(id => (am[id] || {}).name).filter(Boolean)), `${f.name || f.t.name} Group ${mine[0].set + 1}`);
+          }
+        } catch (e) { /* that finals isn't readable now */ }
+      }
+      busyMap = out; busyAt = Date.now(); busyTid = D.tid; busyRun = null; return out;
+    })();
+    return busyRun;
+  }
+  const busyLabel = (D, b) => { const am = T.data.arenaMap(D.t); return busyMap.get(bankSig((b.arenaIds || []).map(id => (am[id] || {}).name).filter(Boolean))) || null; };
   function assignOptions(D) {
     const ctx0 = context(D), am = T.data.arenaMap(D.t), pm = T.data.playerMap(D.t);
     // only groups still waiting (no bank, no arena); banks already used this round (by hand or not) are left out
@@ -109,7 +136,7 @@ TDP.bankplan = (() => {
     const usedBanks = new Set(rg.map(g => g.bankId).filter(b => b != null));
     const ctx = { ...ctx0, groups: ctx0.groups.filter(g => waiting.has(g.key) && !done.has(g.key)) };
     const all = (D.t.banks || []).filter(b => b.status !== 'inactive');
-    const banks = all.filter(b => !usedBanks.has(b.bankId)).map(b => ({ name: b.name, games: (b.arenaIds || []).map(id => (am[id] || {}).name).filter(Boolean) }));
+    const banks = all.filter(b => !usedBanks.has(b.bankId) && !busyLabel(D, b)).map(b => ({ name: b.name, games: (b.arenaIds || []).map(id => (am[id] || {}).name).filter(Boolean) }));   // (not one the other finals is playing right now)
     if (!ctx.round || !ctx.groups.length || !banks.length) return { ctx, banks, list: [], usedBanks: usedBanks.size, allBanks: all.length };
     // each player's earlier "banks": the games their group played in each earlier round
     const past = {};   // playerId -> [{ round, games:Set }]
@@ -193,5 +220,5 @@ TDP.bankplan = (() => {
     return Object.keys(pastTimes).length;
   }
 
-  return { assignOptions, assignSteps, roundSummary, context, estimates, sources, breakdownText, extras, make, steps, qualTimes, loadPast };
+  return { siblingBusy, busyLabel, assignOptions, assignSteps, roundSummary, context, estimates, sources, breakdownText, extras, make, steps, qualTimes, loadPast };
 })();

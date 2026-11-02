@@ -106,6 +106,7 @@ TDP.jobs = (() => {
       const P = counter(groups.length);
       for (const g of groups) { P.to(P.done, `${g.labels.join(', ') || 'no label'} · ${g.ids.length} player${g.ids.length === 1 ? '' : 's'}`); await T.mp.setLabels(g.ids, g.labels, g.color); P.tick(); }
     },
+    async arenaStatus(a) { const ch = await T.mp.setArenaActive(a.arenaId, a.active); return `${a.name} ${a.active ? 'active' : 'deactivated'} in ${a.tname}${ch ? '' : ' (already)'}`; },
     async setCutoffs(a) { await T.mp.setCutoffs(a.lines); },
     async createPlayoff(a) { await T.mp.createPlayoff(a); return `${a.name} created`; },
     async readRanks(a) {
@@ -299,13 +300,21 @@ TDP.jobs = (() => {
         const ids = b.arenaIds || []; if (!ids.includes(s.replId) || ids.includes(s.downId)) continue;
         banks.push({ name: b.name, arenas: ids.map(id => (am[id === s.replId ? s.downId : id] || {}).name).filter(Boolean) });
       }
-      await eachBank(banks, (b, tick) => T.mp.setBankArenas(b.name, b.arenas, tick), b => 2 * b.arenas.length + 1);
-      await T.saveT(a.tid, { downSwaps: (st.downSwaps || []).filter(s => s.downId !== a.downId) });
-      return banks.length ? `${mine[0].down} back in ${banks.map(b => b.name).join(', ')}` : 'nothing to put back';
+      // one bank at a time: a bank that can't be changed is reported, the others still get their game back (item 92)
+      const done = [], failed = [];
+      for (const b of banks) {
+        try { await eachBank([b], (x, tick) => T.mp.setBankArenas(x.name, x.arenas, tick), x => 2 * x.arenas.length + 1); done.push(b.name); }
+        catch (err) { failed.push(`${b.name}: ${err.message || err}`); try { const d = T.dialog(); const c = d && T.findBtn(d, /^(Close|Cancel)$/); if (c) T.click(c); } catch (e) { /* */ } }
+      }
+      const keep = (st.downSwaps || []).filter(s => s.downId !== a.downId || failed.some(f => f.startsWith(s.bank + ':')));
+      await T.saveT(a.tid, { downSwaps: keep });
+      if (failed.length) throw new Error(`${mine[0].down}: couldn't put it back in ${failed.join('; ')}${done.length ? ` (back in ${done.join(', ')})` : ''}`);
+      return banks.length ? `${mine[0].down} back in ${banks.map(b => b.name).join(', ')}` : (mine.length ? `${mine[0].down}: its banks changed since - nothing to put back` : 'nothing to put back');
     },
     // the newest round's waiting groups get banks (same choice as the Assign banks button's best option)
     async assignRound(a) {
       await T.data.refresh(true);
+      await T.bankplan.siblingBusy(T.data.D);
       const o = T.bankplan.assignOptions(T.data.D);
       if (!o.list.length) return o.ctx.groups.length ? 'no free banks to assign' : 'every group already has a bank';
       return ops.assignBanks({ tid: a.tid, roundId: o.ctx.round.roundId, pairs: o.list[0].pairs.map(p => ({ group: p.group, bank: p.bank })) });

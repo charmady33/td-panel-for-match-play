@@ -277,7 +277,7 @@ TDP.mp = (() => {
 
   // ---------- Arenas tab: add existing arenas to this tournament (Add… -> Existing arenas) ----------
   async function addArenas(names, tick = noTick) {
-    T.click(await needBtn(/^Add(…|\.\.\.)$/));
+    T.click(await needBtn(/^Add( arenas|…|\.\.\.)$/));   // (Matchplay's button is "Add arenas" now)
     const d = await needDialog();
     const tab = T.findBtn(d, /^Existing arenas$/); if (tab) T.click(tab);
     await pickArenas(d, names, '', tick, 'This tournament');
@@ -606,5 +606,16 @@ TDP.mp = (() => {
     await dialogClosed(15000);
   }
 
-  return { rankLabels, setCutoffs, createPlayoff, deleteTournament, setPlayerOrder, roundArenas, addTestPlayers, addTestArenas, setArenaById, setGameArena, gameCard, openAssign, groupHead, goTab, menu, playerRows, selectPlayers, setLabels, bulk, setActive, readIfpaRanks, addFromQualifying, setSeeds, closeRound, startNextRound, publishRound, createBank, setBankArenas, reorderBank, assignBank, enterResults, addArenas, resolveTie, needBtn, needDialog, dialogClosed };
+  // ---------- Arenas tab: one arena's Activate / Deactivate link (item 90) ----------
+  async function setArenaActive(arenaId, active) {
+    const row = () => { const a = [...document.querySelectorAll('main table a[href*="/arenas/"]')].find(x => new RegExp('/arenas/' + arenaId + '$').test(x.getAttribute('href') || '')); return a && a.closest('tr'); };
+    const tr = await T.waitFor(row, 10000) || fail(`Arena ${arenaId} isn't on this Arenas tab.`);
+    const want = active ? 'Activate' : 'Deactivate';
+    const b = [...tr.querySelectorAll('button, a')].find(x => T.txt(x) === want);
+    if (!b) return false;   // already that way
+    T.click(b);
+    await T.waitFor(() => { const r = row(); return r && ![...r.querySelectorAll('button, a')].some(x => T.txt(x) === want); }, 5000, 50); await T.sleep(150);
+    return true;
+  }
+  return { setArenaActive, rankLabels, setCutoffs, createPlayoff, deleteTournament, setPlayerOrder, roundArenas, addTestPlayers, addTestArenas, setArenaById, setGameArena, gameCard, openAssign, groupHead, goTab, menu, playerRows, selectPlayers, setLabels, bulk, setActive, readIfpaRanks, addFromQualifying, setSeeds, closeRound, startNextRound, publishRound, createBank, setBankArenas, reorderBank, assignBank, enterResults, addArenas, resolveTie, needBtn, needDialog, dialogClosed };
 })();

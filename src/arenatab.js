@@ -64,6 +64,7 @@ TDP.arenatab = (() => {
       if (cells[2].dataset.k !== comb) { cells[2].dataset.k = comb; cells[2].innerHTML = comb; }
     }
     // item 84: one "Game times" button right after Matchplay's Add arenas (the old "Game times from" bar is gone)
+    autoLocal(D);
     T.inpage.block('tdp-arena-times', null);
     button(D, st);
   }
@@ -112,13 +113,47 @@ ul{margin:6px 0 12px 18px;padding:0}li{margin:3px 0}</style>
       <div class="wrap${document.documentElement.classList.contains('dark') ? ' dark' : ''}"><div class="ov" data-act="bg"><div class="dlg">
       <div class="dh">Game times</div><div class="db">
         <div class="lab">Where the times come from</div><ul>${rows.join('')}</ul>
+        <div class="lab">Search past events (any organizer)</div>
+        <div class="small muted mb">Type a venue or event name, e.g. the league's name - Match Play's search finds events by name.</div>
+        <div class="gap"><input type="text" data-f="q" value="${T.esc(sq.q || '')}" placeholder="e.g. Lane Change Thursday" style="flex:1;min-width:220px"><button class="btn sm sec" data-act="search">Search</button></div>
+        ${sq.busy ? '<div class="small mt">Searching…</div>' : sq.err ? `<div class="small err mt">${T.esc(sq.err)}</div>` : sq.list ? (sq.list.length ? `<table class="small" style="margin:6px 0 10px">${sq.list.map(x => `<tr><td><b>${T.esc(x.name)}</b> <span class="muted">#${x.id}</span></td><td class="muted">${T.esc(x.date || '')}</td><td style="text-align:right">${idsOf(st).includes(x.id) || x.id === D.tid ? '<span class="muted">added</span>' : `<button class="btn sm" data-act="addId" data-id="${x.id}">Add</button>`}</td></tr>`).join('')}</table>` : '<div class="small mt">Nothing found.</div>') : ''}
         <div class="lab">Other Match Play tournament IDs</div>
         <div class="small muted mb">Past events at this venue give game times before this one has its own. Paste one or more IDs (the number in the event's address).</div>
         <div class="gap"><input type="text" data-f="ids" value="${T.esc(st.bankPast || '')}" placeholder="e.g. 280233, 280541" style="flex:1;min-width:220px"><button class="btn sm" data-act="load">Load</button>${st.bankPast ? '<button class="btn sm sec" data-act="clear">Clear</button>' : ''}</div>
-        ${info.length ? `<ul>${info.map(x => `<li>#${x.id} ${T.esc(x.name)} · ${x.games} games</li>`).join('')}</ul>` : ''}
+        ${info.length ? `<ul>${info.map(x => `<li>#${x.id} ${T.esc(x.name)} · ${x.games} games${(st.locAuto || []).includes(x.id) ? ' <span class="small muted">(yours, same location - added by itself)</span>' : ''}</li>`).join('')}</ul>` : ''}
         ${msg ? `<div class="callout ${msg.err ? 'err' : ''} mt">${T.esc(msg.text)}</div>` : ''}
         ${miss.length ? `<div class="mt"><button class="btn sm sec" data-act="copyQual" title="${T.esc(miss.join(', '))}">Copy ${miss.length} arena${miss.length === 1 ? '' : 's'} from ${T.esc(D.qual.name || 'qualifying')}</button></div>` : ''}
       </div><div class="df"><button class="btn" data-act="close">Done</button></div></div></div></div>`;
+  }
+  let sq = { q: '', list: null };
+  const idsOf = st => ((st.bankPast || '').match(/\d+/g) || []).map(Number);
+  // Match Play's search (read-only API): events by name, any organizer, finished ones first
+  async function search(D, q) {
+    sq = { q, busy: true }; drawWin(D);
+    try {
+      const j = await T.api.get(`/search?query=${encodeURIComponent(q)}&type=tournaments`, 60e3);
+      const rows = T.data.arr(j && j.tournaments ? j.tournaments : j);
+      sq = { q, list: rows.filter(t => t && t.tournamentId).map(t => ({ id: t.tournamentId, name: t.name || ('#' + t.tournamentId), date: (t.startLocal || t.startUtc || '').slice(0, 10), done: String(t.status) === 'completed' })).sort((a, b) => (b.done - a.done) || String(b.date).localeCompare(String(a.date))).slice(0, 15) };
+    } catch (err) { sq = { q, err: T.apiErrorText ? T.apiErrorText(err) : String(err) }; }
+    drawWin(D);
+  }
+  // item 89: the TD's own finished events at this event's location are used by themselves (newest 10, last 12 months)
+  let locDone = {};
+  async function autoLocal(D) {
+    if (!D || !D.t || !D.t.locationId || locDone[D.tid] || !T.settings.token) return;
+    locDone[D.tid] = true;
+    try {
+      const me = D.me || T.data.unwrap(await T.api.get('/users/profile', 3600e3)); if (!me || !me.userId) return;
+      const list = T.data.arr(await T.api.get(`/tournaments?owner=${me.userId}&status=completed&limit=100`, 3600e3));
+      const year = Date.now() - 365 * 864e5;
+      const ids = list.filter(t => t.locationId === D.t.locationId && t.tournamentId !== D.tid && (!D.qual || t.tournamentId !== D.qual.tournamentId) && (Date.parse(t.startUtc || t.completedAt || '') || 0) > year)
+        .sort((a, b) => (Date.parse(b.startUtc || '') || 0) - (Date.parse(a.startUtc || '') || 0)).slice(0, 10).map(t => t.tournamentId);
+      const st = T.tstate[D.tid] || {}, have = idsOf(st), add = ids.filter(id => !have.includes(id) && !(st.locSkip || []).includes(id));
+      if (!add.length) return;
+      await T.bankplan.loadPast(D, [...have, ...add]);
+      await T.saveT(D.tid, { locAuto: [...new Set([...(st.locAuto || []), ...add])] });
+      render(T.data.D); drawWin(T.data.D);
+    } catch (e) { /* next time */ }
   }
   async function onWin(e) {
     const a = e.target.closest('[data-act]'); if (!a) return;
@@ -130,7 +165,15 @@ ul{margin:6px 0 12px 18px;padding:0}li{margin:3px 0}</style>
       if (names.length) await T.jobs.start(`Copy ${names.length} arenas from qualifying`, [{ tid: D.tid, page: 'arenas', op: 'copyArenas', args: { names }, label: `Adding ${names.length} arenas` }]);
       return;
     }
-    if (act === 'clear') { await T.saveT(D.tid, { pastTimes: null, bankPast: '', pastInfo: null }); drawWin(D, { text: 'Cleared the other Match Play IDs.' }); return render(T.data.D); }
+    if (act === 'search') { const q = host.shadowRoot.querySelector('[data-f=q]').value.trim(); if (q.length >= 2) search(D, q); return; }
+    if (act === 'addId') {
+      const st = T.tstate[D.tid] || {}, ids = [...new Set([...idsOf(st), +a.dataset.id])];
+      a.disabled = true; a.textContent = 'Loading…';
+      try { const k = await T.bankplan.loadPast(D, ids); drawWin(D, { text: `Loaded times for ${k} arenas from ${ids.length} tournament${ids.length === 1 ? '' : 's'}.` }); }
+      catch (err) { drawWin(D, { text: `#${a.dataset.id}: ${T.apiErrorText ? T.apiErrorText(err) : String(err)} (another organizer's event may not be readable with your token)`, err: true }); }
+      return render(T.data.D);
+    }
+    if (act === 'clear') { await T.saveT(D.tid, { pastTimes: null, bankPast: '', pastInfo: null, locSkip: [...new Set([...((T.tstate[D.tid] || {}).locSkip || []), ...((T.tstate[D.tid] || {}).locAuto || [])])], locAuto: [] }); drawWin(D, { text: 'Cleared the other Match Play IDs.' }); return render(T.data.D); }
     if (act === 'load') {
       const ids = ((host.shadowRoot.querySelector('[data-f=ids]').value.match(/\d+/g)) || []).map(Number).filter(id => id !== D.tid);
       if (!ids.length) { await T.saveT(D.tid, { pastTimes: null, bankPast: '', pastInfo: null }); drawWin(D, { text: 'Cleared the other Match Play IDs.' }); return render(T.data.D); }
@@ -155,5 +198,5 @@ ul{margin:6px 0 12px 18px;padding:0}li{margin:3px 0}</style>
     render(T.data.D);
   }, true);
 
-  return { render };
+  return { render, autoLocal };
 })();

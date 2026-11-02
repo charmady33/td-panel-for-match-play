@@ -2,6 +2,24 @@
 
 All notable changes, newest first. Versions follow [semantic versioning](https://semver.org/): new features bump the middle number, fixes the last.
 
+## 0.25.0 - 2026-11-02
+- Submit to IFPA (items 85, 86): finals with byes use the TGP guide's **Effective Rounds** (rounds the winner is expected
+  to play) × games × group bonus - e.g. 12 players, 4 with byes, 3 games: 2.5 rounds = 15 meaningful games, matching
+  IFPA's chart. Places come from A finals + qualifying only (like Matchplay's IFPA Results); B finals don't change them.
+- Bank Builder in finals (item 87): "Same banks there too" or "Unique banks for each (no clash with these)" for the
+  other finals. Shared banks (item 88): a bank the other finals is playing right now is left out / greyed out
+  ("in use · A Finals Group 2") in Assign banks, Assign Bank/Order and automatic assignment.
+- Game times (item 89): your own finished events at the same location (newest 10, last 12 months) are used by
+  themselves; the Game times window has a search for past events by name (any organizer). Replaces item 39.
+- Down machines (items 90, 91, 96): a game turned off (or on) in qualifying, A or B is turned off (on) in the others;
+  the replacement window opens before the event starts too, and for games waiting on / being played on the machine
+  with or without banks - ★ Best (default), Random, or pick a game.
+- Arenas (item 94): every active qualifying arena is copied into each finals by itself. Fixed: Matchplay renamed its
+  "Add…" button to "Add arenas", which broke copying arenas.
+- Banks (item 95): no more "Finals started: banks are locked" - banks can be changed any time (preview first).
+- Put back (item 92): the button puts the game back one bank at a time and says exactly which bank failed and why.
+- While a task runs (item 93): every Match Play tab is greyed out and can't be clicked; the progress card is bottom left.
+
 ## 0.24.2 - 2026-11-01
 - Fix: eligibility labels stopped with "Set rank labels: next step did not open". Matchplay replaces its window with a
   new one for the "Set player labels" step; the extension kept looking in the old one. It now finds the new window

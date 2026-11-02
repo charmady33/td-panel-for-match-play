@@ -28,3 +28,12 @@ const G = T.ifpa.grade(Q, [F]);
 console.log(JSON.stringify(G.parts.map(p => [p.label, p.mg, p.counts, p.math, p.note])), G.total, G.warns);
 const fam = { qid: 278128, all: [{ tournamentId: 278128 }, { tournamentId: 278131 }] };
 console.log(T.ifpa.notes(fam, Q, [F], G, G.total));
+// IFPA cheat sheet row "8 players: 2 with 2 byes, 2 with 1 bye, 4 in QF" -> 1.75 effective rounds (x3 games x2 = 10.5)
+{
+  const ids = [1, 2, 3, 4, 5, 6, 7, 8].map(i => 900 + i), gs = [], rs = [1, 2, 3].map(i => ({ roundId: 50 + i, index: i - 1 }));
+  const g = (rid, set, p) => { for (let k = 0; k < 3; k++) gs.push({ roundId: rid, set, index: k, playerIds: p }); };
+  g(51, 0, ids.slice(4, 8)); g(52, 0, [ids[2], ids[3], ids[4], ids[5]]); g(53, 0, [ids[0], ids[1], ids[2], ids[4]]);
+  const X = { t: { type: 'group_bracket', players: [] }, standings: ids.map((id, i) => ({ playerId: id, position: i + 1, gamesPlayed: 3 })), rounds: rs, games: gs, pm: {} };
+  const out = T.ifpa.grade({ ...X, t: { type: 'group_matchplay', players: [] }, standings: Array.from({ length: 20 }, (_, i) => ({ playerId: i, position: i + 1, gamesPlayed: 1 })), rounds: [], games: [] }, [{ ...X, label: 'A' }]).parts[1];
+  console.log('8-player 2/2/4 bye structure:', out.evr, out.mg, out.evr === 1.75 && out.mg === 10.5 ? 'OK (matches the IFPA table)' : 'WRONG');
+}

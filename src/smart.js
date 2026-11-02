@@ -340,14 +340,66 @@ TDP.smart = (() => {
     }
     return out;
   }
+  // items 91, 96: a game of the current round waiting on / played on a down machine that no bank change covers ->
+  // every free game ranked: same era, a similar time, not busy right now, not one the group plays this round or played
+  // in the round before
+  function looseFits(D, g, est, roundGames) {
+    const am = T.data.arenaMap(D.t), down = est.find(a => a.arenaId === g.arenaId) || { era: T.banks.eraOf(am[g.arenaId]), sec: 13 * 60 };
+    const group = roundGames.filter(x => x.set === g.set && x.roundId === g.roundId), mine = new Set(group.map(x => x.arenaId));
+    const busy = new Set(roundGames.filter(x => x !== g && !x.bye && !T.timing.isDone(x) && x.arenaId != null).map(x => x.arenaId));
+    const rs = D.rounds || [], i = rs.findIndex(r => r.roundId === g.roundId), prev = i > 0 ? rs[i - 1].roundId : null;
+    const ps = new Set(group.flatMap(x => x.playerIds || []));
+    const hadLast = new Set((D.games || []).filter(x => x.roundId === prev && (x.playerIds || []).some(p => ps.has(p))).map(x => x.arenaId));
+    return est.filter(a => a.arenaId !== g.arenaId && !isDown(am[a.arenaId]) && !mine.has(a.arenaId))
+      .map(a => ({ id: a.arenaId, name: a.name, era: a.era, sec: a.sec, busy: busy.has(a.arenaId), last: hadLast.has(a.arenaId),
+        cost: (eraK(a.era) === eraK(down.era) ? 0 : 300) + Math.abs(a.sec - down.sec) + (busy.has(a.arenaId) ? 900 : 0) + (hadLast.has(a.arenaId) ? 500 : 0) }))
+      .sort((x, y) => x.cost - y.cost);
+  }
+  const openOnDown = (D, roundGames) => { const am = T.data.arenaMap(D.t); return roundGames.filter(g => !g.bye && g.arenaId != null && !T.timing.isDone(g) && isDown(am[g.arenaId])); };
+  // item 90: a game turned off (or back on) in one event of the set - qualifying, A, B… - is turned off (on) in the others
+  async function famSync(D) {
+    if (!D.qual || T.isFrame) return false;
+    const st = T.tstate[D.tid] || {}, seen = st.arenaSeen || null, now = {};
+    for (const a of D.t.arenas || []) now[a.arenaId] = isDown(a) ? 0 : 1;
+    if (JSON.stringify(seen) !== JSON.stringify(now)) await T.saveT(D.tid, { arenaSeen: now });
+    if (!seen) return false;   // first look: nothing changed yet
+    const changed = Object.keys(now).filter(id => id in seen && seen[id] !== now[id]);
+    if (!changed.length) return false;
+    const fam = [{ tid: D.qual.tournamentId, t: D.qual }, ...(D.finals || []).map(f => ({ tid: f.tid, t: f.t }))].filter(x => x.tid !== D.tid && x.t);
+    const steps = [];
+    for (const id of changed) {
+      const active = !!now[id], name = ((D.t.arenas || []).find(a => String(a.arenaId) === id) || {}).name || 'A game';
+      for (const x of fam) {
+        const a = (x.t.arenas || []).find(z => String(z.arenaId) === id); if (!a || !isDown(a) === active) continue;
+        steps.push({ tid: x.tid, page: 'arenas', op: 'arenaStatus', args: { arenaId: +id, active, name, tname: x.t.name || ('#' + x.tid) }, label: `${active ? 'Turning on' : 'Turning off'} ${name} in ${x.t.name || '#' + x.tid}` });
+      }
+    }
+    if (!steps.length) return false;
+    try { await T.jobs.start(`${steps.length === 1 ? steps[0].args.name : 'Games'} ${steps[0].args.active ? 'back on' : 'off'} in the other events too`, steps); return true; } catch (e) { return false; }
+  }
+  // item 94: a finals gets every active arena of its qualifying by itself (Matchplay's "Add from qualifying" can miss some)
+  async function famArenas(D) {
+    if (!D.qual || D.tid === D.qual.tournamentId || T.isFrame) return false;
+    const have = new Set((D.t.arenas || []).map(a => String(a.name || '').toLowerCase()));
+    const names = (D.qual.arenas || []).filter(a => !isDown(a)).map(a => a.name).filter(n => n && !have.has(n.toLowerCase()));
+    if (!names.length) return false;
+    const st = T.tstate[D.tid] || {}, sig = names.slice().sort().join('|');
+    if (st.arenaCopySig === sig && Date.now() - (st.arenaCopyAt || 0) < 30 * 60e3) return false;   // tried already: not again and again
+    await T.saveT(D.tid, { arenaCopySig: sig, arenaCopyAt: Date.now() });
+    try { await T.jobs.start(`Copy ${names.length} arena${names.length === 1 ? '' : 's'} from qualifying`, [{ tid: D.tid, page: 'arenas', op: 'copyArenas', args: { names }, label: `Adding ${names.length} arena${names.length === 1 ? '' : 's'} from ${D.qual.name || 'qualifying'}` }]); return true; } catch (e) { return false; }
+  }
   let downBusy = false;
   async function downCheck() {
     const D = T.data.D;
-    if (T.isFrame || downBusy || !D || !D.t || !D.isTD || D.t.status !== 'started' || T.jobs.active() || !/bank/i.test(D.t.arenaAssignment || '')) return;
-    const am = T.data.arenaMap(D.t);
-    const hit = (D.t.banks || []).filter(b => b.status !== 'inactive' && (b.arenaIds || []).some(id => isDown(am[id])));
-    if (!hit.length) return;
-    const sig = hit.map(b => b.bankId + ':' + b.arenaIds.join(',')).join('|'), st = T.tstate[D.tid] || {};
+    // (item 91: before the event starts too; item 96: with or without banks)
+    if (T.isFrame || downBusy || !D || !D.t || !D.isTD || T.jobs.active()) return;
+    if (D.tid === T.routeTid() && await famSync(D)) return;   // (the window follows once that's done)
+    if (D.tid === T.routeTid() && await famArenas(D)) return;
+    const am = T.data.arenaMap(D.t), usesBanks = /bank/i.test(D.t.arenaAssignment || '');
+    const hit = usesBanks ? (D.t.banks || []).filter(b => b.status !== 'inactive' && (b.arenaIds || []).some(id => isDown(am[id]))) : [];
+    const r = T.data.currentRound(), loose = r ? openOnDown(D, D.games.filter(g => g.roundId === r.roundId)) : [];
+    if (!hit.length && !loose.length) return;
+    const sig = hit.map(b => b.bankId + ':' + b.arenaIds.join(',')).join('|') + '#' + loose.map(g => g.gameId + ':' + g.arenaId).join(','), st = T.tstate[D.tid] || {};
     if (st.downSig === sig && Date.now() - (st.downAt || 0) < 10 * 60e3) return;
     downBusy = true;
     try {
@@ -355,7 +407,12 @@ TDP.smart = (() => {
       const tid = D.tid;
       let bgWin = false; try { bgWin = sessionStorage.getItem('tdp-bg') === '1'; } catch (e) { /* */ }
       if (!bgWin && !document.hidden) return downPreview(D);   // the TD is here: show what will change first
-      await T.jobs.start('A machine is down: fixing its banks', [{ tid, page: 'banks', op: 'downFix', args: { tid }, label: 'Replacing the down game in its banks' }]);
+      if (hit.length) await T.jobs.start('A machine is down: fixing its banks', [{ tid, page: 'banks', op: 'downFix', args: { tid }, label: 'Replacing the down game in its banks' }]);
+      else {   // nobody here: each game gets its best replacement
+        const extra = await T.bankplan.extras(D), est = T.bankplan.estimates(D, st, extra, true), rg = D.games.filter(g => g.roundId === r.roundId);
+        const items = loose.map(g => { const o = looseFits(D, g, est, rg)[0]; return o && { gameId: g.gameId, arenaId: o.id, name: o.name, group: g.set === 9999 ? 'Tiebreaker' : g.set + 1, index: g.index ?? 0 }; }).filter(Boolean);
+        if (items.length) await T.jobs.start('A machine is down: moving its games', [{ tid, page: 'matches', op: 'smartAssign', args: { tid, roundId: r.roundId, items, change: true }, label: `Moving ${items.length} game${items.length === 1 ? '' : 's'} off the down machine` }]);
+      }
     } catch (e) { T.warn('downCheck', e); }
     finally { downBusy = false; }
   }
@@ -364,16 +421,21 @@ TDP.smart = (() => {
   let pvHost = null, pv = null;
   async function downPreview(D) {
     const st = T.tstate[D.tid] || {}, extra = await T.bankplan.extras(D);
-    const changes = downPlan(D, T.bankplan.estimates(D, st, extra), T.bankplan.estimates(D, st, extra, true));
-    if (!changes.length) return;
+    const usesBanks = /bank/i.test(D.t.arenaAssignment || ''), estAll = T.bankplan.estimates(D, st, extra, true);
+    const changes = usesBanks ? downPlan(D, T.bankplan.estimates(D, st, extra), estAll) : [];
     const r = T.data.currentRound(), roundGames = r ? D.games.filter(g => g.roundId === r.roundId) : [];
-    pv = { tid: D.tid, changes, pick: {}, roundGames };
+    // games on the down machine that the bank changes don't move: each gets its own choice (best / random / pick)
+    const covered = new Set(downGames(D, roundGames, changes.filter(c => !c.none)).map(m => m.gameId));
+    const am = T.data.arenaMap(D.t);
+    const loose = openOnDown(D, roundGames).filter(g => !covered.has(g.gameId)).map(g => ({ g, down: (am[g.arenaId] || {}).name || 'a game', options: looseFits(D, g, estAll, roundGames) })).filter(x => x.options.length);
+    if (!changes.length && !loose.length) return;
+    pv = { tid: D.tid, roundId: r && r.roundId, changes, pick: {}, roundGames, loose, lpick: {} };
     if (!pvHost) { pvHost = document.createElement('div'); pvHost.id = 'tdp-downpv'; pvHost.attachShadow({ mode: 'open' }); pvHost.shadowRoot.addEventListener('click', pvClick); pvHost.shadowRoot.addEventListener('change', pvChange); document.documentElement.appendChild(pvHost); }
     pvDraw();
   }
   const pvChoice = (ch, k) => { const id = pv.pick[k]; return (id && ch.options.find(o => String(o.id) === String(id))) || ch.options[0]; };
   function pvDraw() {
-    const D = T.data.D, by = {}; pv.changes.forEach(c => { (by[c.down] = by[c.down] || []).push(c); });
+    const D = T.data.D, by = {}; pv.changes.forEach(c => { (by[c.down] = by[c.down] || []).push(c); }); pv.loose.forEach(x => { by[x.down] = by[x.down] || []; });
     const rows = pv.changes.map((ch, k) => {
       if (ch.none) return `<tr><td><b>${T.esc(ch.bank)}</b></td><td colspan="2" class="small">No free game fits - this bank keeps ${T.esc(ch.down)}.</td></tr>`;
       const o = pvChoice(ch, k);
@@ -383,20 +445,30 @@ TDP.smart = (() => {
     const moving = downGames(D, pv.roundGames, pv.changes.filter(c => !c.none).map((c, k) => { const o = pvChoice(c, pv.changes.indexOf(c)); return { ...c, repl: o.name, replId: o.id }; }));
     pvHost.shadowRoot.innerHTML = `<style>${T.panel.CSS}:host{all:initial}.ov{position:fixed;inset:0;background:rgba(17,24,39,.5);z-index:2147483000;display:flex;align-items:flex-start;justify-content:center;padding:7vh 16px;overflow:auto}.dlg{background:var(--card);border-radius:8px;box-shadow:0 20px 40px rgba(0,0,0,.25);width:640px;max-width:100%;font-family:ui-sans-serif,system-ui,sans-serif;font-size:14px;color:var(--text)}.dh{padding:16px 20px 8px;font-size:18px;font-weight:500}.db{padding:4px 20px 16px}.df{background:var(--head);padding:12px 20px;display:flex;justify-content:flex-end;gap:8px;border-radius:0 0 8px 8px}td{vertical-align:top;padding:6px 4px;border-top:1px solid var(--line)}</style>
       <div class="wrap${document.documentElement.classList.contains('dark') ? ' dark' : ''}"><div class="ov"><div class="dlg"><div class="dh">${Object.keys(by).map(T.esc).join(', ')} ${Object.keys(by).length === 1 ? 'is' : 'are'} going down</div><div class="db">
-      <div class="small mb">${Object.entries(by).map(([d, cs]) => `${T.esc(d)} is in ${cs.map(c => `${T.esc(c.bank)} (game ${c.pos + 1})`).join(' and ')}`).join('. ')}. ★ = best fit (not busy in another bank then, same era as the down game, keeps bank times even, games in the fewest banks). Pick another if you like.</div>
-      <table>${rows}</table>
+      <div class="small mb">${Object.entries(by).filter(([, cs]) => cs.length).map(([d, cs]) => `${T.esc(d)} is in ${cs.map(c => `${T.esc(c.bank)} (game ${c.pos + 1})`).join(' and ')}`).join('. ')}${pv.changes.length ? '. ' : ''}${pv.loose.length ? `${pv.loose.length} game${pv.loose.length === 1 ? ' is' : 's are'} waiting on or being played on it. ` : ''}★ = best fit (${pv.changes.length ? 'banks: not busy in another bank then, same era, keeps bank times even, games in the fewest banks' : 'same era, a similar game time, not busy right now, not one the group plays this round or played last round'}). Pick another if you like.</div>
+      <table>${rows}${pv.loose.map((x, k) => { const v = pv.lpick[k] || 'best', o = x.options[0];
+        return `<tr><td><b>${x.g.set === 9999 ? 'Tiebreaker' : 'Group ' + (x.g.set + 1)}</b><div class="small">game ${(x.g.index ?? 0) + 1} · on ${T.esc(x.down)}</div></td><td><select data-l="${k}" style="width:100%"><option value="best"${v === 'best' ? ' selected' : ''}>★ Best: ${T.esc(o.name)} (${o.era}, ~${Math.round(o.sec / 60)} min)${o.busy ? ' - busy right now' : ''}</option><option value="random"${v === 'random' ? ' selected' : ''}>Random (any free game that fits)</option>${x.options.slice(1).map(c => `<option value="${c.id}"${String(v) === String(c.id) ? ' selected' : ''}>${T.esc(c.name)} (${c.era}, ~${Math.round(c.sec / 60)} min)${c.busy ? ' - busy right now' : ''}${c.last ? ' - played last round' : ''}</option>`).join('')}</select></td></tr>`; }).join('')}</table>
       ${moving.length ? `<div class="small mt">Also moves ${moving.length} game${moving.length === 1 ? '' : 's'} of the current round still waiting on it: ${moving.map(m => `Group ${m.group} → ${T.esc(m.name)}`).join(', ')}.</div>` : ''}
-      </div><div class="df"><button class="btn sec" data-act="leave">Leave banks as they are</button><button class="btn" data-act="apply">Apply</button></div></div></div></div>`;
+      </div><div class="df"><button class="btn sec" data-act="leave">${pv.changes.length ? 'Leave banks as they are' : 'Leave it'}</button><button class="btn" data-act="apply">Apply</button></div></div></div></div>`;
   }
-  function pvChange(e) { const k = e.target.dataset && e.target.dataset.k; if (k == null || !pv) return; pv.pick[k] = e.target.value; pvDraw(); }
+  function pvChange(e) { const d = e.target.dataset || {}; if (!pv) return; if (d.l != null) { pv.lpick[d.l] = e.target.value; return pvDraw(); } if (d.k == null) return; pv.pick[d.k] = e.target.value; pvDraw(); }
   async function pvClick(e) {
     const a = e.target.closest('[data-act]'); if (!a || !pv) return;
     const close = () => { if (pvHost) pvHost.remove(); pvHost = null; };
-    if (a.dataset.act === 'leave') { close(); T.panel.say('Banks left as they are - the Banks tab shows a ⚠ until it\'s fixed.'); pv = null; return; }
+    if (a.dataset.act === 'leave') { close(); T.panel.say(pv.changes.length ? 'Banks left as they are - the Banks tab shows a ⚠ until it\'s fixed.' : 'Left as it is.'); pv = null; return; }
     if (a.dataset.act !== 'apply') return;
     const changes = pv.changes.filter(c => !c.none).map(c => { const o = pvChoice(c, pv.changes.indexOf(c)); return { bank: c.bank, down: c.down, downId: c.downId, repl: o.name, replId: o.id, arenas: o.arenas }; });
-    const tid = pv.tid; close(); pv = null;
-    try { await T.jobs.start('A machine is down: fixing its banks', [{ tid, page: 'banks', op: 'downFix', args: { tid, changes }, label: 'Replacing the down game in its banks' }]); }
+    // games not moved by a bank change: best (default), random, or the one picked
+    const items = pv.loose.map((x, k) => {
+      const v = pv.lpick[k] || 'best', fit = x.options.filter(o => !o.busy && !o.last);
+      const o = v === 'best' ? x.options[0] : v === 'random' ? (fit.length ? fit : x.options)[Math.floor(Math.random() * (fit.length || x.options.length))] : x.options.find(c => String(c.id) === String(v));
+      return o && { gameId: x.g.gameId, arenaId: o.id, name: o.name, group: x.g.set === 9999 ? 'Tiebreaker' : x.g.set + 1, index: x.g.index ?? 0 };
+    }).filter(Boolean);
+    const tid = pv.tid, roundId = pv.roundId; close(); pv = null;
+    const steps = [];
+    if (changes.length) steps.push({ tid, page: 'banks', op: 'downFix', args: { tid, changes }, label: 'Replacing the down game in its banks' });
+    if (items.length) steps.push({ tid, page: 'matches', op: 'smartAssign', args: { tid, roundId, items, change: true }, label: `Moving ${items.length} game${items.length === 1 ? '' : 's'} off the down machine` });
+    try { if (steps.length) await T.jobs.start('A machine is down', steps); }
     catch (err) { T.panel.say(err.message || String(err), 'err'); }
   }
 

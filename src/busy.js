@@ -121,16 +121,28 @@ TDP.busy = (() => {
       document.documentElement.appendChild(card);
     }
     const dark = document.documentElement.classList.contains('dark');
-    card.style.cssText = `position:fixed;bottom:16px;right:${drawerW() + 16}px;z-index:2147482000`;
+    card.style.cssText = 'position:fixed;bottom:16px;left:16px;z-index:2147482001';   // bottom left (item 93)
     const pct = Math.max(4, Math.round(T.jobs.fraction(j) * 100));
     const html = `<div class="${dark ? 'dark' : ''}"><div class="tdpc-card"><div class="tdpc-t"><span class="tdpc-sp"></span>Updating Matchplay…</div>
       <div class="tdpc-s">${T.esc(j.title)}</div><div class="tdpc-s">${T.esc(stepText(j))}</div>
       <div class="tdpc-pb"><i style="width:${pct}%"></i></div><div class="tdpc-s" style="margin:-4px 0 8px;text-align:right">${pct}%${T.esc(countText(j))}</div>
-      <div class="tdpc-row"><span class="tdpc-f">You can keep working.</span><button class="tdpc-b" data-act="show">Show me</button><button class="tdpc-b" data-act="stop">Stop</button></div></div></div>`;
+      <div class="tdpc-row"><span class="tdpc-f">${T.jobs.mine() ? 'Match Play is locked until it\'s done.' : 'Running in another tab - locked until it\'s done.'}</span>${T.jobs.mine() ? '<button class="tdpc-b" data-act="show">Show me</button>' : ''}<button class="tdpc-b" data-act="stop">Stop</button></div></div></div>`;
     const w = card.shadowRoot.querySelector('.w'); if (w.dataset.h !== html) { w.dataset.h = html; w.innerHTML = html; }
     card.dataset.tdpLog = (j.log || []).slice(-10).join(' | ');   // (for troubleshooting)
   }
   function hideCard() { if (card) { card.remove(); card = null; } }
+  // item 93: every Match Play tab is greyed out (and can't be clicked) while a task runs anywhere
+  let grey = null;
+  function greyOut(on) {
+    if (!on) { if (grey) { grey.remove(); grey = null; } return; }
+    if (!grey) {
+      grey = document.createElement('div'); grey.id = 'tdp-greyout';
+      grey.style.cssText = 'position:fixed;inset:0;z-index:2147482000;background:rgba(17,24,39,.35);cursor:wait';
+      ['click', 'mousedown', 'pointerdown', 'wheel', 'touchstart', 'contextmenu'].forEach(ev => grey.addEventListener(ev, e => { e.preventDefault(); e.stopPropagation(); }, { passive: false }));
+      document.documentElement.appendChild(grey);
+    }
+  }
+  if (!T.isFrame) addEventListener('keydown', e => { if (grey && !(e.target && e.target.closest && e.target.closest('[id^="tdp-"]'))) { e.preventDefault(); e.stopPropagation(); } }, true);
   const LOCK = 'data-tdp-lock';
   function lockAreas(on) {
     document.querySelectorAll(`[${LOCK}]`).forEach(el => { if (!on) { el.style.pointerEvents = ''; el.style.opacity = ''; el.removeAttribute(LOCK); } });
@@ -148,8 +160,9 @@ TDP.busy = (() => {
     const running = j && T.jobs.active();
     const own = running && T.jobs.mine();
     if (own && j.runner !== 'frame') { stillOn = false; showCover(j); } else if (!stillOn) hideCover();
-    if (own && j.runner === 'frame') { showCard(j); lockAreas(T.routeTid() && j.steps.some(s => s.tid === T.routeTid() && s.page === T.routePage())); }
-    else { hideCard(); lockAreas(false); }
+    // the task runs in the hidden helper (or in another tab): grey this tab out, progress card bottom left
+    if (running && !(own && j.runner !== 'frame')) { greyOut(true); showCard(j); lockAreas(false); }
+    else { greyOut(false); hideCard(); lockAreas(false); }
     // banner: other tabs while running; this tab when done or stopped with an error
     const main = document.querySelector('main');
     const fresh = j && j.done && j.doneAt && Date.now() - j.doneAt < DONE_MS;
@@ -158,7 +171,7 @@ TDP.busy = (() => {
     let banner = '';
     if (here && j.error) banner = `<div class="callout err gap" style="margin:8px 0;align-items:center"><span class="flex1"><b>Update stopped:</b> ${T.esc(j.title)} - ${T.esc(j.error)}<details style="margin-top:4px"><summary style="cursor:pointer">Details</summary><div style="font:11px/1.4 ui-monospace,monospace;white-space:pre-wrap;max-height:200px;overflow:auto">${T.esc((j.log || []).slice(-25).join('\n'))}</div></details></span><button class="btn sm" data-act="retry">Retry</button>${T.worker && T.worker.isOpen() ? '<button class="btn sm sec" data-act="show">Show me</button>' : ''}<button class="btn sm sec" data-act="stop">Stop</button></div>`;
     else if (here && fresh) banner = `<div class="callout ok" style="margin:8px 0"><b>Updates done ✓</b> ${T.esc(j.title)}</div>`;
-    else if (here && running && !T.jobs.mine()) banner = `<div class="callout gap" style="margin:8px 0;align-items:center"><span class="flex1"><b>Updating Matchplay in another tab:</b> ${T.esc(j.title)} - ${T.esc(stepText(j))} · ${Math.round(T.jobs.fraction(j) * 100)}%. Changes will show when it's done.</span><button class="btn sm sec" data-act="stop">Stop</button></div>`;
+    else if (false && here && running && !T.jobs.mine()) banner = `<div class="callout gap" style="margin:8px 0;align-items:center"><span class="flex1"><b>Updating Matchplay in another tab:</b> ${T.esc(j.title)} - ${T.esc(stepText(j))} · ${Math.round(T.jobs.fraction(j) * 100)}%. Changes will show when it's done.</span><button class="btn sm sec" data-act="stop">Stop</button></div>`;
     const top = main ? (document.getElementById('tdp-tb-reminder') || [...main.children].find(e => !/^tdp-/.test(e.id || ''))) : null;
     T.inpage.block('tdp-busy-banner', banner ? top : null, 'before', banner, onClick);
   }

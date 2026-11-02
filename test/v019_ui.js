@@ -27,7 +27,7 @@ T.arenas.forEach(a => { a.tournamentArena = { status: 'active' }; });
   // no clash yet
   console.log('clash row before:', await page.evaluate(() => { const h = document.getElementById('tdp-bankbar'); return h ? /⚠/.test(h.shadowRoot.textContent) : 'no bar'; }));
   // the first game goes down (it's in Bank 1 game 1 and Bank 2 game 2)
-  await page.evaluate(async () => { TDP.jobs.start = async (t, s) => { window.__job = { t, s }; }; TDP.data.D.t.arenas[0].tournamentArena.status = 'inactive'; await TDP.smart.downCheck(); });
+  await page.evaluate(async () => { TDP.jobs.start = async (t, s) => { window.__job = { t, s }; }; if (TDP.data.D.qual) TDP.data.D.qual.arenas = TDP.data.D.t.arenas.map(a => ({ ...a })); await TDP.smart.downCheck(); TDP.data.D.t.arenas[0].tournamentArena.status = 'inactive'; await TDP.saveT(280073, { arenaSeen: null }); await TDP.smart.downCheck(); });   // (finals has all of qualifying's arenas; no other events to turn it off in)
   await page.waitForTimeout(1500);
   const pv = await page.evaluate(() => { const h = document.getElementById('tdp-downpv'); return h ? h.shadowRoot.querySelector('.dlg').innerText.replace(/\n+/g, ' | ').slice(0, 500) : 'no window'; });
   console.log('preview:', pv);
@@ -45,6 +45,8 @@ T.arenas.forEach(a => { a.tournamentArena = { status: 'active' }; });
   await page.evaluate(() => { window.__job = null; document.getElementById('tdp-bankbar').shadowRoot.querySelector('[data-act=clashfix]').click(); });
   await page.waitForTimeout(300);
   console.log('fix job:', await page.evaluate(() => JSON.stringify(window.__job && window.__job.s.map(x => x.op))));
+  // item 90: a game turned off here is turned off in the qualifying event (and A/B) too
+  console.log('family:', await page.evaluate(async () => { window.__job = null; const D = TDP.data.D; D.t.arenas.forEach(a => { a.tournamentArena.status = 'active'; }); await TDP.saveT(280073, { arenaSeen: null, downSig: null }); await TDP.smart.downCheck(); D.t.arenas[1].tournamentArena.status = 'inactive'; await TDP.smart.downCheck(); return JSON.stringify(window.__job && window.__job.s.map(x => [x.tid, x.op, x.args.name, x.args.active])); }));
   console.log('errors', errors);
   await browser.close();
 })();

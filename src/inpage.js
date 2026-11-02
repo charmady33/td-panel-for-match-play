@@ -345,6 +345,8 @@ TDP.inpage = (() => {
     const pm = T.data.playerMap(D.t), ids = (gs[0] && gs[0].playerIds) || [];
     const banks = (D.t.banks || []).filter(b => b.status !== 'inactive');
     const usedBy = {}; D.games.filter(g => g.roundId === r.roundId && g.bankId != null && g.set !== no - 1).forEach(g => { usedBy[g.bankId] = g.set + 1; });
+    for (const b of D.t.banks || []) { const l = T.bankplan.busyLabel(D, b); if (l && !usedBy[b.bankId]) usedBy[b.bankId] = l; }   // in use in the other finals (item 88)
+    T.bankplan.siblingBusy(D).then(m => { if (m.size && boCur && boHost) { for (const b of D.t.banks || []) { const l = T.bankplan.busyLabel(D, b); if (l && !boCur.usedBy[b.bankId]) boCur.usedBy[b.bankId] = l; } boDraw(); } });
     const am = T.data.arenaMap(D.t);
     banks.forEach(b => { b.games = (b.arenaIds || []).map(id => (am[id] || {}).name).filter(Boolean); });
     boCur = { no, roundId: r.roundId, players: ids.map(id => ({ id, name: (pm[id] || {}).name || '#' + id })), banks, usedBy, bank: 'random', order: {}, err: '' };
@@ -358,7 +360,7 @@ TDP.inpage = (() => {
   function boDraw() {
     if (!boHost || !boCur) return;
     const c = boCur, free = c.banks.filter(b => !c.usedBy[b.bankId]);
-    const opt = b => `<option value="${b.bankId}"${String(c.bank) === String(b.bankId) ? ' selected' : ''}${c.usedBy[b.bankId] ? ' disabled' : ''}>${T.esc(b.name)}${b.games.length ? ' – ' + T.esc(b.games.join(', ')) : ''}${c.usedBy[b.bankId] ? ` · Group ${c.usedBy[b.bankId]}` : ''}</option>`;
+    const opt = b => `<option value="${b.bankId}"${String(c.bank) === String(b.bankId) ? ' selected' : ''}${c.usedBy[b.bankId] ? ' disabled' : ''}>${T.esc(b.name)}${b.games.length ? ' – ' + T.esc(b.games.join(', ')) : ''}${c.usedBy[b.bankId] ? ` · ${typeof c.usedBy[b.bankId] === 'string' ? 'in use · ' + T.esc(c.usedBy[b.bankId]) : 'Group ' + c.usedBy[b.bankId]}` : ''}</option>`;
     const chosen = c.bank === 'random' ? null : c.banks.find(b => String(b.bankId) === String(c.bank));
     const gamesHtml = chosen ? `<ol style="margin:6px 0 0;padding-left:22px">${chosen.games.map(g => `<li style="padding:1px 0"><b>${T.esc(g)}</b></li>`).join('') || '<li class="small">No games in this bank yet</li>'}</ol>` : '<div class="small" style="margin-top:6px">A free bank is picked when you press Save.</div>';
     const taken = id => new Set(Object.entries(c.order).filter(([p]) => String(p) !== String(id)).map(([, v]) => v));

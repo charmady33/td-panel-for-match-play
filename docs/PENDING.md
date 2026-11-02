@@ -32,12 +32,7 @@ Reference: Clark's artifact "Pinball Tournament Bank Builder" — its
 - Test: 14 games, 2/bank, 8 banks, 7 rounds → counts differ ≤ 1 after each round, zero in-bank repeats.
 - Live evidence: "test tuesday" (#280207) Stats → Arenas: Sing Along & Sky Jump played 12, all others 6.
 
-## 39. Game times sooner + pick past events
-- Use this event's time from the first finished game (blend with other sources weighted by count; median/3× rule once
-  a few games exist).
-- "Pick past events" (Arenas tab bar + ⚙ Settings): list of tournaments the TD ran (API owner=me), newest first,
-  name/date/location/games/matching games; tick + Load; "Same location" filter on by default; remembered per
-  tournament; typing Matchplay IDs stays under "Other IDs"; replaces the old "Past events run with the extension" list.
+## 39. (replaced by item 89, shipped in 0.25.0)
 
 ## Open question to watch
 
@@ -60,6 +55,7 @@ Reference: Clark's artifact "Pinball Tournament Bank Builder" — its
 - 65 shipped in 0.18.3.
 - 66-67 shipped in 0.19.0.
 - 68 shipped in 0.19.1.
+- 85-96 shipped in 0.25.0 (item 39 replaced by 89).
 - 84 shipped in 0.24.0 (item 39 "Pick past events" goes in the Game times window).
 - 80-83 shipped in 0.23.0.
 - 72-79 shipped in 0.22.0 (Results / Change player order boxes and the cutoff window checked against the real Match Play windows on test1 #281295; Set rank labels / Create playoffs drivers not run live).

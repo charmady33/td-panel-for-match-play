@@ -11,7 +11,7 @@ TDP.bankbar = (() => {
   const st = D => T.tstate[D.tid] || {};
   const sizeOf = D => D.t.gamesPerRound || 3;   // "Matches each round" on Matchplay's Overview
   const isFinals = D => !!(D.qual && D.qual.tournamentId !== D.tid);
-  const locked = D => D.t.status !== 'planned' && active(D).length > 0;   // banks are built once: locked when the event starts (down games still get replaced)
+  const locked = () => false;   // item 95: banks can be changed any time (the preview shows what changes first)
 
   // ---------- the bar ----------
   // the row holding Matchplay's "Add bank" button; the bar goes right above the bank cards (or under that row).
@@ -28,6 +28,7 @@ TDP.bankbar = (() => {
     const show = D && D.t && D.isTD && T.routePage() === 'banks' && /bank/i.test(D.t.arenaAssignment || '');
     const a = show ? anchor() : null;
     if (!a) return T.inpage.block('tdp-bankbar', null);
+    if (T.arenatab && T.arenatab.autoLocal) T.arenatab.autoLocal(D);   // (game times from your past events here)
     const has = active(D).length, size = sizeOf(D), fin = isFinals(D);
     const html = locked(D) ? `<div class="card" style="margin:0 0 12px"><div class="cb gap" style="flex-wrap:wrap;align-items:center">
       <span class="h" style="margin-right:4px">Bank Builder</span>
@@ -38,8 +39,8 @@ TDP.bankbar = (() => {
       <span class="small" title="From &quot;Matches each round&quot; on Matchplay's Overview">${size} game${size === 1 ? '' : 's'} per bank (from Matchplay)</span>
       ${has ? `<button class="btn" data-act="refresh">Refresh banks</button><button class="btn sec" data-act="add">Add banks</button>` : `<button class="btn" data-act="generate">Generate banks</button>`}
       <button class="btn sec" data-act="settings" title="Games and time sources">⚙ Settings</button>
-      <span class="small flex1" style="text-align:right">${has ? `${has} bank${has === 1 ? '' : 's'} in Matchplay` : 'No banks yet'} · set once, locked when ${fin ? 'the finals start' : 'the event starts'}</span>
-    </div>${clashHtml(D)}</div>`;
+      <span class="small flex1" style="text-align:right">${has ? `${has} bank${has === 1 ? '' : 's'} in Matchplay` : 'No banks yet'} · a game that goes down gets a replacement you can check first</span>
+    </div>${clashHtml(D)}${backHtml(D)}</div>`;
     T.inpage.block('tdp-bankbar', a.el, a.where, html, onBar);
   }
   async function onBar(e) {
@@ -241,7 +242,7 @@ table{width:100%;border-collapse:collapse}td{padding:4px 6px;border-top:1px soli
   }
 
   async function preview(D, mode, n, pins, incl) {
-    cur = { mode, n, pins: pins || [], incl: incl || [] };
+    cur = { mode, n, pins: pins || [], incl: incl || [], fam: (cur && cur.fam) || 'none' };
     show(`<div class="dh">Building ${n} bank${n === 1 ? '' : 's'}…</div><div class="db small">Working out the arrangement.</div>`);
     try { cur.res = await build(D, mode, n, cur.pins.some(p => p && p.length) ? cur.pins : null, cur.incl); } catch (e) {
       return show(`<div class="dh">Can't build banks</div><div class="db"><div class="callout">${T.esc(e.message || String(e))}</div></div><div class="df"><button class="btn sec" data-act="settings">Settings</button><button class="btn" data-act="close">Close</button></div>`);
@@ -264,7 +265,11 @@ table{width:100%;border-collapse:collapse}td{padding:4px 6px;border-top:1px soli
     if (mode === 'refresh') notes.push('Bank names stay the same; their games are replaced.');
     notes.push('Click a game to change it (best choices first). Games you change are pinned 📌 and stay when you ask for another arrangement.');
     const pinned = cur.pins.some(p => p && p.length);
-    show(`<div class="dh">${title}</div><div class="db" style="position:relative"><div class="small mb">${notes.map(T.esc).join('<br>')}</div><div class="bk">${cards}</div>${leftOutHtml(res)}${cur.picking ? pickerHtml(cur.picking.bi, cur.picking.gi) : ''}</div>
+    const D0 = T.data.D, others = mode !== 'add' && D0 ? otherFinals(D0) : [];
+    const famHtml = others.length ? `<div class="small mt" style="border-top:1px solid var(--line);padding-top:8px"><b>Other finals (${others.map(f => T.esc(f.name || f.t.name)).join(', ')}):</b>
+      <label style="margin-left:8px"><input type="checkbox" data-fam="same" ${cur.fam === 'same' ? 'checked' : ''}> Same banks there too</label>
+      <label style="margin-left:12px"><input type="checkbox" data-fam="unique" ${cur.fam === 'unique' ? 'checked' : ''}> Unique banks for each (no clash with these)</label></div>` : '';
+    show(`<div class="dh">${title}</div><div class="db" style="position:relative"><div class="small mb">${notes.map(T.esc).join('<br>')}</div><div class="bk">${cards}</div>${leftOutHtml(res)}${famHtml}${cur.picking ? pickerHtml(cur.picking.bi, cur.picking.gi) : ''}</div>
       <div class="df">${pinned ? '<button class="btn sec" data-act="unpin" style="margin-right:auto">Clear my changes</button>' : ''}<button class="btn sec" data-act="close">Cancel</button><button class="btn sec" data-act="another">Another arrangement</button><button class="btn" data-act="confirm">Confirm</button></div>`);
   }
 
@@ -323,12 +328,39 @@ table{width:100%;border-collapse:collapse}td{padding:4px 6px;border-top:1px soli
     const step = mode === 'refresh'
       ? { tid: D.tid, page: 'banks', op: 'bankArenas', args: { banks }, label: `Replacing games in ${banks.length} banks` }
       : { tid: D.tid, page: 'banks', op: 'createBanks', args: { banks }, label: `Creating ${banks.length} banks` };
+    const steps = [step], fam = cur.fam || 'none';
+    // item 87: the other finals get the same banks, or banks of their own that don't clash with these
+    if (fam !== 'none' && mode !== 'add') {
+      const made = [res.banks.map(b => b.games)];
+      for (const f of otherFinals(D)) {
+        let list = banks;
+        if (fam === 'unique') { const u = await uniqueFor(D, res.banks.length, made); made.push(u.map(b => b.games)); list = u.map((b, i) => ({ name: banks[i] ? banks[i].name : 'Bank ' + (i + 1), arenas: b.games.map(g => g.name) })); }
+        steps.push({ tid: f.tid, page: 'banks', op: 'bankArenas', args: { banks: list }, label: `${fam === 'same' ? 'Same' : 'Own'} banks in ${f.name || f.t.name}` });
+      }
+    }
     close();
-    await T.jobs.start(mode === 'refresh' ? 'Refresh banks' : mode === 'add' ? 'Add banks' : 'Generate banks', [step]);
+    await T.jobs.start(mode === 'refresh' ? 'Refresh banks' : mode === 'add' ? 'Add banks' : 'Generate banks', steps);
+  }
+  const otherFinals = D => (D.finals || []).filter(f => f.tid !== D.tid && f.t && /bank/i.test(f.t.arenaAssignment || ''));
+  // banks for another finals: many tries, keeping the one that shares the fewest machines with the banks already made
+  // and never has a shared machine at the same game number or overlapping time
+  async function uniqueFor(D, n, made) {
+    const size = sizeOf(D), est = await times(D), s = st(D), fixed = made.flat();
+    const used = new Set(fixed.flat().map(g => lc(g.name)));
+    let best = null;
+    for (let k = 0; k < 40; k++) {
+      const r = T.banks.build(est, n, size, { seed: Math.floor(Math.random() * 1e9), exclude: s.bankExclude || [] });
+      const overlap = T.banks.schedule(r.banks, fixed);
+      const shared = r.banks.reduce((t, b) => t + b.games.filter(g => used.has(lc(g.name))).length, 0);
+      const score = overlap * 10 + shared * 2000 + T.banks.cost(r.banks.map(b => b.games));
+      if (!best || score < best.score) best = { score, banks: r.banks };
+    }
+    return best.banks;
   }
 
   // ---------- Assign banks (Matches tab button) ----------
-  function assignPreview(D, k = 0) {
+  async function assignPreview(D, k = 0) {
+    await T.bankplan.siblingBusy(D);
     const o = T.bankplan.assignOptions(D);
     if (!o.list.length) return T.panel.say(!o.ctx.groups.length ? 'No group in this round needs a bank.' : o.allBanks ? 'Every bank is already in use this round - add banks on the Banks tab.' : 'No banks yet - make them on the Banks tab.', 'err');
     k = k % o.list.length; cur = { mode: 'assign', k, o };
@@ -391,6 +423,7 @@ table{width:100%;border-collapse:collapse}td{padding:4px 6px;border-top:1px soli
     const D = T.data.D; if (!D) return;
     const el = e.target;
     if (e.type === 'change') {
+      if (el.dataset.fam && cur) { cur.fam = el.checked ? el.dataset.fam : 'none'; return drawPreview(); }   // (one or the other)
       if (el.dataset.hist) { const s2 = new Set(st(D).histUse || []); el.checked ? s2.add(el.dataset.hist) : s2.delete(el.dataset.hist); await T.saveT(D.tid, { histUse: [...s2] }); }
       return;
     }

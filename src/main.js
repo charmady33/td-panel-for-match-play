@@ -202,6 +202,7 @@ var TDP = window.TDP || (window.TDP = {});
     if (!(await lock(tid + ':assign'))) return;
     assignBusy = true;
     try {
+      await T.bankplan.siblingBusy(D);   // (banks the other finals is playing right now are left out)
       const opts = T.bankplan.assignOptions(D);
       if (!opts.list.length) return;
       await T.saveT(tid, { assignDoneRound: ctx.round.roundId });   // once per round, even if the TD stops the task
