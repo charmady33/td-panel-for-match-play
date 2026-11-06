@@ -195,7 +195,7 @@ TDP.banks = (() => {
   function assignGroups(groups, banks, plays) {
     if (!groups.length || !banks.length) return [];
     const cap = Math.ceil(groups.length / banks.length);   // more groups than banks: banks are shared
-    const c = (g, b) => { let t = 0; for (const p of g.players) for (const n of b.names) { const k = plays.get(p + '|' + String(n).toLowerCase()) || 0; t += k ? 4 * k * k : -1; } return t; };
+    const c = (g, b) => { let t = 0; for (const p of g.players) { let all = b.names.length > 1; for (const n of b.names) { const k = plays.get(p + '|' + String(n).toLowerCase()) || 0; t += k ? 4 * k * k : -1; if (!k) all = false; } if (all) t += 1e6; } return t; };   // (every game of the bank played before: avoided - item 103)
     const M = groups.map(g => banks.map(b => c(g, b)));
     // small rounds (finals, up to 8 groups): try every arrangement and keep the best
     if (groups.length <= 8 && banks.length >= groups.length && banks.length <= 10) {

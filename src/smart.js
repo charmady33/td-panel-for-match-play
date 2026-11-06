@@ -14,7 +14,7 @@ TDP.smart = (() => {
   const T = TDP;
   const VALUE = 'tdp-gt', LABEL = 'Any category (game time) · TD Panel';
   const BUFFER = 60;   // seconds between one group leaving a machine and the next starting it
-  const W = { wait: 40, repeat: 2500, repeatEach: 1500, repeatMore: 2500, equal: 12000, era: 120, len: 0.2, spread: 1, span: 0.5, roundDup: 1e7, b2b: 1e5, recent: 600, quota: 15000, target: 6, equalAll: 50000 };
+  const W = { wait: 40, repeat: 2500, repeatEach: 1500, repeatMore: 2500, equal: 12000, era: 120, len: 0.2, spread: 1, span: 0.5, roundDup: 1e7, pair: 5e6, b2b: 1e5, recent: 600, quota: 15000, target: 6, equalAll: 50000 };
 
   function rngFrom(seed) {
     let a = (seed >>> 0) || 1;
@@ -34,6 +34,9 @@ TDP.smart = (() => {
     }
     return best;
   }
+  // inp.sets: {playerId: ['id,id', …]} - the sorted games each player had in each earlier round
+  const pairKey = ids => ids.map(Number).sort((x, y) => x - y).join(',');
+  const samePair = (inp, players, ids) => { const k = pairKey(ids); return players.some(p => ((inp.sets || {})[p] || []).includes(k)); };
   function once(inp, rng, wobble) {
     const arenas = inp.arenas, byId = {}; arenas.forEach(a => { byId[a.arenaId] = a; });
     const played = {}, repeats = {};
@@ -82,6 +85,8 @@ TDP.smart = (() => {
           const s = startAt(a.arenaId, cur.t, a.sec), wait = s - cur.t;
           let c = wait * W.wait;
           if (cur.used.has(a.arenaId)) c += W.roundDup;
+          // item 103: a player never gets the same set of games as in an earlier round (last game of the group's round)
+          if (!left && cur.used.size && samePair(inp, cur.g.players, [...cur.used, a.arenaId])) c += W.pair;
           for (const p of cur.g.players) {
             const n = (played[p] || {})[a.arenaId] || 0; if (!n) continue;
             c += W.repeat + W.repeatEach * (repeats[p] || 0) + W.repeatMore * (n - 1);
@@ -115,6 +120,7 @@ TDP.smart = (() => {
           const n = (played[p] || {})[a.arenaId] || 0;
           if (n) { notes.push(((inp.ago || {})[p] || {})[a.arenaId] === 1 ? `${nameOf(p)} replays ${a.name} from the last round - nothing else was free` : `${nameOf(p)} replays ${a.name} - every other game was taken`); repeats[p] = (repeats[p] || 0) + 1; }
         }
+        if (!pick.fixed && cur.k === cur.g.slots.length - 1 && cur.used.size && samePair(inp, cur.g.players, [...cur.used, a.arenaId])) notes.push(`${label} gets a set of games a player had before - nothing else fit`);
         if (pick.wait > 30) notes.push(`${label} waits about ${Math.round(pick.wait / 60)} min for ${a.name}`);
         if (pick.d >= 1) notes.push(`${a.name} gets an extra play (others caught up later)`);
       }
@@ -157,7 +163,10 @@ TDP.smart = (() => {
       if (g.set !== 9999) plays[g.arenaId] = (plays[g.arenaId] || 0) + 1;
     }
     const names = {}; for (const p of D.t.players || []) names[p.playerId] = p.name;
-    return { groups, arenas, played, plays, names, ago };
+    // item 103: each player's set of games per earlier round (tiebreakers left out)
+    const per = {}; for (const g of D.games) { if (g.bye || g.arenaId == null || g.set === 9999 || g.roundId === round.roundId) continue; for (const p of g.playerIds || []) { const k = p + '|' + g.roundId; (per[k] = per[k] || []).push(g.arenaId); } }
+    const had = {}; for (const [k, ids] of Object.entries(per)) { if (ids.length < 2) continue; const p = k.split('|')[0]; (had[p] = had[p] || []).push(pairKey(ids)); }
+    return { groups, arenas, played, plays, names, ago, sets: had };
   }
   async function make(D, roundGames, round) {
     const est = T.bankplan.estimates(D, T.tstate[D.tid] || {}, await T.bankplan.extras(D));

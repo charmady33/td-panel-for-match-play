@@ -44,12 +44,33 @@ TDP.data = (() => {
     D.finals = finals;
   }
 
+  // item 102: games of a deleted round are dropped (they'd count as played)
+  const live = games => { if (!D.rounds.length) return games; const ids = new Set(D.rounds.map(r => r.roundId)); return games.filter(g => ids.has(g.roundId)); };
+  // item 102: before games are picked for a round, every earlier round's games are here - Match Play's page only holds
+  // the newest round's, and a refresh still running in the worker could leave older ones out. Rounds straight from the API.
+  async function ensureHistory(tid) {
+    if (!tid || D.tid !== tid) return;
+    const rs = arr(unwrap(await api.get(`/tournaments/${tid}/rounds`, 0, true)));
+    if (!rs.length) return;
+    D.rounds = rs.sort((a, b) => ((a.index != null ? a.index : a.roundId) - (b.index != null ? b.index : b.roundId)));
+    D.games = live(D.games);
+    const have = new Set(D.games.map(g => g.roundId));
+    for (const r of D.rounds) {
+      if (have.has(r.roundId)) continue;
+      const done = String(r.status) === 'completed';
+      D.games.push(...await api.all(`/tournaments/${tid}/games?round=${r.roundId}`, done ? 3600e3 : 0));
+      if (done) doneRounds.add(r.roundId);
+    }
+  }
+  // item 101: the rounds as Match Play has them right now (not what this tab shows)
+  const roundsNow = async tid => arr(unwrap(await api.get(`/tournaments/${tid}/rounds`, 0, true))).sort((a, b) => ((a.index != null ? a.index : a.roundId) - (b.index != null ? b.index : b.roundId)));
+
   // the page's rounds and games (rounds whose games the page hasn't loaded keep what we had; loadGames gets them)
   function fromPage(p) {
     if (p.roundsKnown) D.rounds = p.rounds;
     const keep = new Map(D.games.map(g => [g.gameId, g]));
     for (const g of p.games) keep.set(g.gameId, g);
-    D.games = [...keep.values()];
+    D.games = live([...keep.values()]);
     if (p.standings && D.qual && D.qual.tournamentId === D.tid) D.standings = p.standings;
   }
   async function loadGames(force, p) {
@@ -68,7 +89,7 @@ TDP.data = (() => {
     }
     const lp = p && T.page.get(D.tid);   // the page may have changed while the API answered: its latest wins
     if (lp) { for (const g of lp.games) keep.set(g.gameId, g); if (lp.roundsKnown) D.rounds = lp.rounds; }
-    D.games = [...keep.values()];
+    D.games = live([...keep.values()]);
     // when scores were really entered (Matchplay's Logs): only where game times are shown or used
     if (T.logs && (/^(arenas|banks)$/.test(T.routePage()) || T.isFrame)) await T.logs.load(D.tid, isCompleted(D.t));
     T.timing.noteSuggestions(D.games);
@@ -285,5 +306,5 @@ TDP.data = (() => {
     return { round: r, active, pending, partial, total: gs.length, done: gs.filter(T.timing.doneish).length };
   }
 
-  return { D, refresh, reloadOne, roundGames, roundsOf, onChange: f => changeListeners.add(f), setTournament, useTournament, stop, on: f => listeners.add(f), playerMap, arenaMap, currentRound, latestRound, counts, loadTournament, unwrap, arr };
+  return { D, refresh, reloadOne, roundGames, roundsOf, roundsNow, ensureHistory, onChange: f => changeListeners.add(f), setTournament, useTournament, stop, on: f => listeners.add(f), playerMap, arenaMap, currentRound, latestRound, counts, loadTournament, unwrap, arr };
 })();

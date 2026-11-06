@@ -1,11 +1,11 @@
 # TD Panel for Match Play — notes for Claude
 
 Chrome MV3 extension for pinball tournament directors on app.matchplay.events. Tools are built into Matchplay's own
-pages (no sidebar). Current version: **0.27.0** (see README.md for what each version added).
+pages (no sidebar). Current version: **0.28.0** (see README.md for what each version added).
 
 ## How the maintainer (Clark) wants to work
 - **Propose a plan first, then wait for "code it".** Don't change code until he says so. Number each proposed item
-  (the next free number is **101**; 35 is agreed and waiting — see docs/PENDING.md).
+  (the next free number is **105**; 35 is agreed and waiting — see docs/PENDING.md).
 - Edit files in place with targeted changes; don't rewrite whole files.
 - Explain in plain language; he's a TD, not a developer. Keep messages short and concrete.
 - Each release: bump `manifest.json` "version", `TDP.VERSION` in `src/util.js` and `package.json`; add the version at
@@ -80,6 +80,9 @@ pages (no sidebar). Current version: **0.27.0** (see README.md for what each ver
 - An unplayed game's `resultPositions` is `[null, null, …]` - use `T.timing.hasScore(g)`, never `.length`.
 - Group Actions → **Change player order**: rows P1… (name, "Seed: n"); click a player, then "Move to player N"; Save / Cancel / Flip order.
 - Final round: Matchplay may close it itself (no Close round button) — see item 37.
+- Its page store only holds the **newest round's games** (`games.games`): older rounds come from the API (`T.data.ensureHistory` before
+  picking games, item 102). A tab can lag ~10 s behind changes made in the worker: check rounds with `T.data.roundsNow` (API) before
+  starting one (item 101; on 11/03 a stale tab started round 3 right after round 2).
 - Real time API (experimental): Pusher web socket wss://ws.app.matchplay.events/app/tnrxzkahdeullnwje83e?protocol=7&client=js&version=8.5.0&flash=false,
   channel tournaments.{ID}; events RoundCreatedOrUpdated, GameCreatedOrUpdated, RoundsDeleted, … (see item 59).
 - More in docs/matchplay-reference.md.
@@ -92,7 +95,7 @@ pages (no sidebar). Current version: **0.27.0** (see README.md for what each ver
 
 ## Testing
 - `test/` — Playwright scripts that inject the bundle into mock Matchplay pages (API mocked with `page.route`), plus
-  unit scripts. Run with `node test/<file>.js [outDir]`. Useful ones: `p4_unit.js` (4-player game times), `finloc_unit.js` (finals: qualifying's location + IDs), `down2_ui.js` (down machine under a game, no banks: Best/Random/pick), `ranklab_ui.js` (Set rank labels driver, new window for step 2), `loop_ui.js` (Standings: blocks at the same spot settle, no redraw loop), `gt_ui.js` (Arenas tab Game times button/window), `flicker_ui.js` (tab switch: links row in every painted frame), `cutdrv_ui.js` (setCutoffs driver, empty + existing window), `v022_ui.js` (links row, Manage cutoffs, IFPA box, Results/order boxes, token), `cutoffs_unit.js`, `v021_ui.js` (bank preview era mix, Not in any bank, Include), `eramix_unit.js` (era share/spread), `v020_ui.js` (page data first; NOSTORE=1 = API fallback), `v019_ui.js` (down-machine window, bank clash Fix), `v016_ui.js` (New rounds use, redo, live events), `v0152_ui.js` (quick test box, update bar), `even_unit.js` (round lengths), `v015_ui.js` (timers, Max est., on/off), `v014_ui.js` (Plays tab, optional ties, vote Change…, results grid), `smart_unit.js` (game-time planner), `down_unit.js`
+  unit scripts. Run with `node test/<file>.js [outDir]`. Useful ones: `round101_ui.js` (auto close/start never twice, Start now, ensureHistory), `tuesday_unit.js` (replay of #281484: no back-to-back, no same set of games), `p4_unit.js` (4-player game times), `finloc_unit.js` (finals: qualifying's location + IDs), `down2_ui.js` (down machine under a game, no banks: Best/Random/pick), `ranklab_ui.js` (Set rank labels driver, new window for step 2), `loop_ui.js` (Standings: blocks at the same spot settle, no redraw loop), `gt_ui.js` (Arenas tab Game times button/window), `flicker_ui.js` (tab switch: links row in every painted frame), `cutdrv_ui.js` (setCutoffs driver, empty + existing window), `v022_ui.js` (links row, Manage cutoffs, IFPA box, Results/order boxes, token), `cutoffs_unit.js`, `v021_ui.js` (bank preview era mix, Not in any bank, Include), `eramix_unit.js` (era share/spread), `v020_ui.js` (page data first; NOSTORE=1 = API fallback), `v019_ui.js` (down-machine window, bank clash Fix), `v016_ui.js` (New rounds use, redo, live events), `v0152_ui.js` (quick test box, update bar), `even_unit.js` (round lengths), `v015_ui.js` (timers, Max est., on/off), `v014_ui.js` (Plays tab, optional ties, vote Change…, results grid), `smart_unit.js` (game-time planner), `down_unit.js`
   (down machine in banks), `dup_unit.js` (bank duplicates),
   `sched_unit.js`, `gt.js` (bracket ties), `cascade.js` (finals standings ties), `embed_ui.js`
   (check-in; env CAP=1 / DONEJOB=1 / MOVEUP=1), `t6.js` (bank refresh via worker frame; PICK=1 picker),

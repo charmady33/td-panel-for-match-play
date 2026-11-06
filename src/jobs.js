@@ -211,7 +211,12 @@ TDP.jobs = (() => {
     // Matchplay may close the last round itself: read it fresh first; "already closed" is done, not an error
     async closeRound(a) {
       const closed = async () => { if (!a || !a.roundId) return false; const rs = await T.data.roundsOf(a.tid); const r = rs.find(x => x.roundId === a.roundId); return !!(r && String(r.status) === 'completed'); };
-      if (await closed()) return `${a.name || 'The round'} was already closed by Matchplay`;
+      if (await closed()) {
+        // item 101: closed already AND a newer round is there -> that round was started already: nothing more to do
+        const rs = await T.data.roundsNow(a.tid), i = rs.findIndex(x => x.roundId === a.roundId);
+        if (i >= 0 && i < rs.length - 1) { job.steps = job.steps.slice(0, job.i + 1); return `${a.name || 'The round'} was closed and the next round is already there - not starting another`; }
+        return `${a.name || 'The round'} was already closed by Matchplay`;
+      }
       const b = await T.waitFor(() => T.findBtn(document, /Close round$/), 6000);
       if (!b) { if (await closed()) return `${a.name || 'The round'} was already closed by Matchplay`; throw new Error('No "Close round" button (are all games approved?).'); }
       await T.mp.closeRound();
@@ -219,6 +224,10 @@ TDP.jobs = (() => {
     async startNextRound(a) {
       const D = T.data.D, total = (D.t && (D.t.roundCount || D.t.duration)) || 0;
       if (total && D.rounds.length >= total) { job.steps = job.steps.slice(0, job.i + 1); return `all ${total} rounds played - not starting another`; }   // (later steps were for the new round)
+      if (a && a.after) {   // item 101: only right after that round - a newer round there already = started once, not again
+        const rs = await T.data.roundsNow(T.data.D.tid), i = rs.findIndex(x => x.roundId === a.after);
+        if (i >= 0 && i < rs.length - 1) { job.steps = job.steps.slice(0, job.i + 1); return 'the next round is already there - not starting another'; }
+      }
       await T.saveT(T.data.D.tid, { localStartAt: Date.now() });   // a round the extension starts is never "redone"
       const ok = await T.mp.startNextRound({ publish: !(a && a.publish === false), category: a && a.category });
       if (!ok) { job.steps = job.steps.slice(0, job.i + 1); return 'no "Start next round" button (last round?) - stopped here'; }
@@ -246,6 +255,7 @@ TDP.jobs = (() => {
       }
       if (!round) return 'every game already has an arena';
       await note('Planning games by game time');
+      await T.data.ensureHistory(a.tid);   // (item 102: every earlier round counts)
       const { res } = await T.smart.make(T.data.D, games, round);
       await T.saveT(a.tid, { smartLast: { roundId: round.roundId, at: Date.now(), notes: res.notes.slice(0, 20), mins: Math.round(Math.max(0, ...res.ends) / 60) } });
       const steps = T.smart.fillSteps(a.tid, round.roundId, res.assign, a.publish, !!a.redo);
@@ -314,6 +324,7 @@ TDP.jobs = (() => {
     // the newest round's waiting groups get banks (same choice as the Assign banks button's best option)
     async assignRound(a) {
       await T.data.refresh(true);
+      await T.data.ensureHistory(a.tid);   // (item 102: who played what, every earlier round)
       await T.bankplan.siblingBusy(T.data.D);
       const o = T.bankplan.assignOptions(T.data.D);
       if (!o.list.length) return o.ctx.groups.length ? 'no free banks to assign' : 'every group already has a bank';

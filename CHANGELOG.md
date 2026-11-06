@@ -2,6 +2,12 @@
 
 All notable changes, newest first. Versions follow [semantic versioning](https://semver.org/): new features bump the middle number, fixes the last.
 
+## 0.28.0 - 2026-11-06
+- Auto close & start never starts a round twice: before the countdown and before Start next round, Match Play itself is asked whether a newer round is already there; if so nothing is started (item 101).
+- Picking games (game time, banks) always sees every earlier round - older rounds' games are fetched when the page doesn't have them - and a deleted round's games no longer count as played (item 102).
+- A player never gets the same set of games as in an earlier round; repeats of single games still only when nothing else fits (item 103).
+- The close/start countdown has a Start now (last round: Close now) button (item 104).
+
 ## 0.27.0 - 2026-11-02
 - Submit to IFPA: a B (C, D…) finals with no restrictions (no IFPA rank cutoff, nobody with a "B Ineligible" label) is placed below the A finals, and the notes say "B Finals had no restrictions (open to every player who qualified for it)." Meaningful games still come from qualifying + A finals only (item 100).
 

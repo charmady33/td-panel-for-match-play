@@ -167,19 +167,23 @@ var TDP = window.TDP || (window.TDP = {});
       D.games = D.games.filter(g => g.roundId !== r.roundId).concat(fresh);
       const ft = T.finals.groupTies(D).filter(t => !t.tbDone);
       if (ft.length) return state(ft[0].tbGame ? `waiting for Group ${ft[0].group}'s tiebreaker` : 'tie needs breaking first: ' + ft[0].why);
-      const go = await T.panel.showCountdown(`All games approved in ${r.name}. Closing the round${last ? '' : ' and starting the next one'} in`, 10);
+      // item 101: Match Play itself (not this tab, which can lag a few seconds) says this round is still the newest and open
+      const isOpen = async () => { const rs = await T.data.roundsNow(tid), x = rs[rs.length - 1]; return !!x && x.roundId === r.roundId && String(x.status) !== 'completed'; };
+      if (!(await isOpen())) { T.data.refresh(true); return state('the round changed - checking again'); }
+      const go = await T.panel.showCountdown(`All games approved in ${r.name}. Closing the round${last ? '' : ' and starting the next one'} in`, 10, last ? 'Close now' : 'Start now');
       if (!go || !(T.tstate[tid] || {}).auto) return state('cancelled - will check again');
+      if (T.jobs.active() || !(await isOpen())) { T.data.refresh(true); return state('the round changed - checking again'); }
       const steps = [{ tid, page: 'matches', op: 'closeRound', args: { tid, roundId: r.roundId, name: r.name }, label: `Closing ${r.name}` }];
       const stt = T.tstate[tid] || {}, banksOn = /bank/i.test(D.t.arenaAssignment || '');
       const type = T.rounds.typeOf(D), smart = type === 'smart' && !isFinals(D), assign = banksOn && (type === 'banks' || (!type && stt.autoAssign)) && !smart;
       const cat = !smart && !assign ? T.rounds.startValue(type) : null;   // a category / Any category / Don't draw
       if (!last && smart) {
         // "Any category (game time)": start without drawing arenas, set every game's arena, then publish
-        steps.push({ tid, page: 'matches', op: 'startNextRound', args: { publish: false, category: '-1' }, label: 'Starting the next round (not published yet)' });
+        steps.push({ tid, page: 'matches', op: 'startNextRound', args: { publish: false, category: '-1', after: r.roundId }, label: 'Starting the next round (not published yet)' });
         steps.push({ tid, page: 'matches', op: 'smartPlan', args: { tid, publish: true }, label: 'Working out the arenas by game time' });
       } else if (!last) {
         // Automatic assign (Matches tab): the round starts unpublished, gets its banks, then goes live
-        steps.push({ tid, page: 'matches', op: 'startNextRound', args: { publish: !assign, category: cat }, label: assign ? 'Starting the next round (not published yet)' : 'Starting the next round' });
+        steps.push({ tid, page: 'matches', op: 'startNextRound', args: { publish: !assign, category: cat, after: r.roundId }, label: assign ? 'Starting the next round (not published yet)' : 'Starting the next round' });
         if (assign) {
           steps.push({ tid, page: 'matches', op: 'assignRound', args: { tid }, label: 'Assigning a bank to each group' });
           steps.push({ tid, page: 'matches', op: 'publishRound', label: 'Publishing the round' });
@@ -202,6 +206,7 @@ var TDP = window.TDP || (window.TDP = {});
     if (!(await lock(tid + ':assign'))) return;
     assignBusy = true;
     try {
+      await T.data.ensureHistory(tid);   // (item 102: every earlier round counts)
       await T.bankplan.siblingBusy(D);   // (banks the other finals is playing right now are left out)
       const opts = T.bankplan.assignOptions(D);
       if (!opts.list.length) return;

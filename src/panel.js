@@ -175,7 +175,7 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--pri);vertical-ali
     chip(d);
     const w = root.querySelector('.wrap'); w.classList.toggle('dark', isDark());
     const html = toasts.map((t, i) => t.count
-      ? `<div class="toast"><span class="flex1">${T.esc(t.text)} <b>${Math.max(0, Math.ceil((t.until - Date.now()) / 1000))}s</b></span><button class="btn sm sec" data-act="toastCancel" data-i="${i}">Cancel</button></div>`
+      ? `<div class="toast"><span class="flex1">${T.esc(t.text)} <b>${Math.max(0, Math.ceil((t.until - Date.now()) / 1000))}s</b></span>${t.now ? `<button class="btn sm" data-act="toastNow" data-i="${i}">${T.esc(t.now)}</button>` : ''}<button class="btn sm sec" data-act="toastCancel" data-i="${i}">Cancel</button></div>`
       : t.link ? `<div class="toast"><span class="flex1">${T.esc(t.text)} <a href="${T.esc(t.link)}" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline">${T.esc(t.linkText || 'Open')}</a></span><button class="x" data-act="toastClose" data-i="${i}" title="Dismiss">×</button></div>`
       : `<div class="toast ${t.kind || ''}"><span class="flex1">${T.esc(t.text)}${/API token/.test(t.text) ? ' <a href="https://app.matchplay.events/account/tokens" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline">Create an API token ↗</a>' : ''}</span><button class="x" data-act="toastClose" data-i="${i}" title="Dismiss">×</button></div>`).join('');
     if (w.dataset.h !== html) { w.dataset.h = html; w.innerHTML = html; }
@@ -188,10 +188,10 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--pri);vertical-ali
   // message: errors stay until dismissed, others fade after 6 s
   function say(text, kind) { mount(); toasts = toasts.filter(t => t.count || t.text !== text); toasts.push({ text, kind, until: kind === 'err' ? 0 : Date.now() + 6000 }); render(); startTicker(); }
   // auto close/start round: "Closing the round in 10s" with Cancel; resolves true to go ahead
-  function showCountdown(text, secs) {
+  function showCountdown(text, secs, now) {   // now: label of a button that skips the wait (item 104)
     mount();
     return new Promise(res => {
-      const t = { text, count: true, until: Date.now() + secs * 1000, res };
+      const t = { text, count: true, until: Date.now() + secs * 1000, res, now };
       toasts.push(t); render(); startTicker();
       setTimeout(() => { if (toasts.includes(t)) { toasts = toasts.filter(x => x !== t); render(); res(true); } }, secs * 1000);
     });
@@ -201,6 +201,7 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--pri);vertical-ali
     const t = toasts[+a.dataset.i]; if (!t) return;
     toasts = toasts.filter(x => x !== t);
     if (a.dataset.act === 'toastCancel' && t.res) t.res(false);
+    if (a.dataset.act === 'toastNow' && t.res) t.res(true);
     render();
   }
 

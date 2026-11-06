@@ -99,7 +99,7 @@ TDP.bankplan = (() => {
   // ---------- Assign banks (Matches tab): the banks already in Matchplay, to this round's groups ----------
   // A game a player hasn't played: good. A game they have played: bad, worse each time.
   // A bank sharing 2+ games with a bank (group's games in a round) the player already had: very bad.
-  const NEW_GAME = -10, REPEAT = 40, SIMILAR = 3000;
+  const NEW_GAME = -10, REPEAT = 40, SIMILAR = 3000, SAME_SET = 1e6;   // SAME_SET: item 103, the exact games a player had before
   // item 88: banks being played right now in the other finals (same games = the same bank): sorted game names -> label.
   // Refreshed in the background (at most every 10 s); assignOptions and the Assign Bank/Order window leave them out.
   let busyAt = 0, busyTid = null, busyMap = new Map(), busyRun = null;
@@ -160,7 +160,7 @@ TDP.bankplan = (() => {
       const g = ctx.groups[gi], b = banks[bi]; let t = 0;
       for (const p of g.players) {
         for (const n of b.games) { const k = ctx.plays.get(p + '|' + lc(n)) || 0; t += k ? REPEAT * k * k : NEW_GAME; }
-        for (const x of past[p] || []) { const ov = b.games.filter(n => x.games.has(lc(n))).length; if (ov >= 2) t += SIMILAR * (ov - 1); }
+        for (const x of past[p] || []) { const ov = b.games.filter(n => x.games.has(lc(n))).length; if (ov >= 2) t += SIMILAR * (ov - 1); if (ov >= 2 && ov === b.games.length && ov === x.games.size) t += SAME_SET; }
       }
       return t;
     };
