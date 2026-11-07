@@ -2,6 +2,13 @@
 
 All notable changes, newest first. Versions follow [semantic versioning](https://semver.org/): new features bump the middle number, fixes the last.
 
+## 0.28.1 - 2026-11-07
+- Any category (game time): new rule order - no machine clash, no game twice in a round, no repeat of an earlier game unless nothing else fits, groups finish together, eras mixed, and equal plays per game last (only a tiebreaker). A 3rd play of the same game is blocked hardest; a back-to-back repeat stays the last resort; a group never waits more than about 5 minutes for a machine just to dodge a repeat; the group with the fewest fresh games picks first. Replaying test #282622: 26 repeats → about 21, no 3rd plays (item 105).
+- Stats → Plays: the Games played row adds up each column (one per player per game); hover a number for how many matches it was (item 106).
+- Stats → Rounds: Max est. counts the wait when two groups need the same machine, the way the planner does. Rounds saved before 0.28.1 are worked out once more (item 107).
+- Stats → Rounds with one round picked: an Est. column with each game's estimated time; hover for its group's estimate and whether it was the longest (item 108). Older rounds' games are fetched when the page doesn't have them.
+- Your finished events at the same location are loaded before any game times are used (Start round planner, Max est., banks), not only when the Arenas or Banks tab is opened, so a new or cloned event never starts on era guesses (item 109).
+
 ## 0.28.0 - 2026-11-06
 - Auto close & start never starts a round twice: before the countdown and before Start next round, Match Play itself is asked whether a newer round is already there; if so nothing is started (item 101).
 - Picking games (game time, banks) always sees every earlier round - older rounds' games are fetched when the page doesn't have them - and a deleted round's games no longer count as played (item 102).

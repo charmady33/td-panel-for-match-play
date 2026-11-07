@@ -67,7 +67,7 @@ Your settings, API token and saved tournament data stay as they are.
     - the **Auto close round & start next round** checkbox and its status
     - **New rounds use**: the tournament's default round type; a round started on a phone with something else is redone with it within seconds (while no scores are in)
     - **Est. 34 min** by each group (kept from round start) with its time so far, and a live ⏱ timer over each game that stops at the final time
-    - **Start next round → Limit arenas to… → Any category (game time)**: every game gets its arena right away - no machine shared at the same time, no game twice in a round, every game played equally, groups finishing together; a repeat of a game a player already had is a last resort and is spread over the players. Remembered per tournament; works with Auto close/start
+    - **Start next round → Limit arenas to… → Any category (game time)**: every game gets its arena right away - no machine shared at the same time, no game twice in a round, no repeat of a game a player already had unless nothing else fits (a 3rd play of the same game is blocked hardest, and repeats are spread over the players), groups finishing together, eras mixed, and plays per game evened out last. Remembered per tournament; works with Auto close/start
     - finals groups with a tie for an advancing spot, or any tie in the final, are outlined
   - **Finals Players tab (each A/B/C finals)**: **Finals check-in**, shown once qualifying is completed
     - the qualifiers in seed order, plus 3 backups
@@ -83,12 +83,12 @@ Your settings, API token and saved tournament data stay as they are.
   - **Another arrangement** never repeats one already shown or created, and keeps bank times balanced
   - **⚙ Settings**: each game Use / Never / Always; time sources
   - banks are built once and lock when the event starts. A machine you deactivate (Arenas tab) is replaced automatically in the banks that hold it - only those banks change - and waiting games move to the replacement; **Put … back in its banks** appears when it works again
-- **Stats tab (in Matchplay) → Rounds**: a **Max est.** column (longest group estimate) next to Duration
-- **Stats tab (in Matchplay) → Plays**: who played which game and how many times, sortable by any column, with round / completed / active / tiebreaker filters
+- **Stats tab (in Matchplay) → Rounds**: a **Max est.** column (longest group estimate, including any wait for a machine another group is on) next to Duration; with one round picked, each game's **Est.** (hover for its group)
+- **Stats tab (in Matchplay) → Plays**: who played which game and how many times, sortable by any column, with round / completed / active / tiebreaker filters; the Games played row adds up each column
 - **Arenas tab (in Matchplay)**:
   - **Display**: EM / SS / DMD / **LCD**. LCD comes from Matchplay's OPDB data (e.g. Ninja Eclipse); a menu per game overrides it, saved for that arena in every tournament. Bank Builder balances all four; tiebreaker draws count LCD as "New" with DMD
   - **This event**: running average game time; **Combined**: this event + qualifying + Matchplay IDs + ticked past events, weighted by games (what Bank Builder uses; hover for the breakdown)
-  - **Game times from** bar: the qualifying is included automatically for a linked finals; add other Matchplay IDs and Load
+  - **Game times from** bar: the qualifying is included automatically for a linked finals; your finished events at the same location are added by themselves (before any game times are used, so a new or cloned event never starts on era guesses); add other Matchplay IDs and Load
 - **Game times**: a game starts when the group's previous game ends; it ends when its scores were entered. For games the extension didn't watch, that time is read from Matchplay's Logs ("Suggestion created"), so late approvals don't stretch the times
 - **Submit to IFPA** (Overview, once the tournament is completed): a step-by-step page
   1. **Results**: finals places first (A, then B, C…), then everyone else by qualifying position; ties numbered right; checks for missing or duplicate IFPA numbers; copy button

@@ -1,6 +1,6 @@
 // "Any category (game time)" planner: 14 games, 8 groups of 4, 1 and 3 games per round, 7 rounds.
-// Checks: no machine used by two groups at once, nobody plays a game twice in a round, play counts within 1
-// (when there's room), repeats spread over players, group finish times close.
+// Checks: no machine used by two groups at once, nobody plays a game twice in a round, no repeats when there's
+// room (play counts within 4: equal plays is only a tiebreaker since item 105), repeats spread over players, group finish times close.
 global.window = global; global.TDP = {};
 const fs = require('fs'), path = require('path');
 eval(fs.readFileSync(path.join(__dirname, '../src/smart.js'), 'utf8'));
@@ -47,7 +47,7 @@ for (const per of [1, 3]) {
     console.log(`14 games, 8 groups, ${per}/round, 7 rounds: play gap ${r.worstPlayGap}, finish spread ${Math.round(r.worstSpread / 60)} min, repeats per player ${r.minRep}-${r.maxRep}, back-to-back ${r.b2b}`);
     // 1 game a round: never; 3 a round (24 slots on 14 games, ~10 repeats each): only a rare forced one
     ok(per === 1 ? r.b2b === 0 : r.b2b <= 3, 'back-to-back repeats: ' + r.b2b);
-    if (per === 1) ok(r.worstPlayGap <= 1, `play counts differ by ${r.worstPlayGap}`);
+    if (per === 1) ok(r.worstPlayGap <= 4 && r.maxRep <= 1, `play counts differ by ${r.worstPlayGap} / repeats ${r.maxRep}`);   // item 105: no repeats first, equal plays only a tiebreaker
     ok(r.maxRep - r.minRep <= 4, `repeats not spread: ${r.minRep}-${r.maxRep}`);
   }
 }

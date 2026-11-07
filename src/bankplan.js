@@ -69,6 +69,7 @@ TDP.bankplan = (() => {
   }
   // everything the tools need for times, in one call (qualifying + history are looked up here)
   async function extras(D) {
+    if (T.arenatab && T.arenatab.autoLocal) { try { await T.arenatab.autoLocal(D); } catch (e) { /* optional */ } }   // item 109: your past events here first
     const st = T.tstate[D.tid] || {}, use = new Set(st.histUse || []), hist = await T.store.get('hist', {});
     let qual = null; try { qual = await qualTimes(D); } catch (e) { /* optional */ }
     return { qual, hist: Object.entries(hist).filter(([id]) => use.has(id) && +id !== D.tid).map(([, h]) => h.arenas) };

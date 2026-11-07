@@ -141,9 +141,14 @@ ul{margin:6px 0 12px 18px;padding:0}li{margin:3px 0}</style>
   let locDone = {};
   // item 97: a finals uses its qualifying's location when it has none, and gets the qualifying's Match Play IDs too -
   // even before the qualifying starts
-  async function autoLocal(D) {
-    if (!D || !D.t || locDone[D.tid] || !T.settings.token) return;
-    locDone[D.tid] = true;
+  // item 109: also run (and waited for) before any game times are used - the Start round planner, Max est., banks -
+  // so a new or cloned event never falls back to era guesses just because its Arenas tab wasn't opened first
+  function autoLocal(D) {
+    if (!D || !D.t || !T.settings.token) return Promise.resolve();
+    if (!locDone[D.tid]) locDone[D.tid] = autoLocalRun(D);
+    return locDone[D.tid];
+  }
+  async function autoLocalRun(D) {
     const fin = D.qual && D.qual.tournamentId !== D.tid, loc = D.t.locationId || (fin && D.qual.locationId);
     try {
       let st = T.tstate[D.tid] || {};

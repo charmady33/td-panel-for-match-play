@@ -31,7 +31,7 @@ const g2 = F.games.find(g => g.roundId === 2 && g.set === 0 && g.index === 0); g
   const heads = () => page.evaluate(() => [...document.querySelectorAll('main thead tr')].map(tr => [...tr.children].map(th => th.innerText.replace(/\s+/g, ' ').trim()).filter(Boolean).join(' | ')).join('\n'));
   const h1 = await heads(); await page.waitForTimeout(2100); const h2 = await heads();
   console.log('matches heads:\n' + h1 + '\n(2 s later)\n' + h2);
-  console.log('saved est:', JSON.stringify(await page.evaluate(() => TDP.tstate[280051].est)));
+  console.log('saved est:', JSON.stringify(await page.evaluate(() => TDP.tstate[280051].estW)));
   await page.screenshot({ path: out + '/timers.png' });
   // the estimate doesn't change later (times change -> saved value stays)
   const keep = await page.evaluate(() => { const r = TDP.timers.groupEst(TDP.data.D, 2); return JSON.stringify(r); });

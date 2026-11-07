@@ -30,6 +30,8 @@ const out = process.argv[2] || '.';
   console.log('hidden MP content:', await page.evaluate(() => [...document.querySelectorAll('.mb-4, .space-y-6')].map(e => e.style.display).join(',')), '| active:', await page.evaluate(() => [...document.querySelectorAll('main nav a')].filter(a => a.className.includes('border-indigo-500')).map(a => a.textContent).join(',')));
   await page.evaluate(() => document.getElementById('tdp-plays').shadowRoot.querySelector('[data-sort=rep]').click()); await page.waitForTimeout(300);
   console.log('sorted by repeats:\n' + await R());
+  // item 106: "Games played" row = each column added up
+  console.log('foot check:', await page.evaluate(() => { const rows = [...document.getElementById('tdp-plays').shadowRoot.querySelectorAll('tr')]; const body = rows.slice(1, -1), last = rows[rows.length - 1]; const bad = []; for (let i = 1; i < last.children.length; i++) { if (i === 2) continue; const sum = body.reduce((s, r) => s + (+r.children[i].innerText || 0), 0); if (sum !== (+last.children[i].innerText || 0)) bad.push(i + ':' + sum + '≠' + last.children[i].innerText); } return (bad.length ? 'FAIL ' + bad.join(' ') : 'ok - every column adds up') + ' | ' + last.innerText.replace(/\s+/g, ' ').slice(0, 80) + ' | hover: ' + last.children[4].title; }));
   await page.screenshot({ path: out + '/plays.png' });
   // back to a Matchplay sub-tab
   await page.evaluate(() => document.querySelector('main nav a').click()); await page.waitForTimeout(300);

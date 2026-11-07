@@ -26,7 +26,7 @@ for (let t = 0; t < 4; t++) {
   const spread = Math.max(...maxes) - Math.min(...maxes); worst = Math.max(worst, spread);
   console.log(`run ${t + 1}: Max est. per round ${maxes.join(' / ')} min (spread ${spread}) · play-count gap ${Math.max(...gaps)}`);
   if (spread > 3) fails++;
-  if (Math.max(...gaps) > 1) { fails++; console.log('  FAIL play gap'); }
+  if (Math.max(...gaps) > 4) { fails++; console.log('  FAIL play gap'); }   // item 105: equal plays is only a tiebreaker now
 }
 console.log(fails ? `${fails} FAILED (worst spread ${worst} min)` : `all passed (worst spread ${worst} min)`);
 process.exit(fails ? 1 : 0);

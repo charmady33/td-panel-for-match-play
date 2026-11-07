@@ -1,20 +1,20 @@
 // "Any category (game time)": an extra choice in Matchplay's Start next round → Limit arenas to… dropdown.
 // The round starts with "Don't draw arenas"; then every game of every group gets its arena from here, by these
-// rules (most important first):
+// rules (most important first, item 105):
 //   1. no machine used by two groups at the same time (estimated from game times; a group waits rather than clash)
 //   2. nobody plays the same game twice in one round
-//   3. every game played about equally across the qualifying (counts within 1)
+//   3. nobody plays a game they played in an earlier round, unless nothing else fits; a 3rd play of the same game
+//      is blocked hardest; a repeat goes to the player in the group who has repeated the least so far
 //   4. groups finish at about the same time (long games balanced; extra machines: longest sit out first)
 //   5. a group's games spread over the eras
-// A game a player already played earlier is avoided; when it can't be, the repeat goes to the player in the group
-// who has repeated the least so far. Also: a machine that goes down is replaced in the banks that hold it (down()).
+//   6. every game played about equally (only a tiebreaker) Also: a machine that goes down is replaced in the banks that hold it (down()).
 var TDP = window.TDP || (window.TDP = {});
 
 TDP.smart = (() => {
   const T = TDP;
   const VALUE = 'tdp-gt', LABEL = 'Any category (game time) · TD Panel';
   const BUFFER = 60;   // seconds between one group leaving a machine and the next starting it
-  const W = { wait: 40, repeat: 2500, repeatEach: 1500, repeatMore: 2500, equal: 12000, era: 120, len: 0.2, spread: 1, span: 0.5, roundDup: 1e7, pair: 5e6, b2b: 1e5, recent: 600, quota: 15000, target: 6, equalAll: 50000 };
+  const W = { wait: 40, repeat: 1e6, repeatEach: 1500, repeatMore: 2e7, equal: 1000, era: 120, len: 0.2, spread: 1, span: 0.5, roundDup: 1e9, pair: 1e7, b2b: 3e7, longWait: 4000, recent: 600, quota: 15000, target: 6, equalAll: 0 };   // item 105: repeats far above everything but a clash/same-round dup; equal plays last
 
   function rngFrom(seed) {
     let a = (seed >>> 0) || 1;
@@ -70,7 +70,11 @@ TDP.smart = (() => {
       if (!open.length) break;
       const tmin = Math.min(...open.map(x => x.t));
       const now = open.filter(x => x.t <= tmin + 1e-6);
-      const cur = now[Math.floor(rng() * now.length)];
+      // item 105: the group with the fewest games left that none of its players has played picks first
+      // (most constrained first); ties, and every other try, at random
+      const freeFor = x => arenas.filter(a => !x.used.has(a.arenaId) && !x.g.players.some(p => (played[p] || {})[a.arenaId])).length;
+      let cur = now[Math.floor(rng() * now.length)];
+      if (now.length > 1 && rng() < 0.5) { const f = now.map(freeFor), m = Math.min(...f), tied = now.filter((x, i) => f[i] === m); cur = tied[Math.floor(rng() * tied.length)]; }
       const slot = cur.g.slots[cur.k];
       let pick = null, extra = 0;
       if (slot.arenaId != null) {   // already has an arena (set by hand, or a retry): keep it
@@ -83,7 +87,7 @@ TDP.smart = (() => {
         for (const a of arenas) {
           const m = mins[eraOf(a)];
           const s = startAt(a.arenaId, cur.t, a.sec), wait = s - cur.t;
-          let c = wait * W.wait;
+          let c = wait * W.wait + Math.max(0, wait - 300) * W.longWait;   // item 105: a wait over 5 min costs more than a repeat
           if (cur.used.has(a.arenaId)) c += W.roundDup;
           // item 103: a player never gets the same set of games as in an earlier round (last game of the group's round)
           if (!left && cur.used.size && samePair(inp, cur.g.players, [...cur.used, a.arenaId])) c += W.pair;
@@ -97,7 +101,7 @@ TDP.smart = (() => {
           const d = (plays[a.arenaId] || 0) + (planned[a.arenaId] || 0) - m;
           c += W.equal * d * d;
           const dAll = (plays[a.arenaId] || 0) + (planned[a.arenaId] || 0) - minAll;   // across eras: no game gets a 2nd extra play before the others caught up
-          if (dAll >= 1) c += W.equalAll * dAll * dAll;
+          if (dAll >= 1 && W.equalAll) c += W.equalAll * dAll * dAll;
           c += W.era * cur.eras.filter(e => e === a.era).length;
           const over = (eraCount[eraOf(a)] || 0) + 1 - Math.ceil(quota[eraOf(a)] - 1e-9); if (over > 0) c += W.quota * over;
           c += W.target * Math.abs(cur.sum + a.sec + left * avgSlot - target);
@@ -122,7 +126,6 @@ TDP.smart = (() => {
         }
         if (!pick.fixed && cur.k === cur.g.slots.length - 1 && cur.used.size && samePair(inp, cur.g.players, [...cur.used, a.arenaId])) notes.push(`${label} gets a set of games a player had before - nothing else fit`);
         if (pick.wait > 30) notes.push(`${label} waits about ${Math.round(pick.wait / 60)} min for ${a.name}`);
-        if (pick.d >= 1) notes.push(`${a.name} gets an extra play (others caught up later)`);
       }
       for (const p of cur.g.players) { played[p] = played[p] || {}; played[p][a.arenaId] = (played[p][a.arenaId] || 0) + 1; }
       planned[a.arenaId] = (planned[a.arenaId] || 0) + 1;
@@ -217,7 +220,7 @@ TDP.smart = (() => {
     if (el) return;
     el = document.createElement('div'); el.id = 'tdp-smart-hint'; el.dataset.tdp = '1';
     el.style.cssText = 'font-size:12px;line-height:1.4;margin-top:6px;color:#4f46e5';
-    el.textContent = 'TD Panel gives every game its arena right after the round starts: no two groups on a machine at once, no game twice for a player, every game played equally, groups finishing together.';
+    el.textContent = 'TD Panel gives every game its arena right after the round starts: no two groups on a machine at once, no game twice in a round, no repeats of earlier games when anything else fits, groups finishing together, eras mixed, and plays per game evened out last.';
     sel.parentElement.appendChild(el);
   }
   // any Start round from this computer: the TD picked it - a round started here is never "redone"

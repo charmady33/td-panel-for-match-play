@@ -20,18 +20,42 @@ TDP.timers = (() => {
     return estTid === D.tid ? est : null;
   }
   // each group's estimate for a round: saved the first time all its games have an arena, never changed after
-  let saving = false;
-  function groupEst(D, roundId) {
-    const st = T.tstate[D.tid] || {}, saved = { ...((st.est || {})[roundId] || {}) }, guessed = { ...((st.estGuess || {})[roundId] || {}) }, E = estimates(D);
-    let added = false;
-    const sets = {};
-    for (const g of D.games) if (g.roundId === roundId && !g.bye && g.set !== 9999) (sets[g.set] = sets[g.set] || []).push(g);
-    for (const [set, gs] of Object.entries(sets)) {
-      if (saved[set] != null || !E || gs.some(g => g.arenaId == null)) continue;
-      saved[set] = Math.round(gs.reduce((s, g) => s + (E[g.arenaId] || 13 * 60), 0)); added = true;
-      if (gs.every(g => guess.has(g.arenaId) || !E[g.arenaId])) { guessed[set] = 1; }
+  let saving = false, histFor = null;
+  // item 107: the round played out with the estimated game times: a game starts when its group is free and its
+  // machine is free (+1 min, like the planner), so a group waiting on a machine another group is on counts the wait.
+  // Kept under a new key (estW) so rounds saved before 0.28.1 are worked out again once, with waits.
+  const BUFFER = 60;
+  function schedule(games, E) {
+    const bySet = {}; for (const g of games) (bySet[g.set] = bySet[g.set] || []).push(g);
+    const G = Object.entries(bySet).map(([set, gs]) => ({ set, gs: gs.sort((a, b) => (a.index || 0) - (b.index || 0)), k: 0, t: 0 }));
+    const free = {}, out = {};
+    for (;;) {
+      const open = G.filter(x => x.k < x.gs.length); if (!open.length) break;
+      const x = open.reduce((m, y) => (y.t < m.t || (y.t === m.t && +y.set < +m.set) ? y : m));
+      const g = x.gs[x.k++], sec = E[g.arenaId] || 13 * 60, s = free[g.arenaId] != null ? Math.max(x.t, free[g.arenaId] + BUFFER) : x.t;
+      free[g.arenaId] = x.t = s + sec;
     }
-    if (added && !saving) { saving = true; T.saveT(D.tid, { est: { ...(st.est || {}), [roundId]: saved }, estGuess: { ...(st.estGuess || {}), [roundId]: guessed } }).finally(() => { saving = false; }); }
+    for (const x of G) out[x.set] = Math.round(x.t);
+    return out;
+  }
+  function groupEst(D, roundId) {
+    const st = T.tstate[D.tid] || {}, saved = { ...((st.estW || {})[roundId] || {}) }, guessed = { ...((st.estWGuess || {})[roundId] || {}) }, E = estimates(D);
+    const games = D.games.filter(g => g.roundId === roundId && !g.bye && g.set !== 9999);
+    if (!E || !games.length) return saved;
+    const sets = [...new Set(games.map(g => g.set))];
+    if (sets.every(x => saved[x] != null)) return saved;
+    if (games.some(g => g.arenaId == null)) {   // not every game has its arena yet: show each set's game times added up, save nothing
+      const tmp = { ...saved };
+      for (const x of sets) { const gs = games.filter(g => g.set === x); if (tmp[x] == null && gs.every(g => g.arenaId != null)) tmp[x] = Math.round(gs.reduce((s, g) => s + (E[g.arenaId] || 13 * 60), 0)); }
+      return tmp;
+    }
+    const sch = schedule(games, E);
+    for (const x of sets) {
+      if (saved[x] != null) continue;
+      saved[x] = sch[x];
+      if (games.filter(g => g.set === x).every(g => guess.has(g.arenaId) || !E[g.arenaId])) guessed[x] = 1;
+    }
+    if (!saving) { saving = true; T.saveT(D.tid, { estW: { ...(st.estW || {}), [roundId]: saved }, estWGuess: { ...(st.estWGuess || {}), [roundId]: guessed } }).finally(() => { saving = false; }); }
     return saved;
   }
 
@@ -62,7 +86,7 @@ TDP.timers = (() => {
       const ordered = games.slice().sort((a, b) => (a.index || 0) - (b.index || 0));
       const s0 = T.timing.realStart(ordered[0], rg), all = ordered.every(T.timing.doneish), last = all ? Math.max(...ordered.map(g => T.timing.gEnd(g) || 0)) : null;
       const e = set === 9999 ? null : groupEst(D, rid)[set];
-      put(ths[0], 'tdp-ge', '', { start: s0 || '', end: last || '', est: e || '', guess: set !== 9999 && ((T.tstate[D.tid] || {}).estGuess || {})[rid] && T.tstate[D.tid].estGuess[rid][set] ? 1 : '' });
+      put(ths[0], 'tdp-ge', '', { start: s0 || '', end: last || '', est: e || '', guess: set !== 9999 && ((T.tstate[D.tid] || {}).estWGuess || {})[rid] && T.tstate[D.tid].estWGuess[rid][set] ? 1 : '' });
     }
     tick();
   }
@@ -77,7 +101,7 @@ TDP.timers = (() => {
     for (const el of document.querySelectorAll('[data-tdp="timer"].tdp-ge')) {
       const est = +el.dataset.est;
       // just the estimate (item 74): "Est. 26 min"
-      const html = est ? `<span title="Estimated when the round started (game times added up) - doesn't change">Est. ${mins(est)}</span>` : '<span style="color:#9ca3af">Est. –</span>';
+      const html = est ? `<span title="Estimated when the round started (game times added up, plus any wait for a machine another group is on) - doesn't change">Est. ${mins(est)}</span>` : '<span style="color:#9ca3af">Est. –</span>';
       if (el.dataset.h !== html) { el.dataset.h = html; el.innerHTML = html; }
     }
   }
@@ -89,7 +113,16 @@ TDP.timers = (() => {
     const head = table.querySelector('thead tr') || table.querySelector('tr');
     const di = [...head.children].findIndex(th => /^duration$/i.test(T.txt(th)) && !th.dataset.tdp);
     if (di < 0) return;
-    if (!head.querySelector('[data-tdp="timer"]')) { const th = document.createElement('th'); th.dataset.tdp = 'timer'; th.className = head.children[di].className; th.textContent = 'Max est.'; th.title = 'Longest group estimate of the round (game times added up when it started)'; head.children[di].after(th); }
+    // older rounds' games aren't in the page's data: fetch them once (item 102's ensureHistory)
+    const have = new Set(D.games.map(g => g.roundId));
+    if ((D.rounds || []).some(r => !have.has(r.roundId)) && histFor !== D.tid) { histFor = D.tid; T.data.ensureHistory(D.tid).then(() => render(T.data.D)).catch(() => {}); }
+    const one = new URLSearchParams(location.search).get('roundId');   // item 108: one round picked - a row per game
+    let th = head.querySelector('[data-tdp="timer"]');
+    if (!th) { th = document.createElement('th'); th.dataset.tdp = 'timer'; th.className = head.children[di].className; head.children[di].after(th); }
+    const hText = one ? 'Est.' : 'Max est.', hTitle = one ? "This game's estimated time - hover for its group's estimate" : 'Longest group estimate of the round (game times added up when it started, plus any wait for a machine another group is on)';
+    if (th.textContent !== hText) th.textContent = hText;
+    th.title = hTitle;
+    if (one) return roundRows(D, table, head, di, +one);
     const byName = new Map((D.rounds || []).map(r => [String(r.name || '').toLowerCase(), r]));
     const rows = [...table.querySelectorAll('tr')].filter(tr => tr !== head && tr.children.length > di);
     const maxOf = r => Object.entries(groupEst(D, r.roundId)).sort((a, b) => b[1] - a[1])[0];
@@ -104,6 +137,29 @@ TDP.timers = (() => {
         if (best) { text = mins(best[1]); title = `Group ${+best[0] + 1}`; }
       } else if (/^total$/.test(name) && vals.length) text = mins(vals.reduce((s, v) => s + v, 0));
       else if (/^average$/.test(name) && vals.length) text = mins(vals.reduce((s, v) => s + v, 0) / vals.length);
+      if (td.textContent !== (text || '–')) td.textContent = text || '–';
+      td.title = title;
+    }
+  }
+
+  // item 108: Stats → Rounds with one round picked: rows "#1 | arena | duration …" in Matchplay's game order
+  // (game 1 of every group, then game 2 …); each row gets its game's estimate, the title its group's
+  function roundRows(D, table, head, di, rid) {
+    const E = estimates(D), am = T.data.arenaMap(D.t), est = groupEst(D, rid), top = Math.max(0, ...Object.values(est));
+    const games = D.games.filter(g => g.roundId === rid && !g.bye).sort((a, b) => ((a.index || 0) - (b.index || 0)) || (a.set - b.set) || (a.gameId - b.gameId));
+    const used = new Set();
+    for (const tr of [...table.querySelectorAll('tr')].filter(tr => tr !== head && tr.children.length > di)) {
+      let td = tr.querySelector('[data-tdp="timer"]');
+      if (!td) { td = document.createElement('td'); td.dataset.tdp = 'timer'; td.className = tr.children[di].className; tr.children[di].after(td); }
+      const name = T.txt(tr.children[1]).toLowerCase();
+      const g = games.find(x => !used.has(x.gameId) && String((am[x.arenaId] || {}).name || '').toLowerCase() === name);
+      let text = '', title = '';
+      if (g) {
+        used.add(g.gameId);
+        if (E && E[g.arenaId]) text = mins(E[g.arenaId]);
+        if (g.set === 9999) title = 'Tiebreaker';
+        else if (est[g.set] != null) title = `Group ${g.set + 1}: ${mins(est[g.set])} estimated${est[g.set] === top ? ' - the longest group this round (Max est.)' : ''}`;
+      }
       if (td.textContent !== (text || '–')) td.textContent = text || '–';
       td.title = title;
     }
