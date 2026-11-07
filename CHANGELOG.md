@@ -2,6 +2,14 @@
 
 All notable changes, newest first. Versions follow [semantic versioning](https://semver.org/): new features bump the middle number, fixes the last.
 
+## 0.29.0 - 2026-11-07
+- Max match play: the round options (auto close/start, New rounds use, random results per round) are hidden (item 105).
+- Auto create matches (off by default): when active games drop below the number under Active games, Match Play's own Create matches is clicked (No limit, All arenas, never the Emergency valve) - only when two waiting players haven't played each other; stops at the number under Remaining games. Runs in the background too (item 106, 112).
+- "Waiting for…" note: who still has matches left once others are done, and who only has rematches left (item 107).
+- Fill random results (Test tournaments) for a number of active games you choose (item 108).
+- Progress "7 of 10" on the waiting list and in the Standings Games column (item 109).
+- Machine down works in max match play: active matches on it get a recommended replacement, avoiding games either player already played (item 110).
+
 ## 0.28.1 - 2026-11-07
 - Any category (game time): new rule order - no machine clash, no game twice in a round, no repeat of an earlier game unless nothing else fits, groups finish together, eras mixed, and equal plays per game last (only a tiebreaker). A 3rd play of the same game is blocked hardest; a back-to-back repeat stays the last resort; a group never waits more than about 5 minutes for a machine just to dodge a repeat; the group with the fewest fresh games picks first. Replaying test #282622: 26 repeats → about 21, no 3rd plays (item 105).
 - Stats → Plays: the Games played row adds up each column (one per player per game); hover a number for how many matches it was (item 106).

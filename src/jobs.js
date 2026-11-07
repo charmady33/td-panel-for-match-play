@@ -168,6 +168,33 @@ TDP.jobs = (() => {
       await T.store.del('t:' + a.tid); await T.store.del('cache:' + a.tid);
       return put('deleted');
     },
+    // max match play (item 106): checked again here (fresh), then Match Play's own Create matches
+    async createMatches(a) {
+      await T.data.refresh(true);
+      const D = T.data.D; if (!T.maxmp.isMax(D)) return 'not a max match play tournament';
+      if (String(D.t.status) !== 'started') return 'the tournament is not in progress';
+      const S = T.maxmp.state(D), N = T.maxmp.belowOf(D, S), M = T.maxmp.stopOf(D);
+      if (S.remaining <= M) return `${S.remaining} games remaining - auto create stops at ${M}`;
+      if (S.active.length >= N) return `${S.active.length} games active already - nothing to do`;
+      const made = await T.mp.createMatches();
+      return made ? 'matches created' : 'no matches could be made (the waiting players have all played each other)';
+    },
+    // max match play, Test tournaments (item 108): random results for a number of active games, picked at random
+    async fillMax(a) {
+      const t = await T.data.loadTournament(a.tid, 0);
+      if (!t || t.test !== true) throw new Error('Random results are only for Test tournaments.');
+      await T.data.refresh(true);
+      const D = T.data.D, pm = T.data.playerMap(D.t), am = T.data.arenaMap(D.t);
+      const act = T.maxmp.state(D).active.sort(() => Math.random() - 0.5).slice(0, Math.max(1, a.count || 1));
+      const P = counter(act.length);
+      for (const [i, g] of act.entries()) {
+        const names = (g.playerIds || []).map(id => (pm[id] || {}).name).filter(Boolean), order = [...names].sort(() => Math.random() - 0.5), arena = (am[g.arenaId] || {}).name || '';
+        P.to(i, `${arena || 'Game'}: ${names.join(' vs ')}`);
+        await T.mp.enterResults(names, arena, order);
+        P.tick(`${arena}: ${order[0]} won`);
+      }
+      return `${act.length} game${act.length === 1 ? '' : 's'} filled`;
+    },
     async fillResults(a) {
       const t = await T.data.loadTournament(a.tid, 0);
       if (!t || t.test !== true) throw new Error('Random results are only for Test tournaments.');
@@ -272,7 +299,7 @@ TDP.jobs = (() => {
       const fresh = await T.data.roundGames(a.tid, a.roundId), has = new Set(fresh.filter(g => g.arenaId != null).map(g => g.gameId));
       const P = counter(a.items.length);
       for (const [i, x] of a.items.entries()) {
-        const what = `Group ${x.group} · Game ${x.index + 1} → ${x.name}`;
+        const what = x.label || `Group ${x.group} · Game ${x.index + 1} → ${x.name}`;
         if (has.has(x.gameId) && !a.change) { P.tick(`${what} (already set)`); continue; }
         P.to(i, what); await T.mp.setArenaById(x.gameId, x.arenaId, x.name); P.tick(what);
       }

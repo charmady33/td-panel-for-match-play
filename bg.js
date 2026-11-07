@@ -71,7 +71,7 @@ async function tick() {
   let planned = []; try { planned = rows(await api(`/tournaments?owner=${u.userId}&status=planned&limit=50`)); } catch (e) { /* next time */ }
   for (const t of [...started, ...planned]) {
     const tid = t.tournamentId, st = await store.get('t:' + tid, {});
-    if (!(st.auto || st.autoAssign || st.roundType || st.smartArenas || labelsOn(st))) continue;
+    if (!(st.auto || st.autoAssign || st.roundType || st.smartArenas || st.maxAuto || labelsOn(st))) continue;
     const run = runs[tid];
     if (run && run.windowId) {   // already working on it: give up waiting after 20 min and tell the TD
       const alive = await chrome.windows.get(run.windowId).then(() => true, () => false);
@@ -80,7 +80,7 @@ async function tick() {
       delete runs[tid]; await store.set('bg:runs', runs);
     }
     if ((await tabsOf(tid)).length) continue;   // a tab of it is open: that tab does the work
-    const need = await needs(tid, st);
+    const need = t.type === 'max_matchplay' ? await maxNeeds(tid, st) : await needs(tid, st);
     if (!need) continue;
     // the same need isn't handled twice in 10 minutes (e.g. auto close waiting on a tie)
     if (run && run.sig === need.sig && Date.now() - run.at < 10 * 60e3) continue;
@@ -88,6 +88,25 @@ async function tick() {
     runs[tid] = { windowId: w.id, at: Date.now(), sig: need.sig, what: need.what, name: t.name };
     await store.set('bg:runs', runs);
   }
+}
+
+// item 112: max match play with Auto create matches on - active games below the TD's number, games left above the stop
+// number, and two waiting players who haven't played each other: the tournament's page creates the matches
+async function maxNeeds(tid, st) {
+  if (!st.maxAuto) return null;
+  const t = one(await api(`/tournaments/${tid}?includePlayers=1`)) || {};
+  const dur = +t.maxMatchplayDuration || 0; if (!dur) return null;
+  const ids = (t.players || []).filter(p => !p.tournamentPlayer || p.tournamentPlayer.status !== 'inactive').map(p => p.playerId);
+  const games = rows(await api(`/tournaments/${tid}/games`)).filter(g => !g.bye);
+  const active = games.filter(g => String(g.status) === 'started'), playing = new Set(active.flatMap(g => g.playerIds || []));
+  const count = {}, opp = {}; ids.forEach(id => { count[id] = 0; opp[id] = new Set(); });
+  for (const g of games) for (const id of g.playerIds || []) { if (!(id in count)) continue; count[id]++; (g.playerIds || []).forEach(q => { if (q !== id) opp[id].add(q); }); }
+  const remaining = Math.ceil(ids.reduce((s, id) => s + Math.max(0, dur - count[id]), 0) / 2);
+  const below = +st.maxBelow > 0 ? +st.maxBelow : Math.max(1, Math.floor(ids.length / 2)), stop = Math.max(0, +st.maxStop || 0);
+  if (remaining <= stop || active.length >= below) return null;
+  const waiting = ids.filter(id => !playing.has(id) && count[id] < dur);
+  const pair = waiting.some((a, i) => waiting.slice(i + 1).some(b => !opp[a].has(b)));
+  return pair ? { sig: `max:${games.length}:${active.length}`, what: 'Max match play: matches to create' } : null;
 }
 
 // does this tournament need the automatic options right now?

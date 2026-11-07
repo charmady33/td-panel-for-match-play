@@ -3,7 +3,7 @@
 (() => {
   if (window.__tdpPage) return;
   window.__tdpPage = 1;
-  const SLICES = ['scorekeepers', 'tournaments', 'players', 'tournamentPlayers', 'arenas', 'tournamentArenas', 'banks', 'rounds', 'games', 'standings', 'tournamentStandings', 'linkedTournaments', 'bootData'];
+  const SLICES = ['scorekeepers', 'tournaments', 'players', 'tournamentPlayers', 'arenas', 'tournamentArenas', 'banks', 'rounds', 'games', 'standings', 'tournamentStandings', 'linkedTournaments', 'bootData', 'maxMatchplay'];
   let store = null, last = {}, lastTid = null, timer = null;
 
   function findStore() {
@@ -45,7 +45,11 @@
     const standings = Array.isArray(sids) && sids.length ? sids.map(pid => sm[`${id}-${pid}`]).filter(Boolean) : null;
     const skm = (g('scorekeepers').scorekeepers || {})[id];
     const boot = g('bootData').bootData || {};
+    // max match play: Match Play's own counts (loaded with its Matches tab) - remaining games, each player's matches so far
+    const MX = g('maxMatchplay'), md = (MX.details || {})[id], mpl = (MX.players || {})[id];
+    const max = t.type === 'max_matchplay' && (md || mpl) ? { remaining: md ? md.remainingGames : null, avg: md ? md.avgGameDuration : null, players: Array.isArray(mpl) ? mpl : null } : null;
     return {
+      max,
       tid: id, at: Date.now(),
       t: { ...t, players, arenas, banks, linkedTournaments: links, ...(skm ? { scorekeepers: Object.values(skm) } : {}) },
       playersKnown: !!pids, arenasKnown: !!aids, linksKnown,

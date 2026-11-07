@@ -114,7 +114,7 @@ var TDP = window.TDP || (window.TDP = {});
     if (D.isTD === false && T.settings.token) { T.panel.unmount(); return; }   // not your tournament: stay out of the way
     T.panel.mount(); T.panel.render();
     T.embed.render(); T.inpage.render();
-    autoTick().then(autoAssign).then(autoFill).then(() => T.smart.downCheck()).then(() => T.rounds.guard(lock));
+    autoTick().then(autoAssign).then(autoFill).then(() => T.smart.downCheck()).then(() => T.rounds.guard(lock)).then(() => T.maxmp && T.maxmp.tick(T.data.D));
   });
   let refreshedFor = null;
   T.jobs.on(j => {
@@ -146,7 +146,7 @@ var TDP = window.TDP || (window.TDP = {});
   const state = s => { T.panel.setAutoState(s); T.inpage.setAutoState(s); };
   async function autoTick() {
     const D = T.data.D, tid = D.tid, st = T.tstate[tid] || {};
-    if (!st.auto || autoBusy || !D.t || !D.isTD) return;
+    if (!st.auto || autoBusy || !D.t || !D.isTD || (T.maxmp && T.maxmp.isMax(D))) return;   // (max match play: no rounds)
     if (T.jobs.active()) return state('waiting for the running task');
     if (D.t.status !== 'started') return state('tournament not in progress');
     const r = T.data.latestRound();

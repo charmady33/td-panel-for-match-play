@@ -362,11 +362,18 @@ TDP.smart = (() => {
     const rs = D.rounds || [], i = rs.findIndex(r => r.roundId === g.roundId), prev = i > 0 ? rs[i - 1].roundId : null;
     const ps = new Set(group.flatMap(x => x.playerIds || []));
     const hadLast = new Set((D.games || []).filter(x => x.roundId === prev && (x.playerIds || []).some(p => ps.has(p))).map(x => x.arenaId));
+    // max match play (item 110): a game either player already played counts against it
+    const played = {}; if (T.maxmp && T.maxmp.isMax(D)) for (const x of D.games || []) if (x !== g && !x.bye && x.arenaId != null && (x.playerIds || []).some(p => (g.playerIds || []).includes(p))) played[x.arenaId] = (played[x.arenaId] || 0) + (x.playerIds || []).filter(p => (g.playerIds || []).includes(p)).length;
     return est.filter(a => a.arenaId !== g.arenaId && !isDown(am[a.arenaId]) && !mine.has(a.arenaId))
       .map(a => ({ id: a.arenaId, name: a.name, era: a.era, sec: a.sec, busy: busy.has(a.arenaId), last: hadLast.has(a.arenaId),
-        cost: (eraK(a.era) === eraK(down.era) ? 0 : 300) + Math.abs(a.sec - down.sec) + (busy.has(a.arenaId) ? 900 : 0) + (hadLast.has(a.arenaId) ? 500 : 0) }))
+        cost: (eraK(a.era) === eraK(down.era) ? 0 : 300) + Math.abs(a.sec - down.sec) + (busy.has(a.arenaId) ? 900 : 0) + (hadLast.has(a.arenaId) ? 500 : 0) + 400 * (played[a.arenaId] || 0) }))
       .sort((x, y) => x.cost - y.cost);
   }
+  // item 110: max match play has no rounds - its active games are "the round"
+  const curRound = D => T.maxmp && T.maxmp.isMax(D) ? { roundId: 0, max: true } : T.data.currentRound();
+  const curGames = (D, r) => !r ? [] : r.max ? (D.games || []).filter(g => !g.bye && String(g.status) === 'started') : D.games.filter(g => g.roundId === r.roundId);
+  const vsOf = g => { const pm = T.data.playerMap(T.data.D.t); return (g.playerIds || []).map(id => (pm[id] || {}).name || '#' + id).join(' vs '); };
+  const pvMax = () => !!(T.maxmp && T.maxmp.isMax(T.data.D));
   const openOnDown = (D, roundGames) => { const am = T.data.arenaMap(D.t); return roundGames.filter(g => !g.bye && g.arenaId != null && !T.timing.isDone(g) && isDown(am[g.arenaId])); };
   // item 90: a game turned off (or back on) in one event of the set - qualifying, A, B… - is turned off (on) in the others
   async function famSync(D) {
@@ -409,7 +416,7 @@ TDP.smart = (() => {
     if (D.tid === T.routeTid() && await famArenas(D)) return;
     const am = T.data.arenaMap(D.t), usesBanks = /bank/i.test(D.t.arenaAssignment || '');
     const hit = usesBanks ? (D.t.banks || []).filter(b => b.status !== 'inactive' && (b.arenaIds || []).some(id => isDown(am[id]))) : [];
-    const r = T.data.currentRound(), loose = r ? openOnDown(D, D.games.filter(g => g.roundId === r.roundId)) : [];
+    const r = curRound(D), loose = r ? openOnDown(D, curGames(D, r)) : [];
     if (!hit.length && !loose.length) return;
     const sig = hit.map(b => b.bankId + ':' + b.arenaIds.join(',')).join('|') + '#' + loose.map(g => g.gameId + ':' + g.arenaId).join(','), st = T.tstate[D.tid] || {};
     if (st.downSig === sig && Date.now() - (st.downAt || 0) < 10 * 60e3) return;
@@ -421,7 +428,7 @@ TDP.smart = (() => {
       if (!bgWin && !document.hidden) return downPreview(D);   // the TD is here: show what will change first
       if (hit.length) await T.jobs.start('A machine is down: fixing its banks', [{ tid, page: 'banks', op: 'downFix', args: { tid }, label: 'Replacing the down game in its banks' }]);
       else {   // nobody here: each game gets its best replacement
-        const extra = await T.bankplan.extras(D), est = T.bankplan.estimates(D, st, extra, true), rg = D.games.filter(g => g.roundId === r.roundId);
+        const extra = await T.bankplan.extras(D), est = T.bankplan.estimates(D, st, extra, true), rg = curGames(D, r);
         const items = loose.map(g => { const o = looseFits(D, g, est, rg)[0]; return o && { gameId: g.gameId, arenaId: o.id, name: o.name, group: g.set === 9999 ? 'Tiebreaker' : g.set + 1, index: g.index ?? 0 }; }).filter(Boolean);
         if (items.length) await T.jobs.start('A machine is down: moving its games', [{ tid, page: 'matches', op: 'smartAssign', args: { tid, roundId: r.roundId, items, change: true }, label: `Moving ${items.length} game${items.length === 1 ? '' : 's'} off the down machine` }]);
       }
@@ -435,7 +442,7 @@ TDP.smart = (() => {
     const st = T.tstate[D.tid] || {}, extra = await T.bankplan.extras(D);
     const usesBanks = /bank/i.test(D.t.arenaAssignment || ''), estAll = T.bankplan.estimates(D, st, extra, true);
     const changes = usesBanks ? downPlan(D, T.bankplan.estimates(D, st, extra), estAll) : [];
-    const r = T.data.currentRound(), roundGames = r ? D.games.filter(g => g.roundId === r.roundId) : [];
+    const r = curRound(D), roundGames = curGames(D, r);
     // games on the down machine that the bank changes don't move: each gets its own choice (best / random / pick)
     const covered = new Set(downGames(D, roundGames, changes.filter(c => !c.none)).map(m => m.gameId));
     const am = T.data.arenaMap(D.t);
@@ -459,7 +466,7 @@ TDP.smart = (() => {
       <div class="wrap${document.documentElement.classList.contains('dark') ? ' dark' : ''}"><div class="ov"><div class="dlg"><div class="dh">${Object.keys(by).map(T.esc).join(', ')} ${Object.keys(by).length === 1 ? 'is' : 'are'} going down</div><div class="db">
       <div class="small mb">${Object.entries(by).filter(([, cs]) => cs.length).map(([d, cs]) => `${T.esc(d)} is in ${cs.map(c => `${T.esc(c.bank)} (game ${c.pos + 1})`).join(' and ')}`).join('. ')}${pv.changes.length ? '. ' : ''}${pv.loose.length ? `${pv.loose.length} game${pv.loose.length === 1 ? ' is' : 's are'} waiting on or being played on it. ` : ''}★ = best fit (${pv.changes.length ? 'banks: not busy in another bank then, same era, keeps bank times even, games in the fewest banks' : 'same era, a similar game time, not busy right now, not one the group plays this round or played last round'}). Pick another if you like.</div>
       <table>${rows}${pv.loose.map((x, k) => { const v = pv.lpick[k] || 'best', o = x.options[0];
-        return `<tr><td><b>${x.g.set === 9999 ? 'Tiebreaker' : 'Group ' + (x.g.set + 1)}</b><div class="small">game ${(x.g.index ?? 0) + 1} · on ${T.esc(x.down)}</div></td><td><select data-l="${k}" style="width:100%"><option value="best"${v === 'best' ? ' selected' : ''}>★ Best: ${T.esc(o.name)} (${o.era}, ~${Math.round(o.sec / 60)} min)${o.busy ? ' - busy right now' : ''}</option><option value="random"${v === 'random' ? ' selected' : ''}>Random (any free game that fits)</option>${x.options.slice(1).map(c => `<option value="${c.id}"${String(v) === String(c.id) ? ' selected' : ''}>${T.esc(c.name)} (${c.era}, ~${Math.round(c.sec / 60)} min)${c.busy ? ' - busy right now' : ''}${c.last ? ' - played last round' : ''}</option>`).join('')}</select></td></tr>`; }).join('')}</table>
+        return `<tr><td><b>${pvMax() ? T.esc(vsOf(x.g)) : x.g.set === 9999 ? 'Tiebreaker' : 'Group ' + (x.g.set + 1)}</b><div class="small">${pvMax() ? '' : `game ${(x.g.index ?? 0) + 1} · `}on ${T.esc(x.down)}</div></td><td><select data-l="${k}" style="width:100%"><option value="best"${v === 'best' ? ' selected' : ''}>★ Best: ${T.esc(o.name)} (${o.era}, ~${Math.round(o.sec / 60)} min)${o.busy ? ' - busy right now' : ''}</option><option value="random"${v === 'random' ? ' selected' : ''}>Random (any free game that fits)</option>${x.options.slice(1).map(c => `<option value="${c.id}"${String(v) === String(c.id) ? ' selected' : ''}>${T.esc(c.name)} (${c.era}, ~${Math.round(c.sec / 60)} min)${c.busy ? ' - busy right now' : ''}${c.last ? ' - played last round' : ''}</option>`).join('')}</select></td></tr>`; }).join('')}</table>
       ${moving.length ? `<div class="small mt">Also moves ${moving.length} game${moving.length === 1 ? '' : 's'} of the current round still waiting on it: ${moving.map(m => `Group ${m.group} → ${T.esc(m.name)}`).join(', ')}.</div>` : ''}
       </div><div class="df"><button class="btn sec" data-act="leave">${pv.changes.length ? 'Leave banks as they are' : 'Leave it'}</button><button class="btn" data-act="apply">Apply</button></div></div></div></div>`;
   }
@@ -474,7 +481,7 @@ TDP.smart = (() => {
     const items = pv.loose.map((x, k) => {
       const v = pv.lpick[k] || 'best', fit = x.options.filter(o => !o.busy && !o.last);
       const o = v === 'best' ? x.options[0] : v === 'random' ? (fit.length ? fit : x.options)[Math.floor(Math.random() * (fit.length || x.options.length))] : x.options.find(c => String(c.id) === String(v));
-      return o && { gameId: x.g.gameId, arenaId: o.id, name: o.name, group: x.g.set === 9999 ? 'Tiebreaker' : x.g.set + 1, index: x.g.index ?? 0 };
+      return o && { gameId: x.g.gameId, arenaId: o.id, name: o.name, group: x.g.set === 9999 ? 'Tiebreaker' : x.g.set + 1, index: x.g.index ?? 0, ...(pvMax() ? { label: `${vsOf(x.g)} → ${o.name}` } : {}) };
     }).filter(Boolean);
     const tid = pv.tid, roundId = pv.roundId; close(); pv = null;
     const steps = [];

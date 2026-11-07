@@ -245,7 +245,8 @@ TDP.inpage = (() => {
         <span class="small flex1">${!r ? 'No round in progress.' : !open.length ? 'Every game in this round has a result.' : `${open.length} open game${open.length === 1 ? '' : 's'}${ready.length < open.length ? ` - ${open.length - ready.length} still need an arena (assign banks first)` : ''}.`} Test tournaments only.</span>
       </div>`;
     }
-    const html = D.t && D.t.status === 'started' ? `<div class="card" style="margin:12px 0"><div class="cb gap">
+    const max = T.maxmp && T.maxmp.isMax(D);   // items 105-108: no rounds - its own box instead
+    const html = max ? (D.t.status === 'started' ? T.maxmp.box(D) : '') : D.t && D.t.status === 'started' ? `<div class="card" style="margin:12px 0"><div class="cb gap">
       <label class="gap"><input type="checkbox" data-act="auto" ${st.auto ? 'checked' : ''}> <span class="lab">Auto close round &amp; start next round</span></label>
       <span class="small" title="When every game is approved (no pending or partial scores, no open tiebreakers), closes the round and starts the next after a 10-second countdown you can cancel. Never past the last round; never completes the tournament." style="cursor:help">ⓘ</span>
       <span class="small flex1">${st.auto ? T.esc(autoState || 'watching') : 'Off'}</span>
@@ -253,6 +254,7 @@ TDP.inpage = (() => {
       </div>${smartRow(D)}${bankRow}${testRow}</div>` : '';
     block('tdp-auto', html ? bar : null, 'after', html, async e => {
       const el = e.target;
+      if (T.maxmp && T.maxmp.isMax(T.data.D)) return T.maxmp.onBox(e);
       if (e.type === 'click' && el.closest && el.closest('[data-act=assign]')) return T.bankbar.assignPreview(T.data.D);
       if (e.type === 'click' && el.closest && el.closest('[data-act=fill]')) return T.bankbar.fillConfirm(T.data.D);
       if (e.type === 'click' && el.closest && el.closest('[data-act=smartNow]')) {
@@ -458,6 +460,7 @@ TDP.inpage = (() => {
       if (T.plays) T.plays.render(D);
       if (T.timers) T.timers.render(D);
       if (T.links) T.links.render(D);
+      if (T.maxmp) T.maxmp.render(D);
     } catch (e) { T.warn('inpage', e); }
   }
   // Matchplay's "Manual" button in the standings Ties column: show our resolved-tie window instead of its info box

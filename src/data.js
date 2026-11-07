@@ -70,6 +70,8 @@ TDP.data = (() => {
     if (p.roundsKnown) D.rounds = p.rounds;
     const keep = new Map(D.games.map(g => [g.gameId, g]));
     for (const g of p.games) keep.set(g.gameId, g);
+    // max match play: Match Play's page holds only the active games - one that's gone from it has finished
+    if (p.max && p.t && p.t.type === 'max_matchplay') { const on = new Set(p.games.map(g => g.gameId)); for (const [id, g] of keep) if (String(g.status) === 'started' && !on.has(id)) keep.set(id, { ...g, status: 'completed' }); }
     D.games = live([...keep.values()]);
     if (p.standings && D.qual && D.qual.tournamentId === D.tid) D.standings = p.standings;
   }
@@ -77,6 +79,8 @@ TDP.data = (() => {
     // Matchplay lists rounds newest first: keep them oldest first everywhere (Round 1, 2, 3…)
     if (!(p && p.roundsKnown)) D.rounds = arr(unwrap(await api.get(`/tournaments/${D.tid}/rounds`, 15000))).sort((a, b) => ((a.index != null ? a.index : a.roundId) - (b.index != null ? b.index : b.roundId)));
     const keep = new Map(D.games.map(g => [g.gameId, g]));
+    // max match play (no rounds): every game, straight from the API
+    if (D.t && D.t.type === 'max_matchplay') for (const g of await api.all(`/tournaments/${D.tid}/games`, force ? 0 : 10000)) keep.set(g.gameId, g);
     for (const r of D.rounds) {
       const done = String(r.status) === 'completed';
       const onPage = p ? p.games.filter(g => g.roundId === r.roundId) : [];

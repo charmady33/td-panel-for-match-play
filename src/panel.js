@@ -122,7 +122,7 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--pri);vertical-ali
       + b('#d1fae5', '#065f46', `● ${c.active} active`, 'Games still being played')
       + (c.pending ? b('#fef3c7', '#92400e', `${c.pending} pending approval${c.pending === 1 ? '' : 's'}`, 'Every score entered, waiting for your approval') : '')
       + (c.partial ? b('#f3f4f6', '#374151', `${c.partial} partial`, 'Some scores entered - not complete') : '')
-      + (() => { const st = T.tstate[D.tid] || {}; return st.auto || st.autoAssign ? b('#ede9fe', '#5b21b6', 'Watching for new rounds', 'An automatic option is on: new rounds (also started on a phone) and finished rounds are handled, even with this tab in the background or closed while Chrome is open') : ''; })();
+      + (() => { const st = T.tstate[D.tid] || {}; return st.auto || st.autoAssign || st.maxAuto ? b('#ede9fe', '#5b21b6', st.maxAuto ? 'Auto create matches on' : 'Watching for new rounds', 'An automatic option is on: new rounds (also started on a phone) and finished rounds are handled, even with this tab in the background or closed while Chrome is open') : ''; })();
     if (el.dataset.h !== html) { el.dataset.h = html; el.shadowRoot.innerHTML = html; }
   }
 

@@ -396,6 +396,22 @@ TDP.mp = (() => {
     await dialogClosed();
   }
 
+  // ---------- max match play: Matches tab -> Create matches (No limit, All arenas, never the Emergency valve) ----------
+  // returns true when matches were made, false when Match Play says "No games created"
+  async function createMatches() {
+    T.click(await needBtn(/^Create matches$/, document.querySelector('main')));
+    const d = await needDialog();
+    const lim = d.querySelector('select[name=gameLimit], select#gameLimit'); if (lim && lim.value !== '0') { T.setVal(lim, '0'); await T.sleep(100); }
+    const cat = d.querySelector('select[name=categoryId], select#categoryId'); if (cat && cat.value !== '0') { T.setVal(cat, '0'); await T.sleep(100); }
+    const ev = [...d.querySelectorAll('input[type=checkbox]')].find(c => /Emergency/i.test(T.cbLabel(c))); if (ev && ev.checked) { ev.click(); await T.sleep(100); }
+    T.click(await needBtn(/^Create matches$/, d));
+    await T.sleep(1200);
+    const r = await T.waitFor(() => { const x = T.dialog(); if (!x) return 'ok'; if (/No games created/i.test(T.txt(x))) return 'none'; return null; }, 15000);
+    if (r === 'none') { T.click(T.findBtn(T.dialog(), /^(Okay|OK)$/i)); await dialogClosed(); return false; }
+    if (!r) fail('The Create matches window did not close.');
+    return true;
+  }
+
   // ---------- Matches tab: group Actions -> Assign bank -> tick one bank -> Update arenas ----------
   // the group's heading cell ("Group 2" / "Group 2 - Bank 4"); our own Assign bank button inside it doesn't count
   const ownTxt = e => [...e.childNodes].filter(n => !(n.dataset && n.dataset.tdp)).map(n => n.textContent).join('').replace(/\s+/g, ' ').trim();
@@ -617,5 +633,5 @@ TDP.mp = (() => {
     await T.waitFor(() => { const r = row(); return r && ![...r.querySelectorAll('button, a')].some(x => T.txt(x) === want); }, 5000, 50); await T.sleep(150);
     return true;
   }
-  return { setArenaActive, rankLabels, setCutoffs, createPlayoff, deleteTournament, setPlayerOrder, roundArenas, addTestPlayers, addTestArenas, setArenaById, setGameArena, gameCard, openAssign, groupHead, goTab, menu, playerRows, selectPlayers, setLabels, bulk, setActive, readIfpaRanks, addFromQualifying, setSeeds, closeRound, startNextRound, publishRound, createBank, setBankArenas, reorderBank, assignBank, enterResults, addArenas, resolveTie, needBtn, needDialog, dialogClosed };
+  return { createMatches, setArenaActive, rankLabels, setCutoffs, createPlayoff, deleteTournament, setPlayerOrder, roundArenas, addTestPlayers, addTestArenas, setArenaById, setGameArena, gameCard, openAssign, groupHead, goTab, menu, playerRows, selectPlayers, setLabels, bulk, setActive, readIfpaRanks, addFromQualifying, setSeeds, closeRound, startNextRound, publishRound, createBank, setBankArenas, reorderBank, assignBank, enterResults, addArenas, resolveTie, needBtn, needDialog, dialogClosed };
 })();

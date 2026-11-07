@@ -15,8 +15,8 @@ TDP.page = (() => {
     const rounds = [...d.rounds].sort((a, b) => ((a.index != null ? a.index : a.roundId) - (b.index != null ? b.index : b.roundId)));
     const standings = d.standings ? d.standings.map(s => ({ ...s, points: pts(s.points) })) : null;
     // a started tournament whose rounds aren't loaded yet: rounds come from the API
-    const roundsKnown = rounds.length > 0 || String(d.t.status) !== 'started';
-    return { tid: d.tid, at: Date.now(), t: d.t, rounds, roundsKnown, games: d.games, standings, me: d.me, linksKnown: d.linksKnown };
+    const roundsKnown = rounds.length > 0 || String(d.t.status) !== 'started' || d.t.type === 'max_matchplay';   // (max match play has no rounds)
+    return { tid: d.tid, at: Date.now(), t: d.t, rounds, roundsKnown, games: d.games, standings, me: d.me, linksKnown: d.linksKnown, max: d.max || null };
   }
 
   window.addEventListener('message', e => {
